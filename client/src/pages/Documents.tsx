@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, FileText, Download, Trash2, Calendar } from "lucide-react";
+import { Plus, Search, Filter, FileText, Download, Trash2, Calendar, Pencil } from "lucide-react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import GlassCard from "@/components/GlassCard";
@@ -33,6 +33,8 @@ export default function Documents() {
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingDocument, setEditingDocument] = useState<Document | null>(null);
   const { toast } = useToast();
 
   const { data: documents = [], isLoading } = useQuery<Document[]>({
@@ -52,6 +54,20 @@ export default function Documents() {
     },
     onError: () => {
       toast({ title: "Failed to create document", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Document> }) =>
+      apiRequest(`/api/documents/${id}`, "PATCH", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      toast({ title: "Document updated successfully" });
+      setIsEditDialogOpen(false);
+      setEditingDocument(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to update document", variant: "destructive" });
     },
   });
 
@@ -78,6 +94,19 @@ export default function Documents() {
       createdBy: null,
     };
     createMutation.mutate(data);
+  };
+
+  const handleEditDocument = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingDocument) return;
+    const formData = new FormData(e.currentTarget);
+    const data: Partial<Document> = {
+      title: formData.get("title") as string,
+      description: formData.get("description") as string || null,
+      documentType: formData.get("documentType") as string,
+      fileUrl: formData.get("fileUrl") as string || null,
+    };
+    updateMutation.mutate({ id: editingDocument.id, data });
   };
 
   const filteredDocuments = documents.filter((doc) => {
@@ -278,18 +307,32 @@ export default function Documents() {
                   <div className="flex flex-col h-full space-y-4">
                     <div className="flex items-start justify-between gap-2">
                       <FileText className="w-8 h-8 text-primary flex-shrink-0" />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteMutation.mutate(doc.id);
-                        }}
-                        disabled={deleteMutation.isPending}
-                        data-testid={`button-delete-${doc.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingDocument(doc);
+                            setIsEditDialogOpen(true);
+                          }}
+                          data-testid={`button-edit-${doc.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteMutation.mutate(doc.id);
+                          }}
+                          disabled={deleteMutation.isPending}
+                          data-testid={`button-delete-${doc.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="flex-1 space-y-3">
@@ -344,6 +387,76 @@ export default function Documents() {
             );
           })}
         </div>
+
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Document</DialogTitle>
+            </DialogHeader>
+            {editingDocument && (
+              <form onSubmit={handleEditDocument} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title *</Label>
+                  <Input
+                    name="title"
+                    placeholder="Document title..."
+                    defaultValue={editingDocument.title}
+                    required
+                    data-testid="input-edit-title"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="documentType">Document Type *</Label>
+                  <Select name="documentType" required defaultValue={editingDocument.documentType}>
+                    <SelectTrigger data-testid="select-edit-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="report">Report</SelectItem>
+                      <SelectItem value="contract">Contract</SelectItem>
+                      <SelectItem value="invoice">Invoice</SelectItem>
+                      <SelectItem value="test-results">Test Results</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    name="description"
+                    placeholder="Document description..."
+                    rows={4}
+                    defaultValue={editingDocument.description || ""}
+                    data-testid="input-edit-description"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="fileUrl">File URL</Label>
+                  <Input
+                    name="fileUrl"
+                    placeholder="https://example.com/document.pdf"
+                    type="url"
+                    defaultValue={editingDocument.fileUrl || ""}
+                    data-testid="input-edit-url"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} data-testid="button-edit-cancel">
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={updateMutation.isPending} data-testid="button-edit-save">
+                    {updateMutation.isPending ? "Updating..." : "Update Document"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
