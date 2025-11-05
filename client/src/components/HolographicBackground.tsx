@@ -1,27 +1,29 @@
-import { useEffect, useState } from "react";
-import { motion, useScroll, useTransform, useSpring } from "framer-motion";
+import { useEffect, useState, useMemo } from "react";
+import { motion, useScroll, useTransform, useSpring, useMotionTemplate } from "framer-motion";
 
 // Animated particle field - creates depth and movement
 const ParticleField = ({ scrollY }: { scrollY: any }) => {
-  const particles = Array.from({ length: 150 }, (_, i) => {
-    const randomX = Math.random() * 100;
-    const randomY = Math.random() * 100;
-    const randomSize = 1 + Math.random() * 3;
-    const randomDuration = 8 + Math.random() * 15;
-    const randomDelay = Math.random() * 8;
-    const layer = Math.floor(i / 50); // 3 layers for depth
-    
-    return {
-      id: i,
-      x: randomX,
-      y: randomY,
-      size: randomSize,
-      duration: randomDuration,
-      delay: randomDelay,
-      layer,
-      opacity: 0.2 + (layer * 0.15),
-    };
-  });
+  // Memoize particles to prevent regeneration on every render
+  const particles = useMemo(() => 
+    Array.from({ length: 150 }, (_, i) => {
+      const randomX = Math.random() * 100;
+      const randomY = Math.random() * 100;
+      const randomSize = 1 + Math.random() * 3;
+      const randomDuration = 8 + Math.random() * 15;
+      const randomDelay = Math.random() * 8;
+      const layer = Math.floor(i / 50); // 3 layers for depth
+      
+      return {
+        id: i,
+        x: randomX,
+        y: randomY,
+        size: randomSize,
+        duration: randomDuration,
+        delay: randomDelay,
+        layer,
+        opacity: 0.2 + (layer * 0.15),
+      };
+    }), []);
 
   const y1 = useTransform(scrollY, [0, 1000], [0, 100]);
   const y2 = useTransform(scrollY, [0, 1000], [0, 200]);
@@ -35,31 +37,34 @@ const ParticleField = ({ scrollY }: { scrollY: any }) => {
 
   return (
     <motion.div className="absolute inset-0 overflow-hidden">
-      {particles.map((particle) => (
-        <motion.div
-          key={particle.id}
-          className="absolute rounded-full bg-gradient-to-br from-cyan/40 to-magenta/30 blur-[1px]"
-          style={{
-            left: `${particle.x}%`,
-            top: `${particle.y}%`,
-            width: `${particle.size}px`,
-            height: `${particle.size}px`,
-            y: getYTransform(particle.layer),
-          }}
-          animate={{
-            y: [-30, 30, -30],
-            x: [-15, 15, -15],
-            scale: [1, 1.3, 1],
-            opacity: [particle.opacity, particle.opacity * 1.5, particle.opacity],
-          }}
-          transition={{
-            duration: particle.duration,
-            repeat: Infinity,
-            delay: particle.delay,
-            ease: "easeInOut",
-          }}
-        />
-      ))}
+      {particles.map((particle) => {
+        const scrollY = getYTransform(particle.layer);
+        
+        return (
+          <motion.div
+            key={particle.id}
+            className="absolute rounded-full bg-gradient-to-br from-cyan/40 to-magenta/30 blur-[1px]"
+            style={{
+              left: `${particle.x}%`,
+              top: `${particle.y}%`,
+              width: `${particle.size}px`,
+              height: `${particle.size}px`,
+              y: scrollY,
+            }}
+            animate={{
+              x: [-15, 15, -15],
+              scale: [1, 1.3, 1],
+              opacity: [particle.opacity, particle.opacity * 1.5, particle.opacity],
+            }}
+            transition={{
+              duration: particle.duration,
+              repeat: Infinity,
+              delay: particle.delay,
+              ease: "easeInOut",
+            }}
+          />
+        );
+      })}
     </motion.div>
   );
 };
@@ -350,24 +355,36 @@ const GradientOrbs = ({ scrollY }: { scrollY: any }) => {
 
 // Sound visualizer
 const SoundVisualizer = () => {
-  const bars = Array.from({ length: 5 }, (_, i) => (
-    <motion.div
-      key={i}
-      className="bg-gradient-to-t from-cyan/60 to-cyan/20 rounded-t-sm"
-      style={{ width: '8px', minHeight: '4px' }}
-      animate={{
-        height: [`${10 + Math.random() * 10}px`, `${30 + Math.random() * 40}px`, `${10 + Math.random() * 10}px`],
-      }}
-      transition={{
-        duration: 0.5 + Math.random() * 0.5,
-        repeat: Infinity,
-        delay: i * 0.1,
-        ease: "easeInOut",
-      }}
-    />
-  ));
+  // Memoize bar configurations to prevent re-randomization
+  const barConfigs = useMemo(() => 
+    Array.from({ length: 5 }, (_, i) => ({
+      id: i,
+      minHeight: 10 + Math.random() * 10,
+      maxHeight: 30 + Math.random() * 40,
+      duration: 0.5 + Math.random() * 0.5,
+      delay: i * 0.1,
+    })), []);
 
-  return <div className="absolute bottom-8 left-8 flex items-end gap-1.5 opacity-40" data-testid="sound-visualizer">{bars}</div>;
+  return (
+    <div className="absolute bottom-8 left-8 flex items-end gap-1.5 opacity-40" data-testid="sound-visualizer">
+      {barConfigs.map((config) => (
+        <motion.div
+          key={config.id}
+          className="bg-gradient-to-t from-cyan/60 to-cyan/20 rounded-t-sm"
+          style={{ width: '8px', minHeight: '4px' }}
+          animate={{
+            height: [`${config.minHeight}px`, `${config.maxHeight}px`, `${config.minHeight}px`],
+          }}
+          transition={{
+            duration: config.duration,
+            repeat: Infinity,
+            delay: config.delay,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  );
 };
 
 // Spinning rings
