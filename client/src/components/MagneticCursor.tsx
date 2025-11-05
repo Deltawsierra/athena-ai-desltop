@@ -56,7 +56,8 @@ export default function MagneticCursor() {
       {/* Outer ring */}
       <motion.div
         ref={cursorRef}
-        className="fixed top-0 left-0 pointer-events-none z-[9999] mix-blend-difference"
+        data-testid="cursor-ring"
+        className="fixed top-0 left-0 pointer-events-none z-[9999]"
         style={{
           x: cursorXSpring,
           y: cursorYSpring,
@@ -70,7 +71,7 @@ export default function MagneticCursor() {
             width: isHovering ? 48 : 32,
             height: isHovering ? 48 : 32,
             borderColor: isHovering ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)',
-            opacity: isHovering ? 0.8 : 1,
+            opacity: isHovering ? 0.9 : 0.7,
           }}
           transition={{ duration: 0.15, ease: 'easeOut' }}
         />
@@ -79,7 +80,8 @@ export default function MagneticCursor() {
       {/* Center dot */}
       <motion.div
         ref={cursorDotRef}
-        className="fixed top-0 left-0 pointer-events-none z-[9999] mix-blend-difference"
+        data-testid="cursor-dot"
+        className="fixed top-0 left-0 pointer-events-none z-[9999]"
         style={{
           x: dotXSpring,
           y: dotYSpring,

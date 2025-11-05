@@ -31,6 +31,7 @@ export default function CursorGlow() {
 
   return (
     <motion.div
+      data-testid="cursor-glow"
       className="pointer-events-none fixed inset-0 z-30 transition-opacity duration-300"
       style={{
         opacity: isVisible ? 1 : 0,
