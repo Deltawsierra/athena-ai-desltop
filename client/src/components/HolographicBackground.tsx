@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { motion, useScroll, useTransform, useMotionValue } from "framer-motion";
+import { motion, useScroll, useTransform, useMotionValue, useSpring } from "framer-motion";
 import darkBg from "@assets/generated_images/Dark_mode_3D_holographic_background_bc80ede4.png";
 import lightBg from "@assets/generated_images/Light_mode_3D_holographic_background_5e232446.png";
 
@@ -182,7 +182,7 @@ const SpinningRings = () => {
 };
 
 // AI Brain mapping - responds to cursor and scroll
-const AIBrainMap = ({ mouseX, mouseY, scrollY }: { mouseX: number; mouseY: number; scrollY: any }) => {
+const AIBrainMap = ({ scrollY }: { scrollY: any }) => {
   const nodes = Array.from({ length: 12 }, (_, i) => {
     const angle = (i / 12) * Math.PI * 2;
     const radius = 80;
@@ -192,17 +192,52 @@ const AIBrainMap = ({ mouseX, mouseY, scrollY }: { mouseX: number; mouseY: numbe
     return { x, y, index: i };
   });
 
-  const centerX = useTransform(scrollY, [0, 1000], [0, 30]);
-  const centerY = useTransform(scrollY, [0, 1000], [0, -20]);
+  // Cursor tracking
+  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setCursorPosition({ x: e.clientX, y: e.clientY });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // Scroll-based movement
+  const scrollOffsetX = useTransform(scrollY, [0, 1000], [0, 30]);
+  const scrollOffsetY = useTransform(scrollY, [0, 1000], [0, -20]);
+  
+  // Cursor-based parallax (subtle movement toward cursor)
+  const cursorParallaxX = useSpring(
+    (cursorPosition.x / window.innerWidth - 0.5) * 30,
+    { stiffness: 100, damping: 20 }
+  );
+  const cursorParallaxY = useSpring(
+    (cursorPosition.y / window.innerHeight - 0.5) * 30,
+    { stiffness: 100, damping: 20 }
+  );
+  
+  // Glow scale based on cursor
+  const glowScale = useSpring(
+    0.9 + (cursorPosition.x / window.innerWidth) * 0.4,
+    { stiffness: 150, damping: 25 }
+  );
 
   return (
     <motion.div
       className="absolute top-1/2 left-1/2 opacity-20 pointer-events-none"
       style={{
-        x: centerX,
-        y: centerY,
+        x: scrollOffsetX,
+        y: scrollOffsetY,
       }}
     >
+      <motion.div
+        style={{
+          x: cursorParallaxX,
+          y: cursorParallaxY,
+        }}
+      >
       <svg width="400" height="400" viewBox="-200 -200 400 400" className="overflow-visible">
         {/* Neural connections */}
         {nodes.map((node, i) => (
@@ -302,22 +337,26 @@ const AIBrainMap = ({ mouseX, mouseY, scrollY }: { mouseX: number; mouseY: numbe
         </defs>
       </svg>
       
-      {/* Glow effect responding to cursor distance */}
-      <motion.div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full blur-[80px]"
-        animate={{
-          background: [
-            'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
-            'radial-gradient(circle, rgba(236,72,153,0.2) 0%, transparent 70%)',
-            'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
-          ],
-        }}
-        transition={{
-          duration: 5,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-      />
+        {/* Glow effect responding to cursor and scroll */}
+        <motion.div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full blur-[80px]"
+          style={{
+            scale: glowScale,
+          }}
+          animate={{
+            background: [
+              'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
+              'radial-gradient(circle, rgba(236,72,153,0.2) 0%, transparent 70%)',
+              'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
+            ],
+          }}
+          transition={{
+            duration: 5,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      </motion.div>
     </motion.div>
   );
 };
@@ -326,9 +365,6 @@ export default function HolographicBackground() {
   const [isDark, setIsDark] = useState(true);
   const { scrollY } = useScroll();
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
   
   const backgroundY = useTransform(scrollY, [0, 1000], [0, 200]);
   const gridY = useTransform(scrollY, [0, 1000], [0, 150]);
@@ -348,18 +384,10 @@ export default function HolographicBackground() {
       attributeFilter: ["class"],
     });
     
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseX.set(e.clientX);
-      mouseY.set(e.clientY);
-    };
-    
-    window.addEventListener('mousemove', handleMouseMove);
-    
     return () => {
       observer.disconnect();
-      window.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [mouseX, mouseY]);
+  }, []);
 
   return (
     <div ref={containerRef} className="fixed inset-0 -z-10 overflow-hidden">
@@ -496,7 +524,7 @@ export default function HolographicBackground() {
       {/* New interactive elements */}
       <SoundVisualizer />
       <SpinningRings />
-      <AIBrainMap mouseX={mouseX.get()} mouseY={mouseY.get()} scrollY={scrollY} />
+      <AIBrainMap scrollY={scrollY} />
     </div>
   );
 }
