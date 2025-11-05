@@ -1,9 +1,10 @@
-import { Shield, Bug, Activity, Scan, TrendingUp } from "lucide-react";
+import { Shield, Bug, Activity, Scan, TrendingUp, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import MetricCard from "@/components/MetricCard";
 import GlassCard from "@/components/GlassCard";
 import ThreatBadge from "@/components/ThreatBadge";
 import AnimatedContainer from "@/components/AnimatedContainer";
+import TickerTape from "@/components/TickerTape";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 //todo: remove mock functionality
@@ -22,9 +23,19 @@ const mockKeywords = [
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))"];
 
+const tickerItems = [
+  { id: '1', text: 'CVE-2024-0001: Critical vulnerability detected in authentication module', type: 'threat' as const, icon: AlertTriangle },
+  { id: '2', text: 'Pentest scan completed - 22 threats identified', type: 'warning' as const, icon: Activity },
+  { id: '3', text: 'Security patch applied to database layer', type: 'info' as const, icon: Shield },
+  { id: '4', text: 'New malware signature added to detection engine', type: 'info' as const, icon: Shield },
+  { id: '5', text: 'Active monitoring - 8 systems under surveillance', type: 'info' as const, icon: Activity },
+  { id: '6', text: 'Threat analysis: Ransomware attack vectors increasing', type: 'threat' as const, icon: AlertTriangle },
+];
+
 export default function Dashboard() {
   return (
     <div className="min-h-screen">
+      <TickerTape items={tickerItems} speed={60} />
       <div className="container mx-auto p-6 space-y-8">
         <AnimatedContainer direction="up" delay={0}>
           <div className="space-y-2">

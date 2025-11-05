@@ -19,22 +19,24 @@ export default function GlassCard({
     <motion.div
       className={cn(
         "relative rounded-xl backdrop-blur-md bg-card/40 border border-card-border/50 shadow-lg overflow-hidden",
-        "transition-all duration-300",
         className
       )}
       whileHover={
         hover
           ? {
-              y: -4,
-              boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
-              scale: 1.02,
+              y: -6,
+              boxShadow: "0 25px 50px rgba(0,0,0,0.4)",
+              scale: 1.01,
             }
           : undefined
       }
       transition={{
         type: "spring",
-        stiffness: 300,
-        damping: 20,
+        stiffness: 400,
+        damping: 25,
+      }}
+      style={{
+        willChange: 'transform, box-shadow',
       }}
     >
       {glow && (
