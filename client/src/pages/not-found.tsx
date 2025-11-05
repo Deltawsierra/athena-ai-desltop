@@ -5,11 +5,7 @@ import { Home } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-purple/10" />
-      <div className="absolute inset-0 opacity-20">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.1),transparent_50%)]" />
-      </div>
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
 
       <GlassCard className="max-w-md text-center relative z-10">
         <div className="mb-8">

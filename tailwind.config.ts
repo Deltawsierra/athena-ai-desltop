@@ -81,6 +81,14 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        cyan: {
+          DEFAULT: "hsl(var(--cyan) / <alpha-value>)",
+          foreground: "hsl(var(--cyan-foreground) / <alpha-value>)",
+        },
+        magenta: {
+          DEFAULT: "hsl(var(--magenta) / <alpha-value>)",
+          foreground: "hsl(var(--magenta-foreground) / <alpha-value>)",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { Shield, Activity, Bug, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import athenaLogo from "@assets/generated_images/Athena_AI_owl_shield_logo_3eda4960.png";
+import ThemeToggle from "./ThemeToggle";
 import { cn } from "@/lib/utils";
 
 interface NavigationProps {
@@ -69,6 +70,7 @@ export default function Navigation({ onLogout, isAuthenticated = true }: Navigat
           </div>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             {isAuthenticated ? (
               <Button
                 variant="outline"

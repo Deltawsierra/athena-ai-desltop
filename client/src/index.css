@@ -14,17 +14,17 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 240 4% 96%;
+  --background: 210 40% 98%;
 
-  --foreground: 240 8% 12%;
+  --foreground: 222 47% 11%;
 
   --border: 240 6% 88%;
 
-  --card: 240 5% 94%;
+  --card: 0 0% 100%;
 
-  --card-foreground: 240 8% 12%;
+  --card-foreground: 222 47% 11%;
 
-  --card-border: 240 6% 86%;
+  --card-border: 214 32% 91%;
 
   --sidebar: 240 5% 92%;
 
@@ -48,17 +48,25 @@
 
   --popover-border: 240 6% 82%;
 
-  --primary: 217 91% 45%;
+  --primary: 199 89% 48%;
 
-  --primary-foreground: 217 91% 98%;
+  --primary-foreground: 0 0% 100%;
   
   --gold: 45 93% 58%;
   
   --gold-foreground: 45 93% 10%;
   
-  --purple: 271 70% 52%;
+  --purple: 271 91% 65%;
   
-  --purple-foreground: 271 70% 98%;
+  --purple-foreground: 0 0% 100%;
+  
+  --cyan: 189 94% 43%;
+  
+  --cyan-foreground: 0 0% 100%;
+  
+  --magenta: 328 86% 70%;
+  
+  --magenta-foreground: 0 0% 100%;
 
   --secondary: 240 6% 86%;
 
@@ -140,17 +148,17 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 240 6% 8%;
+  --background: 222 47% 11%;
 
-  --foreground: 240 5% 92%;
+  --foreground: 210 40% 98%;
 
   --border: 240 6% 18%;
 
-  --card: 240 5% 10%;
+  --card: 215 28% 17%;
 
-  --card-foreground: 240 5% 92%;
+  --card-foreground: 210 40% 98%;
 
-  --card-border: 240 6% 16%;
+  --card-border: 217 33% 25%;
 
   --sidebar: 240 5% 12%;
 
@@ -174,17 +182,25 @@
 
   --popover-border: 240 6% 22%;
 
-  --primary: 217 91% 55%;
+  --primary: 189 94% 43%;
 
-  --primary-foreground: 217 91% 98%;
+  --primary-foreground: 222 47% 11%;
   
   --gold: 45 93% 65%;
   
   --gold-foreground: 45 93% 10%;
   
-  --purple: 271 70% 62%;
+  --purple: 328 86% 70%;
   
-  --purple-foreground: 271 70% 98%;
+  --purple-foreground: 222 47% 11%;
+  
+  --cyan: 189 94% 43%;
+  
+  --cyan-foreground: 222 47% 11%;
+  
+  --magenta: 328 86% 70%;
+  
+  --magenta-foreground: 222 47% 11%;
 
   --secondary: 240 6% 20%;
 
@@ -229,6 +245,21 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.05);
+    }
+  }
+  
+  .animate-pulse-glow {
+    animation: pulse-glow 4s ease-in-out infinite;
   }
 }
 

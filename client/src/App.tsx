@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import Navigation from "@/components/Navigation";
 import TokenRefresher from "@/components/TokenRefresher";
+import HolographicBackground from "@/components/HolographicBackground";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import PentestScan from "@/pages/PentestScan";
@@ -94,6 +95,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <HolographicBackground />
         <TokenRefresher />
         <Toaster />
         <Router isAuthenticated={isAuthenticated} onLogout={handleLogout} />

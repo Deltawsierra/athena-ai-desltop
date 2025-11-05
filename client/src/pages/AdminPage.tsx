@@ -21,7 +21,7 @@ export default function AdminPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <div className="container mx-auto p-6 space-y-6">
         <div className="space-y-2">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3">

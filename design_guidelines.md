@@ -2,9 +2,78 @@
 
 ## Design Approach: JARVIS-Inspired Intelligence Platform
 
-**Reference**: Iron Man's JARVIS interface aesthetic combined with Linear's clarity and modern enterprise cybersecurity dashboards (Datadog, Splunk). The design must convey intelligence, precision, and protective power worthy of the goddess Athena.
+**Reference**: Iron Man's JARVIS interface aesthetic with 3D holographic HUD elements, combined with Linear's clarity and modern enterprise cybersecurity dashboards (Datadog, Splunk). The design must convey intelligence, precision, and protective power worthy of the goddess Athena.
 
-**Core Principle**: Futuristic glassmorphism with holographic accents, animated data visualizations, and sophisticated information architecture that balances high-tech aesthetics with enterprise-grade usability.
+**Core Principle**: Futuristic glassmorphism with 3D holographic backgrounds, animated data visualizations, and sophisticated information architecture that balances high-tech aesthetics with enterprise-grade usability.
+
+---
+
+## Theme System
+
+The platform features **completely different** visual themes with distinct color palettes and aesthetics:
+
+### Dark Mode (Default)
+- **Aesthetic**: Cyberpunk/sci-fi, high contrast, neon accents
+- **Background**: `hsl(222, 47%, 11%)` - Deep navy blue
+- **Foreground**: `hsl(210, 40%, 98%)` - Near white text
+- **Card Surface**: `hsl(215, 28%, 17%)` - Elevated dark blue
+- **Primary (Cyan)**: `hsl(189, 94%, 43%)` - Electric cyan glow
+- **Magenta**: `hsl(328, 86%, 70%)` - Vibrant neon pink
+- **Purple**: `hsl(328, 86%, 70%)` - Neon purple accents
+- **Holographic BG**: Deep space with neon grid floor, holographic platforms, digital particles
+
+### Light Mode
+- **Aesthetic**: Professional, clean, modern tech interface
+- **Background**: `hsl(210, 40%, 98%)` - Clean white-blue
+- **Foreground**: `hsl(222, 47%, 11%)` - Dark navy text
+- **Card Surface**: `hsl(0, 0%, 100%)` - Pure white with subtle shadows
+- **Primary (Cyan)**: `hsl(199, 89%, 48%)` - Bright cyan
+- **Purple**: `hsl(271, 91%, 65%)` - Soft purple accents
+- **Holographic BG**: Bright environment with subtle holographic elements, light blue highlights
+
+### Theme Toggle
+- Located in navigation header (top-right)
+- Smooth 1-second transitions between themes
+- Preference stored in localStorage
+- All components automatically adapt
+
+---
+
+## 3D Holographic Background System
+
+**HolographicBackground Component**: Full-screen fixed background layer that provides immersive depth
+
+### Visual Layers (Back to Front):
+1. **Base Image Layer**: Theme-specific generated 3D holographic backgrounds
+   - Dark mode: Deep space, neon grids, holographic rings
+   - Light mode: Clean, bright, minimal holographic elements
+   - Opacity: 0.3-0.4 to avoid overwhelming content
+
+2. **Gradient Overlay**: `bg-gradient-to-b from-background/95 via-background/80 to-background/95`
+   - Ensures content readability
+   - Creates depth perception
+
+3. **Radial Gradients**: Subtle colored light sources
+   - Primary color at top
+   - Purple accent at bottom
+   - Creates atmospheric glow
+
+4. **Animated Glowing Orbs**: Pulsing, scaling light effects
+   - 2 orbs positioned strategically
+   - Cyan and magenta colors
+   - 4s pulse animation with stagger
+
+5. **Grid Overlay**: SVG pattern providing tech aesthetic
+   - 50x50 grid pattern
+   - Primary color with 30% opacity
+   - Perspective depth effect
+
+### Implementation Notes:
+- Always use the `HolographicBackground` component
+- Component placed at root level in App.tsx
+- Fixed positioning with `-z-10` (always behind content)
+- Smooth theme transitions via MutationObserver
+- Never apply `bg-background` to page containers (let holographic bg show through)
 
 ---
 
@@ -14,197 +83,225 @@
 **Secondary Font**: Inter or Roboto for body text - ensuring readability in data-dense contexts
 
 **Hierarchy**:
-- Page Titles: `text-3xl md:text-4xl font-bold tracking-tight` with subtle letter-spacing
+- Page Titles: `text-3xl md:text-4xl font-bold tracking-tight` with gradient text effects
 - Section Headers: `text-xl md:text-2xl font-semibold`
 - Card Titles: `text-lg font-medium`
 - Metrics/Stats: `text-4xl md:text-6xl font-bold tabular-nums` for numerical displays
 - Body Text: `text-sm md:text-base`
 - Labels/Metadata: `text-xs uppercase tracking-wide font-medium`
 
+**Gradient Text Effects**: Use for branding and emphasis
+```
+bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent
+```
+
 ---
 
 ## Layout System & Spacing
 
-**Spacing Primitives**: Use Tailwind units of `2, 4, 8, 12, 16` for consistent rhythm
+**Spacing Primitives**: Use Tailwind units of `2, 4, 6, 8, 12, 16` for consistent rhythm
 - Component padding: `p-4 md:p-8`
 - Section spacing: `space-y-8` or `gap-8`
 - Card internal spacing: `p-6`
 - Micro-spacing (between labels/values): `space-y-2`
 
 **Container Strategy**:
-- Main content: `max-w-7xl mx-auto px-4 md:px-8`
+- Main content: `container mx-auto px-4 md:px-8` with responsive max-width
 - Dashboard grid: `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6`
 - Data tables: Full-width with `max-w-full overflow-x-auto`
 
-**Viewport Management**: Natural height flow, no forced 100vh constraints except hero sections if needed
+**Viewport Management**: Let holographic background fill screen, content flows naturally
 
 ---
 
 ## Core Component Library
 
 ### 1. Navigation & Header
-- **Top Navigation Bar**: Fixed position with glassmorphism effect (backdrop-blur, semi-transparent)
-- Contains: Athena AI logo with owl/shield icon, main nav links, user profile, logout
+- **Top Navigation Bar**: Fixed position with glassmorphism effect
+- Contains: Athena AI logo, main nav links, **theme toggle**, logout
 - Active state: Glowing border-bottom indicator with smooth transition
 - Height: `h-16 md:h-20`
-- Include subtle scan line animation overlay for JARVIS effect
+- Glassmorphic background: `backdrop-blur-md bg-card/80 border-b`
 
-### 2. Glassmorphism Cards (Primary Container)
+### 2. ThemeToggle
+- Icon button in navigation (Sun/Moon icons from lucide-react)
+- Rounded full design: `rounded-full`
+- Toggles between light and dark modes
+- Smooth icon transition
+
+### 3. HolographicBackground
+- Full-screen fixed background component
+- Dual theme support with different images
+- Layered effects: image, gradients, glowing orbs, grid
+- Z-index: -10 (always behind content)
+- Smooth 1s theme transitions
+
+### 4. Glassmorphism Cards (GlassCard)
 - Foundational component for all data displays
 - Structure: `rounded-xl backdrop-blur-md border` with subtle shadow
 - Padding: `p-6 md:p-8`
-- Include: Optional glowing border on hover (1px gradient border with 0.3s transition)
-- States: Default, hover (subtle lift with `translate-y-[-2px]`), active
+- Glowing border on hover (animated transition)
+- Theme-aware styling
 
-### 3. Metric/Stat Cards
-- Large numerical display with label
-- Layout: Vertical stack with icon/badge at top
-- Number: `text-5xl font-bold tabular-nums` with animated count-up effect
-- Label: `text-sm text-muted uppercase tracking-wide`
-- Trend indicator: Small arrow/percentage change badge
-- Grid placement: 3-4 columns on desktop, stack on mobile
+### 5. Metric/Stat Cards (MetricCard)
+- Large numerical display with label, icon, trend
+- Number: `text-5xl font-bold tabular-nums` with gradient effect
+- Label: `text-sm text-muted-foreground uppercase tracking-wide`
+- Trend indicator: Arrow/percentage change with color coding
+- Grid placement: 3-4 columns on desktop
 
-### 4. Threat Badge Component
-- Severity indicator: High/Medium/Low
+### 6. Threat Badge Component (ThreatBadge)
+- Severity indicator: Critical/High/Medium/Low/Info
 - Shape: `rounded-full px-3 py-1 text-xs font-semibold uppercase`
-- Include pulsing animation for "High" severity
-- Use consistent sizing: `inline-flex items-center gap-1.5`
+- Pulsing animation for Critical/High severity
+- Color-coded with matching background glow
 
-### 5. Data Tables
-- Structure: Responsive table with sticky header
-- Header: `bg-surface text-xs uppercase tracking-wide font-semibold`
-- Row: `hover:bg-surface-hover transition-colors` with `border-b`
+### 7. Progress Indicators (ProgressBar)
+- Linear progress with animated fill
+- Gradient colors based on completion
+- Label support with percentage
+- Height: `h-2 md:h-3`, rounded ends
+
+### 8. Confidence Meter (ConfidenceMeter)
+- Circular progress indicator for AI confidence
+- Animated stroke with gradient
+- Central percentage display
+- Color changes based on confidence level
+
+### 9. Status Indicator (StatusIndicator)
+- Compact status pills with pulsing animation
+- Color-coded: online (green), away (yellow), busy (red), offline (gray)
+- Icon + text support
+- Used for system status, scan progress
+
+### 10. Data Tables
+- Structure: Responsive with sticky header
+- Header: `text-xs uppercase tracking-wide font-semibold`
+- Row: `hover:bg-accent/10 transition-colors` with `border-b`
 - Cell padding: `px-4 py-3`
-- Include expandable row functionality (chevron icon, smooth height transition)
-- Mobile: Convert to card stack with `hidden md:table-cell` pattern
-
-### 6. Progress Indicators
-- **Linear Progress Bar**: Full-width with animated fill, height `h-2`, rounded ends
-- **Circular Progress**: For scan status, with percentage display inside
-- **Animated Skeleton**: Shimmer effect for loading states using gradient animation
-
-### 7. Confidence Meter (CVE Classifier)
-- Visual representation of AI confidence (0-100%)
-- Design: Horizontal bar with gradient fill that animates on render
-- Include percentage value overlaid
-- Height: `h-8`, rounded, with segmented appearance for visual interest
-
-### 8. Interactive Form Elements
-- Input fields: `rounded-lg border px-4 py-3 focus:ring-2` with smooth transitions
-- Checkboxes: Custom styled with glowing effect when checked
-- Buttons:
-  - Primary: `rounded-lg px-6 py-3 font-semibold` with subtle glow effect
-  - Secondary: Ghost style with border
-  - Icon buttons: `rounded-full p-2` for compact actions
-
-### 9. Timeline/Log Viewer
-- Vertical timeline with connection lines
-- Each entry: Timestamp (left), icon/badge, content (right)
-- Line spacing: `space-y-4`
-- Include filter controls at top (date range, type selector)
-
-### 10. Chart/Visualization Containers
-- Wrapper: Same glassmorphism card style
-- Include: Title, time range selector, legend
-- Chart padding: `p-4` to ensure breathing room
-- Use animated entry transitions for data points
+- Mobile: Convert to card stack
 
 ---
 
 ## Page-Specific Layouts
 
+### All Pages
+- **No** `bg-background` on page containers
+- Use `min-h-screen` to ensure full height
+- Let holographic background show through
+- Content in `container mx-auto p-6`
+
 ### Dashboard Page
 **Structure**: 
-1. Welcome header with user greeting and real-time timestamp
+1. Welcome header with gradient text and description
 2. 4-column metrics grid (Total Scans, Threats Detected, Active Monitors, System Status)
 3. 2-column layout:
-   - Left: Threat Breakdown chart (pie/donut showing vulnerability types)
-   - Right: Recent Activity timeline (last 10 scans/detections)
-4. Full-width: Top Keywords visualization (tag cloud or bar chart)
-5. Quick action buttons: "Start New Scan", "View Reports", "Configure Alerts"
+   - Left: Threat Breakdown chart (pie/donut)
+   - Right: Recent Activity timeline
+4. Full-width: System activity visualization
+5. Quick action cards
 
 ### Pentest Scan Page
 **Structure**:
-1. Scan configuration form (left 2/3): URL input, max pages, checks selection (multi-column checkbox grid)
-2. Scan status panel (right 1/3): Live progress circle, status text, discovered pages counter
-3. When running: Full-width progress visualization with scan phases
-4. Results section: 
-   - Summary cards (3-column: Total Findings, Severity Breakdown, Pages Scanned)
-   - Findings table with expandable details
-   - Action buttons: Download PDF, Email Report, Export JSON
+1. Header with title and description
+2. Scan configuration form in GlassCard
+3. Live scan status with progress indicators
+4. Results section with findings table
+5. Action buttons: Download PDF, Email Report
 
 ### CVE Classifier Page
 **Structure**:
-1. Hero-style header with description
-2. 2-column layout:
-   - Left: Input form (textarea for CVE description, submit button)
-   - Right: Info panel (example inputs, tips, recent classifications)
-3. Results panel (appears below): 
-   - Animated card slide-in
-   - Label with icon badge
-   - Confidence meter with gradient
-   - Keywords as animated tag chips
-   - Related CVEs section
-
-### Admin Analytics Page
-**Structure**:
-1. Date range selector and filter controls
-2. 3-column stats overview
-3. Charts section (2-column grid):
-   - Scan volume over time (line chart)
-   - Threat type distribution (bar chart)
-4. Full-width audit log table with search, sort, pagination
+1. Hero-style header with Shield icon
+2. Input form in GlassCard (textarea + submit)
+3. Results panel with animated appearance
+4. Confidence meter and keyword tags
+5. Classification details
 
 ### Login Page
-**Layout**: Centered card (`max-w-md mx-auto`) on full viewport
-- Athena AI logo/wordmark at top
-- Form fields with floating labels
-- "Remember me" checkbox and "Forgot password" link
-- Animated holographic border effect on card
+**Layout**: Centered card on full viewport
+- Athena AI logo at top with gradient effect
+- Form fields with labels
+- "Remember me" checkbox
+- Holographic background visible
+- GlassCard for form container
 
 ---
 
-## Animation Strategy (Minimal, Strategic)
+## Animation Strategy
 
-**Use sparingly**:
-- Scan line effect on header (subtle, slow)
-- Metric counter animations on dashboard load (count-up effect)
+**Keyframe Animations**:
+```css
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.05); }
+}
+```
+
+**Use Cases**:
+- Holographic background glowing orbs (4s infinite)
+- Metric counter animations (count-up effect)
 - Progress bar fills (smooth width transition)
-- Card hover lifts (`transform: translateY(-2px)`)
-- Page transitions (fade-in, slide-up on route change)
+- Card hover lifts (`translate-y-[-2px]`)
 - Loading spinners with orbital animation
+- Threat badge pulsing for high severity
 
-**Avoid**: Excessive hover effects, distracting particle effects, auto-playing animations
+**Transitions**:
+- Theme changes: 1s duration
+- Component state changes: 300ms
+- Hover effects: 200ms
 
 ---
 
 ## Icon Strategy
-Use **Heroicons** (outline for navigation, solid for badges/status)
-- Threat types: Shield, bug, key, lock icons
-- Actions: Play, pause, download, refresh, settings
-- Status: Check circle, x circle, exclamation triangle
-- Never create custom SVGs; use icon library exclusively
+Use **Lucide React** icons exclusively:
+- Threat types: Shield, Bug, AlertTriangle, Lock icons
+- Actions: Play, Pause, Download, RefreshCw, Settings
+- Status: CheckCircle, XCircle, AlertCircle
+- Navigation: Home, Activity, FileText
+- Theme: Sun, Moon
 
 ---
 
 ## Accessibility & Interaction
 
 - All interactive elements: Minimum 44px touch target
-- Focus states: Visible ring with 2px offset
-- Color contrast: Ensure all text meets WCAG AA standards
-- Keyboard navigation: Full support with visible focus indicators
-- Loading states: Always include aria-live regions for screen readers
-- Form validation: Inline error messages with icons
+- Focus states: Visible ring with offset
+- Color contrast: WCAG AA compliant (high contrast in dark mode)
+- Keyboard navigation: Full support
+- Loading states: aria-live regions
+- Form validation: Inline error messages
+- Theme toggle: aria-label for screen readers
 
 ---
 
-## Images
+## Color Usage Guidelines
 
-**Dashboard Hero/Header**: Optional branded header image showing abstract network visualization or circuit board pattern (full-width, h-48, with overlay gradient for text readability)
+### Text Hierarchy
+- Primary text: `text-foreground`
+- Secondary text: `text-muted-foreground`
+- Accents: `text-primary` or `text-purple`
 
-**About/Marketing Content**: If creating an About page, include:
-- Athena AI concept illustration (AI brain + shield motif)
-- Team or technology showcase images in 2-column grid
-- Use `rounded-xl` for all images with subtle shadow
+### Backgrounds
+- Page backgrounds: Transparent (let holographic bg show)
+- Cards: `bg-card` with `border-card-border`
+- Overlays: `bg-background/95` for modals
 
-**No hero image required** for functional dashboard pages - focus on data visualization and glassmorphism panels for visual impact.
+### Interactive States
+- Hover: `hover:bg-accent/10` or `hover-elevate`
+- Active: `active:bg-accent/20`
+- Focus: `focus-visible:ring-2 focus-visible:ring-primary`
+
+---
+
+## Best Practices
+
+1. **Always use HolographicBackground** component at app root
+2. **Never add bg-background** to page containers
+3. **Use GlassCard** for all primary content containers
+4. **Consistent spacing** with predefined values (4, 6, 8)
+5. **Theme-aware components** that adapt automatically
+6. **Gradient text** for branding and emphasis
+7. **Subtle animations** - avoid overwhelming users
+8. **Test both themes** for every component
+9. **Maintain glassmorphism** aesthetic throughout
+10. **Performance optimized** - CSS transforms over position changes
