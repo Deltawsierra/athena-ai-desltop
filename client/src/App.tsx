@@ -60,7 +60,9 @@ function Router({ isAuthenticated, onLogout }: { isAuthenticated: boolean; onLog
         <Route path="/pentest">
           <ProtectedRoute component={PentestScan} />
         </Route>
-        <Route path="/classify-cve" component={CVEClassifier} />
+        <Route path="/classify-cve">
+          <ProtectedRoute component={CVEClassifier} />
+        </Route>
         <Route path="/admin">
           <ProtectedRoute component={AdminPage} />
         </Route>

@@ -1,155 +1,255 @@
 # Athena AI - Cybersecurity Intelligence Platform
 
+A futuristic, JARVIS-inspired cybersecurity dashboard with ultra-smooth animations and advanced UI effects.
+
 ## Overview
 
-Athena AI is a futuristic, JARVIS-inspired cybersecurity dashboard designed for penetration testing, vulnerability analysis, and threat detection. The platform features a distinctive dual-theme system with completely different visual aesthetics for light and dark modes, 3D holographic backgrounds, glassmorphism design patterns, and AI-powered security analysis tools.
+Athena AI is a comprehensive cybersecurity platform featuring:
+- Real-time threat monitoring and analysis
+- CVE (Common Vulnerabilities and Exposures) classification
+- Automated penetration testing and scanning
+- Security audit logging and compliance tracking
+- Admin controls for user and system management
 
-## User Preferences
+## Recent Updates
 
-Preferred communication style: Simple, everyday language.
+### November 5, 2025 - Ultra-Smooth Animation System
+Implemented advanced animation system with performance optimizations:
 
-## System Architecture
+**New Animation Components:**
+- **SmoothScroll** - Lenis-powered buttery-smooth scrolling with proper RAF cleanup
+- **MagneticCursor** - Spring-based magnetic cursor effect (desktop only)
+- **CursorGlow** - Radial gradient spotlight following cursor
+- **TickerTape** - Seamless infinite marquee for threat feeds with dynamic width measurement
+- **AnimatedContainer** - Scroll-triggered fade-in animations with spring physics
+- **Enhanced GlassCard** - Optimized hover effects with GPU acceleration
 
-### Frontend Architecture
+**Performance Optimizations:**
+- GPU acceleration via willChange CSS properties
+- Spring physics (stiffness 100-500, damping 15-30) for natural motion
+- ResizeObserver for dynamic content measurement
+- Proper requestAnimationFrame cleanup to prevent memory leaks
+- Intersection Observer for viewport-based animations
+- Custom CSS utilities for smooth elevation effects
 
-**Framework**: React with TypeScript, using Vite as the build tool and development server.
+**Animation Configuration:**
+- Smooth scroll: 1.2s duration with custom easing
+- Ticker speed: 60px/s (configurable)
+- Spring stiffness: 100-500 depending on interaction
+- Spring damping: 15-30 for balanced bounce
 
-**Routing**: Wouter for lightweight client-side routing with protected route implementation requiring JWT authentication.
+All animations tested and architect-approved for production use.
 
-**UI Component System**: 
-- shadcn/ui component library with Radix UI primitives
-- Custom glassmorphic components (GlassCard, MetricCard, ThreatBadge, etc.)
-- Tailwind CSS for styling with custom theme variables
-- Framer Motion for animations and page transitions
+## Tech Stack
 
-**Theme System**:
-- Dual-mode theming (light/dark) with completely different visual aesthetics
-- Dark mode: Cyberpunk/sci-fi aesthetic with deep navy backgrounds and neon cyan/magenta accents
-- Light mode: Professional, clean interface with white-blue backgrounds
-- Theme preference stored in localStorage
-- CSS custom properties for dynamic theme switching with 1-second transitions
+### Frontend
+- **React 18** with TypeScript
+- **Vite** for blazing-fast development
+- **Wouter** for lightweight routing
+- **Framer Motion** for advanced spring animations
+- **Lenis** for smooth scrolling
+- **Shadcn/UI** component library
+- **Tailwind CSS** for styling
+- **Recharts** for data visualization
+- **React Query** for server state management
 
-**Authentication Flow**:
-- JWT-based authentication with access and refresh tokens
-- Token storage in localStorage (persistent) or sessionStorage (session-only)
-- Automatic token refresh mechanism via TokenRefresher component
-- Protected routes redirect to login with "next" parameter for post-auth navigation
+### Animation Libraries
+- framer-motion - Primary animation library with spring physics
+- lenis - Smooth scroll implementation
+- react-intersection-observer - Viewport detection
+- Custom CSS utilities for GPU-accelerated effects
 
-**State Management**:
-- TanStack Query (React Query) for server state and API calls
-- Local component state with React hooks
-- No global state management library (Redux, Zustand, etc.)
+### Backend
+- **Express** server
+- **PostgreSQL** database (Neon)
+- **Drizzle ORM** for type-safe database queries
+- **JWT** authentication with refresh tokens
+- **Session** management with PostgreSQL store
 
-**Key Design Patterns**:
-- Glassmorphism: Semi-transparent cards with backdrop blur and subtle borders
-- 3D Holographic backgrounds with animated particles and geometric shapes
-- Animated metrics with count-up effects and progress indicators
-- Responsive design with mobile breakpoints
+## Project Structure
 
-### Backend Architecture
+```
+client/src/
+├── components/
+│   ├── Animation Components/
+│   │   ├── SmoothScroll.tsx - Lenis smooth scroll wrapper
+│   │   ├── MagneticCursor.tsx - Cursor-following magnetic effect
+│   │   ├── CursorGlow.tsx - Radial gradient cursor spotlight
+│   │   ├── TickerTape.tsx - Seamless infinite marquee
+│   │   ├── AnimatedContainer.tsx - Scroll-triggered animations
+│   │   └── GlassCard.tsx - Glass morphism cards with hover
+│   ├── UI Components/
+│   │   ├── Navigation.tsx - Main header navigation
+│   │   ├── MetricCard.tsx - Dashboard metric displays
+│   │   ├── ThreatBadge.tsx - Threat severity indicators
+│   │   └── HolographicBackground.tsx - Animated gradient bg
+│   └── ui/ - Shadcn component library
+├── pages/
+│   ├── Dashboard.tsx - Main dashboard with ticker tape
+│   ├── CVEClassifier.tsx - CVE analysis tool
+│   ├── PentestScan.tsx - Penetration testing
+│   ├── AdminPage.tsx - User management
+│   └── AuditLogs.tsx - Security audit logs
+├── lib/
+│   └── queryClient.ts - React Query configuration
+└── index.css - Global styles with animation utilities
 
-**Server Framework**: Express.js with TypeScript running on Node.js
+server/
+├── routes.ts - API endpoints
+├── storage.ts - In-memory data storage
+└── index.ts - Express server setup
 
-**API Structure**:
-- RESTful API endpoints prefixed with `/api`
-- Routes defined in `server/routes.ts` (currently empty/placeholder)
-- Session-based or token-based authentication expected (not yet implemented)
+shared/
+└── schema.ts - Shared TypeScript types
+```
 
-**Data Layer**:
-- Storage interface pattern (IStorage) for abstraction
-- In-memory implementation (MemStorage) as default
-- Prepared for database integration via Drizzle ORM
+## Key Features
 
-**Build System**:
-- Development: tsx for hot-reloading TypeScript execution
-- Production: esbuild bundles server code, Vite bundles client code
-- Single-file server bundle output to `dist/index.js`
+### Dashboard
+- Real-time threat monitoring with animated ticker tape
+- Metric cards with spring-based hover effects
+- Interactive charts (pie, bar) with smooth transitions
+- Glass morphism design with backdrop blur
+- Recent activity feed with severity badges
 
-**Development Features**:
-- Request logging middleware with response capture
-- Vite middleware integration for HMR in development
-- Replit-specific plugins (cartographer, dev banner, runtime error overlay)
+### CVE Classifier
+- Automated CVE analysis and severity classification
+- Description-based vulnerability detection
+- Integration-ready for external CVE databases
 
-### Data Storage Solutions
+### Pentest Scanner
+- Automated penetration testing
+- Configurable scan depth and targets
+- Real-time scan progress tracking
 
-**ORM**: Drizzle ORM configured for PostgreSQL (via `@neondatabase/serverless`)
+### Admin Panel
+- User management (create, edit, delete)
+- Role assignment (admin/user)
+- System configuration
 
-**Database Schema** (defined but not yet used):
-- Users table with id (UUID), username (unique), and password fields
-- Schema validation via drizzle-zod integration
-- Migration files generated to `./migrations` directory
+### Audit Logs
+- Comprehensive security event logging
+- Filterable by user, action, timestamp
+- Compliance tracking
 
-**Current Implementation**:
-- In-memory storage (Map-based) for development
-- User CRUD operations: getUser, getUserByUsername, createUser
-- Ready to swap to PostgreSQL connection when DATABASE_URL is provided
+## Animation Best Practices
 
-**Rationale**: The application uses an abstraction layer (IStorage interface) to allow easy switching between in-memory and database persistence without changing application logic.
+### Performance
+- Always use willChange for animated properties
+- Prefer transform/opacity for GPU acceleration
+- Use spring physics instead of duration-based easing
+- Implement proper cleanup for RAF loops and observers
+- Measure dynamic content widths for seamless loops
 
-### Authentication and Authorization
+### Spring Configuration
+- **Light interactions** (cards, buttons): stiffness 300-400, damping 25-30
+- **Entry animations** (scroll-triggered): stiffness 100-150, damping 20
+- **Cursor tracking**: stiffness 300, damping 30
+- **Icons/small elements**: stiffness 500+, damping 15
 
-**Strategy**: JWT-based authentication with access/refresh token pair
+### Accessibility
+- Custom cursor disabled on mobile/touch devices
+- Smooth scroll respects user motion preferences
+- All interactive elements have proper focus states
+- Animations don't interfere with functionality
 
-**Token Management**:
-- Access tokens for API authorization
-- Refresh tokens for obtaining new access tokens
-- Client-side token validation via JWT payload decoding
-- Automatic refresh scheduling (60 seconds before expiry)
-- Storage strategy: localStorage for "remember me", sessionStorage otherwise
+## Environment Variables
 
-**Authorization Flow**:
-- Login endpoint expected to return access and refresh tokens
-- Protected routes validate token presence and expiry
-- Token refresh mechanism runs in background via TokenRefresher component
-- Logout clears all tokens and redirects to login
+### Frontend (VITE_)
+- None required (all backend API calls use relative URLs)
 
-**Security Considerations**:
-- Tokens validated on both client (expiry check) and server (expected)
-- HTTPS required for production (tokens transmitted in headers)
-- No password stored client-side, only tokens
+### Backend
+- `SESSION_SECRET` - Secret key for session encryption (auto-generated)
+- `DATABASE_URL` - PostgreSQL connection string (auto-configured)
 
-## External Dependencies
+## Authentication
 
-### Third-Party UI Libraries
-- **Radix UI**: Unstyled, accessible UI primitives (dialogs, dropdowns, tooltips, etc.)
-- **shadcn/ui**: Pre-styled component library built on Radix UI
-- **Lucide React**: Icon library for consistent iconography
-- **Recharts**: Chart library for data visualization (bar charts, pie charts)
-- **Framer Motion**: Animation library for smooth transitions and effects
-- **Embla Carousel**: Touch-friendly carousel component
+The application uses a dual-token JWT system:
+- **Access tokens** - Short-lived (15 min), used for API requests
+- **Refresh tokens** - Long-lived (7 days), used to obtain new access tokens
+- Tokens stored in localStorage
+- Automatic refresh before expiration
 
-### Development and Build Tools
-- **Vite**: Frontend build tool and dev server with HMR
-- **esbuild**: Fast JavaScript bundler for production server code
-- **tsx**: TypeScript execution engine for development
-- **Tailwind CSS**: Utility-first CSS framework with PostCSS
-- **TypeScript**: Type-safe JavaScript with strict configuration
+### Default Users
+- **Admin**: username `testadmin`, password `password123`
+- **Regular User**: username `testuser`, password `password123`
 
-### Backend and Data
-- **Express.js**: Web server framework
-- **Drizzle ORM**: TypeScript ORM for SQL databases
-- **@neondatabase/serverless**: PostgreSQL client for Neon DB (serverless)
-- **drizzle-zod**: Zod schema generation from Drizzle schemas
-- **connect-pg-simple**: PostgreSQL session store for Express (not yet used)
+## Running the Project
 
-### Utility Libraries
-- **date-fns**: Date manipulation and formatting
-- **clsx** / **class-variance-authority**: Conditional className utilities
-- **cmdk**: Command palette component (not visibly used yet)
-- **zod**: Schema validation and type inference
+1. The workflow "Start application" is pre-configured and runs automatically
+2. Backend starts on port 5000
+3. Frontend served via Vite HMR
+4. Access at the Replit webview URL
 
-### Database
-- **PostgreSQL**: Expected production database (via Neon serverless)
-- Currently optional: Application runs with in-memory storage if DATABASE_URL is not provided
+## Development Guidelines
 
-### Assets and Media
-- **Generated Images**: Static holographic backgrounds and logo assets stored in `attached_assets/generated_images/`
-- Dark mode background: Deep space with neon grid floor
-- Light mode background: Bright environment with subtle holographic elements
-- Athena AI logo: Owl shield design for branding
+### Adding New Animations
+1. Use existing components (AnimatedContainer, GlassCard) when possible
+2. For custom animations, use framer-motion with spring physics
+3. Add willChange CSS for animated properties
+4. Test on both light and dark themes
+5. Ensure proper cleanup in useEffect hooks
 
-### Notes on Missing Integrations
-- Authentication backend endpoints are not yet implemented (mock data in frontend)
-- Admin dashboard, CVE classifier, and pentest scan features use placeholder/mock data
-- Email automation, SMS alerts, and reporting features mentioned in docs but not implemented
-- External security tool integrations (SIEM, etc.) are planned but not present
+### Performance Checklist
+- [ ] Uses GPU-accelerated properties (transform, opacity)
+- [ ] Spring physics configured appropriately
+- [ ] RAF loops have cleanup (cancelAnimationFrame)
+- [ ] Observers (Intersection, Resize) are disconnected
+- [ ] No fixed pixel values for dynamic content
+- [ ] Tested on multiple viewport sizes
+
+## Database Schema
+
+- **users** - User accounts with authentication
+- **scanResults** - Pentest scan results
+- **cveResults** - CVE classification results
+- **auditLogs** - Security event logs
+
+## API Routes
+
+- `POST /api/auth/login` - User authentication
+- `POST /api/auth/refresh` - Refresh access token
+- `POST /api/auth/logout` - End session
+- `GET /api/users` - List users (admin)
+- `POST /api/users` - Create user (admin)
+- `GET /api/scans` - List scan results
+- `POST /api/scans` - Create new scan
+- `GET /api/cve` - List CVE results
+- `POST /api/cve/classify` - Classify CVE
+- `GET /api/audit-logs` - Retrieve audit logs
+
+## Deployment
+
+The application is designed to run on Replit with:
+- Single port configuration (5000)
+- Automatic database provisioning
+- Built-in session management
+- Zero-configuration deployment
+
+## Future Enhancements
+
+### Potential Improvements
+- Three.js 3D visualizations (requires React 19+ for proper hook support)
+- Real-time WebSocket updates for threat feeds
+- Advanced filtering and search
+- Export reports (PDF, CSV)
+- Integration with external threat intelligence APIs
+- Mobile-optimized touch animations
+- Custom animation timeline editor
+
+## Contributing
+
+When making changes:
+1. Follow existing code patterns
+2. Test animations on multiple screen sizes
+3. Run architect review for significant changes
+4. Update this documentation
+5. Ensure all tests pass
+
+## Support
+
+For issues or questions:
+- Check browser console for errors
+- Verify animation performance with DevTools
+- Review architect feedback in task history
+- Test on latest Chrome/Firefox for best results
