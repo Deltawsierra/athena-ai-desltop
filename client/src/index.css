@@ -402,13 +402,16 @@ html.lenis, html.lenis body {
   pointer-events: none;
 }
 
-/* Cursor styles */
-html {
-  cursor: none;
+/* Cursor styles - hide default cursor everywhere */
+html,
+html * {
+  cursor: none !important;
 }
 
+/* Re-enable cursor on mobile */
 @media (max-width: 768px) {
-  html {
-    cursor: auto;
+  html,
+  html * {
+    cursor: auto !important;
   }
 }

@@ -8,14 +8,15 @@ export default function MagneticCursor() {
   const cursorX = useMotionValue(0);
   const cursorY = useMotionValue(0);
   
-  const springConfig = { damping: 25, stiffness: 200, mass: 0.5 };
+  // Faster, more responsive spring config
+  const springConfig = { damping: 15, stiffness: 500, mass: 0.3 };
   const cursorXSpring = useSpring(cursorX, springConfig);
   const cursorYSpring = useSpring(cursorY, springConfig);
 
   const dotX = useMotionValue(0);
   const dotY = useMotionValue(0);
-  const dotXSpring = useSpring(dotX, { damping: 30, stiffness: 400 });
-  const dotYSpring = useSpring(dotY, { damping: 30, stiffness: 400 });
+  const dotXSpring = useSpring(dotX, { damping: 10, stiffness: 700, mass: 0.2 });
+  const dotYSpring = useSpring(dotY, { damping: 10, stiffness: 700, mass: 0.2 });
 
   const [isHovering, setIsHovering] = useState(false);
 
@@ -31,7 +32,7 @@ export default function MagneticCursor() {
     const handleMouseLeave = () => setIsHovering(false);
 
     const interactiveElements = document.querySelectorAll(
-      'button, a, input, textarea, [role="button"], [data-magnetic]'
+      'button, a, input, textarea, select, [role="button"], [data-magnetic], label'
     );
 
     interactiveElements.forEach((el) => {
@@ -52,9 +53,10 @@ export default function MagneticCursor() {
 
   return (
     <>
+      {/* Outer ring */}
       <motion.div
         ref={cursorRef}
-        className="fixed top-0 left-0 w-8 h-8 pointer-events-none z-[9999] mix-blend-difference"
+        className="fixed top-0 left-0 pointer-events-none z-[9999] mix-blend-difference"
         style={{
           x: cursorXSpring,
           y: cursorYSpring,
@@ -63,18 +65,21 @@ export default function MagneticCursor() {
         }}
       >
         <motion.div
-          className="w-full h-full rounded-full border-2 border-cyan"
+          className="rounded-full border-2 transition-colors"
           animate={{
-            scale: isHovering ? 1.5 : 1,
-            opacity: isHovering ? 0.5 : 1,
+            width: isHovering ? 48 : 32,
+            height: isHovering ? 48 : 32,
+            borderColor: isHovering ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)',
+            opacity: isHovering ? 0.8 : 1,
           }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
         />
       </motion.div>
 
+      {/* Center dot */}
       <motion.div
         ref={cursorDotRef}
-        className="fixed top-0 left-0 w-1.5 h-1.5 pointer-events-none z-[9999] mix-blend-difference"
+        className="fixed top-0 left-0 pointer-events-none z-[9999] mix-blend-difference"
         style={{
           x: dotXSpring,
           y: dotYSpring,
@@ -82,7 +87,15 @@ export default function MagneticCursor() {
           translateY: '-50%',
         }}
       >
-        <div className="w-full h-full rounded-full bg-cyan" />
+        <motion.div
+          className="rounded-full transition-colors"
+          animate={{
+            width: isHovering ? 8 : 6,
+            height: isHovering ? 8 : 6,
+            backgroundColor: isHovering ? 'rgb(236, 72, 153)' : 'rgb(6, 182, 212)',
+          }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+        />
       </motion.div>
     </>
   );

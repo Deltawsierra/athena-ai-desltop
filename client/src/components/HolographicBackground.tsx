@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform, useMotionValue } from "framer-motion";
 import darkBg from "@assets/generated_images/Dark_mode_3D_holographic_background_bc80ede4.png";
 import lightBg from "@assets/generated_images/Light_mode_3D_holographic_background_5e232446.png";
 
@@ -74,10 +74,261 @@ const GeometricShape = ({ index }: { index: number }) => {
   );
 };
 
+// Sound bar visualizer in bottom left
+const SoundVisualizer = () => {
+  const bars = Array.from({ length: 5 }, (_, i) => {
+    const randomDelay = i * 0.1;
+    const randomDuration = 0.5 + Math.random() * 0.5;
+    
+    return (
+      <motion.div
+        key={i}
+        className="bg-gradient-to-t from-cyan/60 to-cyan/20 rounded-t-sm"
+        style={{
+          width: '8px',
+          minHeight: '4px',
+        }}
+        animate={{
+          height: [
+            `${10 + Math.random() * 10}px`,
+            `${30 + Math.random() * 40}px`,
+            `${10 + Math.random() * 10}px`,
+          ],
+        }}
+        transition={{
+          duration: randomDuration,
+          repeat: Infinity,
+          delay: randomDelay,
+          ease: "easeInOut",
+        }}
+      />
+    );
+  });
+
+  return (
+    <div className="absolute bottom-8 left-8 flex items-end gap-1.5 opacity-40">
+      {bars}
+    </div>
+  );
+};
+
+// Spinning circular rings in top left
+const SpinningRings = () => {
+  return (
+    <div className="absolute top-8 left-8 opacity-30">
+      {/* Outer ring - clockwise */}
+      <motion.div
+        className="absolute inset-0 w-24 h-24 rounded-full border-2 border-cyan/40"
+        animate={{ rotate: 360 }}
+        transition={{
+          duration: 8,
+          repeat: Infinity,
+          ease: "linear",
+        }}
+        style={{
+          borderStyle: 'dashed',
+          borderSpacing: '4px',
+        }}
+      />
+      
+      {/* Middle ring - counter-clockwise */}
+      <motion.div
+        className="absolute inset-0 w-24 h-24 rounded-full border border-magenta/40"
+        animate={{ rotate: -360 }}
+        transition={{
+          duration: 12,
+          repeat: Infinity,
+          ease: "linear",
+        }}
+        style={{
+          transform: 'scale(0.7)',
+          borderStyle: 'dotted',
+        }}
+      />
+      
+      {/* Inner ring - clockwise fast */}
+      <motion.div
+        className="absolute inset-0 w-24 h-24 rounded-full border border-primary/40"
+        animate={{ rotate: 360 }}
+        transition={{
+          duration: 5,
+          repeat: Infinity,
+          ease: "linear",
+        }}
+        style={{
+          transform: 'scale(0.4)',
+        }}
+      />
+      
+      {/* Center dot pulse */}
+      <motion.div
+        className="absolute inset-0 w-24 h-24 flex items-center justify-center"
+      >
+        <motion.div
+          className="w-2 h-2 rounded-full bg-cyan/60"
+          animate={{
+            scale: [1, 1.5, 1],
+            opacity: [0.6, 1, 0.6],
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      </motion.div>
+    </div>
+  );
+};
+
+// AI Brain mapping - responds to cursor and scroll
+const AIBrainMap = ({ mouseX, mouseY, scrollY }: { mouseX: number; mouseY: number; scrollY: any }) => {
+  const nodes = Array.from({ length: 12 }, (_, i) => {
+    const angle = (i / 12) * Math.PI * 2;
+    const radius = 80;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    
+    return { x, y, index: i };
+  });
+
+  const centerX = useTransform(scrollY, [0, 1000], [0, 30]);
+  const centerY = useTransform(scrollY, [0, 1000], [0, -20]);
+
+  return (
+    <motion.div
+      className="absolute top-1/2 left-1/2 opacity-20 pointer-events-none"
+      style={{
+        x: centerX,
+        y: centerY,
+      }}
+    >
+      <svg width="400" height="400" viewBox="-200 -200 400 400" className="overflow-visible">
+        {/* Neural connections */}
+        {nodes.map((node, i) => (
+          nodes.slice(i + 1).map((target, j) => (
+            <motion.line
+              key={`connection-${i}-${j}`}
+              x1={node.x}
+              y1={node.y}
+              x2={target.x}
+              y2={target.y}
+              stroke="url(#brainGradient)"
+              strokeWidth="0.5"
+              animate={{
+                opacity: [0.1, 0.3, 0.1],
+                strokeWidth: [0.5, 1, 0.5],
+              }}
+              transition={{
+                duration: 3 + Math.random() * 2,
+                repeat: Infinity,
+                delay: Math.random() * 2,
+                ease: "easeInOut",
+              }}
+            />
+          ))
+        ))}
+        
+        {/* Nodes */}
+        {nodes.map((node, i) => (
+          <motion.g key={`node-${i}`}>
+            <motion.circle
+              cx={node.x}
+              cy={node.y}
+              r="3"
+              fill="currentColor"
+              className="text-cyan"
+              animate={{
+                r: [3, 5, 3],
+                opacity: [0.4, 0.8, 0.4],
+              }}
+              transition={{
+                duration: 2 + Math.random(),
+                repeat: Infinity,
+                delay: i * 0.2,
+                ease: "easeInOut",
+              }}
+            />
+            
+            {/* Pulse rings */}
+            <motion.circle
+              cx={node.x}
+              cy={node.y}
+              r="3"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="0.5"
+              className="text-magenta"
+              animate={{
+                r: [3, 12, 3],
+                opacity: [0.6, 0, 0.6],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                delay: i * 0.15,
+                ease: "easeOut",
+              }}
+            />
+          </motion.g>
+        ))}
+        
+        {/* Center brain core */}
+        <motion.circle
+          cx="0"
+          cy="0"
+          r="8"
+          fill="url(#coreGradient)"
+          animate={{
+            r: [8, 12, 8],
+            opacity: [0.6, 0.9, 0.6],
+          }}
+          transition={{
+            duration: 3,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+        
+        <defs>
+          <linearGradient id="brainGradient">
+            <stop offset="0%" stopColor="rgb(6, 182, 212)" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="rgb(236, 72, 153)" stopOpacity="0.3" />
+          </linearGradient>
+          <radialGradient id="coreGradient">
+            <stop offset="0%" stopColor="rgb(6, 182, 212)" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="rgb(236, 72, 153)" stopOpacity="0.4" />
+          </radialGradient>
+        </defs>
+      </svg>
+      
+      {/* Glow effect responding to cursor distance */}
+      <motion.div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full blur-[80px]"
+        animate={{
+          background: [
+            'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
+            'radial-gradient(circle, rgba(236,72,153,0.2) 0%, transparent 70%)',
+            'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
+          ],
+        }}
+        transition={{
+          duration: 5,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+    </motion.div>
+  );
+};
+
 export default function HolographicBackground() {
   const [isDark, setIsDark] = useState(true);
   const { scrollY } = useScroll();
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
   
   const backgroundY = useTransform(scrollY, [0, 1000], [0, 200]);
   const gridY = useTransform(scrollY, [0, 1000], [0, 150]);
@@ -97,8 +348,18 @@ export default function HolographicBackground() {
       attributeFilter: ["class"],
     });
     
-    return () => observer.disconnect();
-  }, []);
+    const handleMouseMove = (e: MouseEvent) => {
+      mouseX.set(e.clientX);
+      mouseY.set(e.clientY);
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [mouseX, mouseY]);
 
   return (
     <div ref={containerRef} className="fixed inset-0 -z-10 overflow-hidden">
@@ -231,6 +492,11 @@ export default function HolographicBackground() {
           ease: "linear",
         }}
       />
+      
+      {/* New interactive elements */}
+      <SoundVisualizer />
+      <SpinningRings />
+      <AIBrainMap mouseX={mouseX.get()} mouseY={mouseY.get()} scrollY={scrollY} />
     </div>
   );
 }
