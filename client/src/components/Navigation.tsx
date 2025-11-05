@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Shield, Activity, Bug, Settings, LogOut } from "lucide-react";
+import { Shield, Activity, Bug, Settings, LogOut, Users, Brain, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import athenaLogo from "@assets/generated_images/Athena_AI_owl_shield_logo_3eda4960.png";
 import ThemeToggle from "./ThemeToggle";
@@ -12,8 +12,11 @@ interface NavigationProps {
 
 const navLinks = [
   { path: "/dashboard", label: "Dashboard", icon: Activity },
+  { path: "/clients", label: "Clients", icon: Users },
   { path: "/pentest", label: "Pentest", icon: Shield },
   { path: "/classify-cve", label: "CVE Classifier", icon: Bug },
+  { path: "/ai-health", label: "AI Health", icon: Brain },
+  { path: "/audit-logs", label: "Logs", icon: FileText },
   { path: "/admin", label: "Admin", icon: Settings },
 ];
 

@@ -17,6 +17,8 @@ import PentestScan from "@/pages/PentestScan";
 import CVEClassifier from "@/pages/CVEClassifier";
 import AdminPage from "@/pages/AdminPage";
 import AuditLogs from "@/pages/AuditLogs";
+import Clients from "@/pages/Clients";
+import AIHealth from "@/pages/AIHealth";
 import NotFound from "@/pages/not-found";
 import { getAccess, isTokenValid, clearTokens } from "@/utils/auth";
 
@@ -56,11 +58,17 @@ function Router({ isAuthenticated, onLogout }: { isAuthenticated: boolean; onLog
         <Route path="/dashboard">
           <ProtectedRoute component={Dashboard} />
         </Route>
+        <Route path="/clients">
+          <ProtectedRoute component={Clients} />
+        </Route>
         <Route path="/pentest">
           <ProtectedRoute component={PentestScan} />
         </Route>
         <Route path="/classify-cve">
           <ProtectedRoute component={CVEClassifier} />
+        </Route>
+        <Route path="/ai-health">
+          <ProtectedRoute component={AIHealth} />
         </Route>
         <Route path="/admin">
           <ProtectedRoute component={AdminPage} />

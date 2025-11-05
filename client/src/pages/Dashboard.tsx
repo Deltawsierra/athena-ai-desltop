@@ -43,7 +43,7 @@ export default function Dashboard() {
               className="text-3xl md:text-4xl font-bold tracking-tight"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
+              transition={{ duration: 1.2, delay: 0.3 }}
             >
               Welcome to <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Athena AI</span>
             </motion.h1>
@@ -51,7 +51,7 @@ export default function Dashboard() {
               className="text-muted-foreground"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.2, duration: 0.6 }}
+              transition={{ delay: 0.8, duration: 1 }}
             >
               Your central intelligence hub for threat detection and security analytics
             </motion.p>
