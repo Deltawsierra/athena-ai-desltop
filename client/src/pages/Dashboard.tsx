@@ -1,7 +1,9 @@
 import { Shield, Bug, Activity, Scan, TrendingUp } from "lucide-react";
+import { motion } from "framer-motion";
 import MetricCard from "@/components/MetricCard";
 import GlassCard from "@/components/GlassCard";
 import ThreatBadge from "@/components/ThreatBadge";
+import AnimatedContainer from "@/components/AnimatedContainer";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 //todo: remove mock functionality
@@ -24,43 +26,64 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen">
       <div className="container mx-auto p-6 space-y-8">
-        <div className="space-y-2">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Welcome to <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Athena AI</span>
-          </h1>
-          <p className="text-muted-foreground">
-            Your central intelligence hub for threat detection and security analytics
-          </p>
-        </div>
+        <AnimatedContainer direction="up" delay={0}>
+          <div className="space-y-2">
+            <motion.h1 
+              className="text-3xl md:text-4xl font-bold tracking-tight"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              Welcome to <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Athena AI</span>
+            </motion.h1>
+            <motion.p 
+              className="text-muted-foreground"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+            >
+              Your central intelligence hub for threat detection and security analytics
+            </motion.p>
+          </div>
+        </AnimatedContainer>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-testid="metrics-grid">
-          <MetricCard
-            title="Total Scans"
-            value="24"
-            icon={Scan}
-            trend={{ value: 12, isPositive: true }}
-          />
-          <MetricCard
-            title="Threats Detected"
-            value="22"
-            icon={Bug}
-            trend={{ value: 5, isPositive: false }}
-          />
-          <MetricCard
-            title="Active Monitors"
-            value="8"
-            icon={Activity}
-          />
-          <MetricCard
-            title="Detection Rate"
-            value="98%"
-            icon={Shield}
-            trend={{ value: 2, isPositive: true }}
-          />
+          <AnimatedContainer direction="up" delay={0.1}>
+            <MetricCard
+              title="Total Scans"
+              value={24}
+              icon={Scan}
+              trend={{ value: 12, isPositive: true }}
+            />
+          </AnimatedContainer>
+          <AnimatedContainer direction="up" delay={0.2}>
+            <MetricCard
+              title="Threats Detected"
+              value={22}
+              icon={Bug}
+              trend={{ value: 5, isPositive: false }}
+            />
+          </AnimatedContainer>
+          <AnimatedContainer direction="up" delay={0.3}>
+            <MetricCard
+              title="Active Monitors"
+              value={8}
+              icon={Activity}
+            />
+          </AnimatedContainer>
+          <AnimatedContainer direction="up" delay={0.4}>
+            <MetricCard
+              title="Detection Rate"
+              value="98%"
+              icon={Shield}
+              trend={{ value: 2, isPositive: true }}
+            />
+          </AnimatedContainer>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <GlassCard>
+          <AnimatedContainer direction="left" delay={0.2}>
+            <GlassCard>
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-primary" />
               Threat Breakdown
@@ -87,8 +110,10 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
           </GlassCard>
+          </AnimatedContainer>
 
-          <GlassCard>
+          <AnimatedContainer direction="right" delay={0.2}>
+            <GlassCard>
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Bug className="w-5 h-5 text-primary" />
               Recent Activity
@@ -110,9 +135,11 @@ export default function Dashboard() {
               ))}
             </div>
           </GlassCard>
+          </AnimatedContainer>
         </div>
 
-        <GlassCard>
+        <AnimatedContainer direction="up" delay={0.3}>
+          <GlassCard>
           <h3 className="text-lg font-semibold mb-4">Top Keywords in Threats</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -132,6 +159,7 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
         </GlassCard>
+        </AnimatedContainer>
       </div>
     </div>
   );
