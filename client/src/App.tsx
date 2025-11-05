@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 import Navigation from "@/components/Navigation";
 import TokenRefresher from "@/components/TokenRefresher";
 import HolographicBackground from "@/components/HolographicBackground";
-import ThreeDBackground from "@/components/ThreeDBackground";
 import MagneticCursor from "@/components/MagneticCursor";
 import CursorGlow from "@/components/CursorGlow";
 import SmoothScroll from "@/components/SmoothScroll";
