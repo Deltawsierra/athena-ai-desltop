@@ -214,5 +214,5 @@ Session stored in memory (resets on server restart).
 
 ## Credits
 
-Built with ❤️ using Replit Agent
 Athena AI - Goddess of Wisdom, Strategy, and Protection
+Built with modern React, TypeScript, and advanced animation libraries
