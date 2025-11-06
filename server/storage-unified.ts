@@ -215,7 +215,7 @@ class UnifiedStorage implements IStorage {
     if (useDesktopStorage) {
       return sqliteStorage.getAIChatMessages();
     }
-    return memStorage.getAllAIChatMessages();
+    return memStorage.getAllChatMessages();
   }
   
   async getAllChatMessages(): Promise<AIChatMessage[]> {
@@ -223,7 +223,10 @@ class UnifiedStorage implements IStorage {
   }
   
   async createAIChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage> {
-    return this.backend.createAIChatMessage(message);
+    if (useDesktopStorage) {
+      return sqliteStorage.createAIChatMessage(message);
+    }
+    return memStorage.createChatMessage(message);
   }
   
   async createChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage> {
