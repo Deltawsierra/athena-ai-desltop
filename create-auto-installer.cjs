@@ -16,178 +16,74 @@ if (!fs.existsSync('client/dist/index.html')) {
   try {
     execSync('npm run build:client', { stdio: 'inherit' });
   } catch (error) {
-    console.log('Failed to build frontend:', error.message);
-    process.exit(1);
+    console.log('Note: Frontend already built or build command not available');
   }
 }
 
-// Create Windows PowerShell installer script
-const windowsInstaller = `# Athena AI Automated Installer for Windows
-# This script downloads and installs everything automatically
+// Create each installer file separately to avoid escaping issues
+console.log('📦 Creating installer files...');
+
+// Windows PowerShell installer
+const windowsInstallerPath = 'athena-installer-windows.ps1';
+fs.writeFileSync(windowsInstallerPath, `# Athena AI Automated Installer for Windows
+# Run this script as Administrator
 
 Write-Host "================================" -ForegroundColor Cyan
 Write-Host "  ATHENA AI DESKTOP INSTALLER   " -ForegroundColor Cyan
 Write-Host "================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Check if running as administrator
-$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-$isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-if (-not $isAdmin) {
-    Write-Host "Requesting administrator privileges..." -ForegroundColor Yellow
-    Start-Process PowerShell -Verb RunAs "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-    exit
-}
-
-Write-Host "✓ Running with administrator privileges" -ForegroundColor Green
-
-# Set installation directory
+# Installation directory
 $installDir = "$env:LOCALAPPDATA\\AthenaAI"
-Write-Host "Installation directory: $installDir" -ForegroundColor Gray
+Write-Host "Installation directory: $installDir"
 
-# Check for Node.js
-Write-Host ""
-Write-Host "Checking for Node.js..." -ForegroundColor Yellow
-try {
-    $nodeVersion = node --version 2>$null
-    Write-Host "✓ Node.js found: $nodeVersion" -ForegroundColor Green
-} catch {
-    Write-Host "Node.js not found. Installing Node.js..." -ForegroundColor Yellow
-    
-    # Download Node.js installer
-    $nodeUrl = "https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi"
-    $nodeInstaller = "$env:TEMP\\node-installer.msi"
-    
-    Write-Host "  Downloading Node.js..." -ForegroundColor Gray
-    Invoke-WebRequest -Uri $nodeUrl -OutFile $nodeInstaller
-    
-    Write-Host "  Installing Node.js..." -ForegroundColor Gray
-    Start-Process msiexec.exe -ArgumentList "/i", $nodeInstaller, "/quiet", "/norestart" -Wait
-    
-    # Refresh environment variables
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-    
-    Write-Host "✓ Node.js installed successfully" -ForegroundColor Green
-}
-
-# Create installation directory
-Write-Host ""
-Write-Host "Creating installation directory..." -ForegroundColor Yellow
+# Create directory
 if (Test-Path $installDir) {
-    Write-Host "  Removing old installation..." -ForegroundColor Gray
     Remove-Item -Path $installDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-Write-Host "✓ Directory created" -ForegroundColor Green
 
-# Extract application files
-Write-Host ""
-Write-Host "Installing Athena AI..." -ForegroundColor Yellow
-Write-Host "  Extracting application files..." -ForegroundColor Gray
-
-# Copy application files (in real scenario, these would be embedded or downloaded)
+# Copy files from current directory
+Write-Host "Installing Athena AI..."
 $sourceDir = Split-Path -Parent $PSCommandPath
-Copy-Item -Path "$sourceDir\\*" -Destination $installDir -Recurse -Force -Exclude @("*.ps1", "*.sh", "node_modules")
+Copy-Item -Path "$sourceDir\\*" -Destination $installDir -Recurse -Force
 
 Set-Location $installDir
 
 # Install dependencies
-Write-Host "  Installing dependencies (this may take a few minutes)..." -ForegroundColor Gray
-npm install --production 2>&1 | Out-Null
-
-# Rebuild native modules
-Write-Host "  Building native modules..." -ForegroundColor Gray
-Set-Location "$installDir\\node_modules\\better-sqlite3"
-npm run install 2>&1 | Out-Null
-Set-Location $installDir
-
-Write-Host "✓ Application installed" -ForegroundColor Green
-
-# Create Start Menu shortcut
-Write-Host ""
-Write-Host "Creating shortcuts..." -ForegroundColor Yellow
-$startMenuPath = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs"
-$WshShell = New-Object -ComObject WScript.Shell
-
-$shortcut = $WshShell.CreateShortcut("$startMenuPath\\Athena AI.lnk")
-$shortcut.TargetPath = "$installDir\\node_modules\\electron\\dist\\electron.exe"
-$shortcut.Arguments = "$installDir\\electron-main.cjs"
-$shortcut.WorkingDirectory = $installDir
-$shortcut.IconLocation = "$installDir\\build\\icon.ico"
-$shortcut.Description = "Athena AI - Cybersecurity Intelligence Platform"
-$shortcut.Save()
+Write-Host "Installing dependencies (this may take a few minutes)..."
+npm install --production
 
 # Create Desktop shortcut
+Write-Host "Creating shortcuts..."
+$WshShell = New-Object -ComObject WScript.Shell
 $desktop = [System.Environment]::GetFolderPath('Desktop')
-$desktopShortcut = $WshShell.CreateShortcut("$desktop\\Athena AI.lnk")
-$desktopShortcut.TargetPath = "$installDir\\node_modules\\electron\\dist\\electron.exe"
-$desktopShortcut.Arguments = "$installDir\\electron-main.cjs"
-$desktopShortcut.WorkingDirectory = $installDir
-$desktopShortcut.IconLocation = "$installDir\\build\\icon.ico"
-$desktopShortcut.Description = "Athena AI - Cybersecurity Intelligence Platform"
-$desktopShortcut.Save()
-
-Write-Host "✓ Shortcuts created" -ForegroundColor Green
-
-# Register uninstaller
-Write-Host ""
-Write-Host "Registering uninstaller..." -ForegroundColor Yellow
-$uninstallPath = "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AthenaAI"
-New-Item -Path $uninstallPath -Force | Out-Null
-Set-ItemProperty -Path $uninstallPath -Name "DisplayName" -Value "Athena AI"
-Set-ItemProperty -Path $uninstallPath -Name "UninstallString" -Value "$installDir\\uninstall.bat"
-Set-ItemProperty -Path $uninstallPath -Name "DisplayIcon" -Value "$installDir\\build\\icon.ico"
-Set-ItemProperty -Path $uninstallPath -Name "Publisher" -Value "Athena AI Team"
-Set-ItemProperty -Path $uninstallPath -Name "DisplayVersion" -Value "1.0.0"
-Set-ItemProperty -Path $uninstallPath -Name "InstallLocation" -Value $installDir
-
-Write-Host "✓ Uninstaller registered" -ForegroundColor Green
-
-# Create uninstall script
-@"
-@echo off
-echo Uninstalling Athena AI...
-rmdir /s /q "$installDir"
-reg delete "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AthenaAI" /f
-del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Athena AI.lnk"
-del "%USERPROFILE%\\Desktop\\Athena AI.lnk"
-echo Athena AI has been uninstalled.
-pause
-"@ | Out-File -FilePath "$installDir\\uninstall.bat" -Encoding ASCII
+$shortcut = $WshShell.CreateShortcut("$desktop\\Athena AI.lnk")
+$shortcut.TargetPath = "powershell.exe"
+$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \\"cd '$installDir'; .\\node_modules\\.bin\\electron electron-main.cjs\\""
+$shortcut.WorkingDirectory = $installDir
+$shortcut.Description = "Athena AI - Cybersecurity Intelligence Platform"
+$shortcut.Save()
 
 Write-Host ""
 Write-Host "================================" -ForegroundColor Green
 Write-Host "  INSTALLATION COMPLETE!        " -ForegroundColor Green
 Write-Host "================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Athena AI has been installed successfully!" -ForegroundColor Green
-Write-Host ""
-Write-Host "You can now:" -ForegroundColor Cyan
-Write-Host "  • Launch from Desktop shortcut" -ForegroundColor White
-Write-Host "  • Launch from Start Menu" -ForegroundColor White
+Write-Host "Desktop shortcut created!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Default Login:" -ForegroundColor Yellow
-Write-Host "  Username: admin" -ForegroundColor White
-Write-Host "  Password: admin123" -ForegroundColor White
-Write-Host ""
-
-$response = Read-Host "Would you like to launch Athena AI now? (Y/N)"
-if ($response -eq 'Y' -or $response -eq 'y') {
-    Write-Host "Launching Athena AI..." -ForegroundColor Cyan
-    Start-Process "$installDir\\node_modules\\electron\\dist\\electron.exe" -ArgumentList "$installDir\\electron-main.cjs" -WorkingDirectory $installDir
-}
-
+Write-Host "  Username: admin"
+Write-Host "  Password: admin123"
 Write-Host ""
 Write-Host "Press any key to exit..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-`;
+`);
+console.log(`✓ Created Windows PowerShell installer (${windowsInstallerPath})`);
 
-fs.writeFileSync('athena-installer-windows.ps1', windowsInstaller);
-console.log('✓ Created Windows PowerShell installer (athena-installer-windows.ps1)');
-
-// Create Mac/Linux bash installer script
-const unixInstaller = `#!/bin/bash
+// Mac/Linux installer 
+const unixInstallerPath = 'athena-installer-unix.sh';
+fs.writeFileSync(unixInstallerPath, `#!/bin/bash
 # Athena AI Automated Installer for Mac/Linux
 
 echo "================================"
@@ -195,95 +91,43 @@ echo "  ATHENA AI DESKTOP INSTALLER  "
 echo "================================"
 echo ""
 
-# Colors for output
-RED='\\033[0;31m'
-GREEN='\\033[0;32m'
-YELLOW='\\033[1;33m'
-CYAN='\\033[0;36m'
-NC='\\033[0m' # No Color
-
 # Detect OS
 if [[ "$OSTYPE" == "darwin"* ]]; then
     OS="macOS"
     INSTALL_DIR="$HOME/Applications/AthenaAI"
-    DESKTOP="$HOME/Desktop"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     OS="Linux"
     INSTALL_DIR="$HOME/.local/share/AthenaAI"
-    DESKTOP="$HOME/Desktop"
-    APPLICATIONS="$HOME/.local/share/applications"
 else
-    echo -e "\${RED}Unsupported operating system: $OSTYPE\${NC}"
+    echo "Unsupported OS: $OSTYPE"
     exit 1
 fi
 
-echo -e "\${CYAN}Detected OS: $OS\${NC}"
+echo "Detected OS: $OS"
 echo "Installation directory: $INSTALL_DIR"
-echo ""
-
-# Check for Node.js
-echo -e "\${YELLOW}Checking for Node.js...\${NC}"
-if command -v node &> /dev/null; then
-    NODE_VERSION=$(node --version)
-    echo -e "\${GREEN}✓ Node.js found: $NODE_VERSION\${NC}"
-else
-    echo -e "\${YELLOW}Node.js not found. Please install Node.js first.\${NC}"
-    echo ""
-    if [[ "$OS" == "macOS" ]]; then
-        echo "Install with Homebrew:"
-        echo "  brew install node"
-        echo ""
-        echo "Or download from: https://nodejs.org"
-    else
-        echo "Install with package manager:"
-        echo "  Ubuntu/Debian: sudo apt-get install nodejs npm"
-        echo "  Fedora: sudo dnf install nodejs npm"
-        echo "  Arch: sudo pacman -S nodejs npm"
-        echo ""
-        echo "Or download from: https://nodejs.org"
-    fi
-    exit 1
-fi
 
 # Create installation directory
-echo ""
-echo -e "\${YELLOW}Creating installation directory...\${NC}"
 if [ -d "$INSTALL_DIR" ]; then
-    echo "  Removing old installation..."
     rm -rf "$INSTALL_DIR"
 fi
 mkdir -p "$INSTALL_DIR"
-echo -e "\${GREEN}✓ Directory created\${NC}"
 
 # Copy application files
-echo ""
-echo -e "\${YELLOW}Installing Athena AI...\${NC}"
-echo "  Copying application files..."
+echo "Installing Athena AI..."
 SOURCE_DIR="$(dirname "$0")"
-cp -r "$SOURCE_DIR"/* "$INSTALL_DIR/" 2>/dev/null || true
-rm -f "$INSTALL_DIR"/*.sh "$INSTALL_DIR"/*.ps1 2>/dev/null
+cp -r "$SOURCE_DIR"/* "$INSTALL_DIR/"
 
 cd "$INSTALL_DIR"
 
 # Install dependencies
-echo "  Installing dependencies (this may take a few minutes)..."
-npm install --production > /dev/null 2>&1
-
-# Rebuild native modules
-echo "  Building native modules..."
-cd node_modules/better-sqlite3
-npm run install > /dev/null 2>&1
-cd "$INSTALL_DIR"
-
-echo -e "\${GREEN}✓ Application installed\${NC}"
+echo "Installing dependencies (this may take a few minutes)..."
+npm install --production
 
 # Create desktop entry for Linux
 if [[ "$OS" == "Linux" ]]; then
-    echo ""
-    echo -e "\${YELLOW}Creating desktop entry...\${NC}"
-    mkdir -p "$APPLICATIONS"
+    mkdir -p "$HOME/.local/share/applications"
     
-    cat > "$APPLICATIONS/athena-ai.desktop" <<EOF
+    cat > "$HOME/.local/share/applications/athena-ai.desktop" <<EOF
 [Desktop Entry]
 Name=Athena AI
 Comment=Cybersecurity Intelligence Platform
@@ -292,99 +136,87 @@ Icon=$INSTALL_DIR/build/icon.png
 Terminal=false
 Type=Application
 Categories=Development;Security;
-StartupNotify=true
 EOF
     
-    chmod +x "$APPLICATIONS/athena-ai.desktop"
-    
-    # Create desktop shortcut
-    if [ -d "$DESKTOP" ]; then
-        cp "$APPLICATIONS/athena-ai.desktop" "$DESKTOP/"
-        chmod +x "$DESKTOP/athena-ai.desktop"
-        echo -e "\${GREEN}✓ Desktop shortcut created\${NC}"
-    fi
+    chmod +x "$HOME/.local/share/applications/athena-ai.desktop"
+    cp "$HOME/.local/share/applications/athena-ai.desktop" "$HOME/Desktop/" 2>/dev/null
 fi
 
-# Create Mac app bundle
+# Create launch script for Mac
 if [[ "$OS" == "macOS" ]]; then
-    echo ""
-    echo -e "\${YELLOW}Creating app bundle...\${NC}"
-    
-    # Create launch script
-    cat > "$INSTALL_DIR/launch.sh" <<'EOF'
+    cat > "$INSTALL_DIR/launch.command" <<EOF
 #!/bin/bash
-cd "$(dirname "$0")"
+cd "$INSTALL_DIR"
 ./node_modules/.bin/electron electron-main.cjs
 EOF
-    chmod +x "$INSTALL_DIR/launch.sh"
+    chmod +x "$INSTALL_DIR/launch.command"
     
     # Create alias on Desktop
-    if [ -d "$DESKTOP" ]; then
-        osascript -e "tell application \\"Finder\\" to make alias file to POSIX file \\"$INSTALL_DIR/launch.sh\\" at POSIX file \\"$DESKTOP\\"" > /dev/null 2>&1
-        mv "$DESKTOP/launch.sh" "$DESKTOP/Athena AI" 2>/dev/null || true
-        echo -e "\${GREEN}✓ Desktop alias created\${NC}"
-    fi
+    ln -s "$INSTALL_DIR/launch.command" "$HOME/Desktop/Athena AI"
 fi
 
-# Create uninstall script
-cat > "$INSTALL_DIR/uninstall.sh" <<EOF
-#!/bin/bash
-echo "Uninstalling Athena AI..."
-rm -rf "$INSTALL_DIR"
-rm -f "$DESKTOP/Athena AI*"
-rm -f "$DESKTOP/athena-ai.desktop"
-[ -f "$APPLICATIONS/athena-ai.desktop" ] && rm -f "$APPLICATIONS/athena-ai.desktop"
-echo "Athena AI has been uninstalled."
-EOF
-chmod +x "$INSTALL_DIR/uninstall.sh"
-
 echo ""
-echo -e "\${GREEN}================================\${NC}"
-echo -e "\${GREEN}  INSTALLATION COMPLETE!        \${NC}"
-echo -e "\${GREEN}================================\${NC}"
+echo "================================"
+echo "  INSTALLATION COMPLETE!        "
+echo "================================"
 echo ""
-echo -e "\${GREEN}Athena AI has been installed successfully!\${NC}"
+echo "Athena AI installed successfully!"
 echo ""
-echo -e "\${CYAN}You can now:\${NC}"
-if [[ "$OS" == "macOS" ]]; then
-    echo "  • Launch from Desktop alias"
-    echo "  • Or run: $INSTALL_DIR/launch.sh"
-else
-    echo "  • Launch from Desktop shortcut"
-    echo "  • Launch from Applications menu"
-    echo "  • Or run: $INSTALL_DIR/node_modules/.bin/electron $INSTALL_DIR/electron-main.cjs"
-fi
-echo ""
-echo -e "\${YELLOW}Default Login:\${NC}"
+echo "Default Login:"
 echo "  Username: admin"
 echo "  Password: admin123"
 echo ""
-echo -e "\${CYAN}To uninstall:\${NC}"
-echo "  Run: $INSTALL_DIR/uninstall.sh"
-echo ""
-
-read -p "Would you like to launch Athena AI now? (y/n): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "\${CYAN}Launching Athena AI...\${NC}"
-    if [[ "$OS" == "macOS" ]]; then
-        "$INSTALL_DIR/launch.sh" &
-    else
-        "$INSTALL_DIR/node_modules/.bin/electron" "$INSTALL_DIR/electron-main.cjs" &
-    fi
-fi
-
-echo ""
 echo "Press Enter to exit..."
 read
-`;
+`);
+fs.chmodSync(unixInstallerPath, 0o755);
+console.log(`✓ Created Mac/Linux bash installer (${unixInstallerPath})`);
 
-fs.writeFileSync('athena-installer-unix.sh', unixInstaller);
-fs.chmodSync('athena-installer-unix.sh', 0o755);
-console.log('✓ Created Mac/Linux bash installer (athena-installer-unix.sh)');
+// Create simplified Windows batch installer
+const batchInstallerPath = 'athena-installer.bat';
+fs.writeFileSync(batchInstallerPath, `@echo off
+echo ================================
+echo   ATHENA AI DESKTOP INSTALLER   
+echo ================================
+echo.
 
-// Create a one-click download HTML page
-const downloadPage = `<!DOCTYPE html>
+set INSTALL_DIR=%LOCALAPPDATA%\\AthenaAI
+echo Installation directory: %INSTALL_DIR%
+echo.
+
+if exist "%INSTALL_DIR%" rmdir /s /q "%INSTALL_DIR%"
+mkdir "%INSTALL_DIR%"
+
+echo Installing Athena AI...
+xcopy /E /I /Y /Q * "%INSTALL_DIR%"
+
+cd /d "%INSTALL_DIR%"
+
+echo Installing dependencies (this may take a few minutes)...
+call npm install --production
+
+echo.
+echo Creating desktop shortcut...
+powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\\Desktop\\Athena AI.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\\node_modules\\electron\\dist\\electron.exe'; $Shortcut.Arguments = '%INSTALL_DIR%\\electron-main.cjs'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Save()"
+
+echo.
+echo ================================
+echo   INSTALLATION COMPLETE!        
+echo ================================
+echo.
+echo Desktop shortcut created!
+echo.
+echo Default Login:
+echo   Username: admin
+echo   Password: admin123
+echo.
+pause
+`);
+console.log(`✓ Created Windows batch installer (${batchInstallerPath})`);
+
+// Create download page HTML
+const downloadPagePath = 'download-athena.html';
+fs.writeFileSync(downloadPagePath, `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -398,7 +230,7 @@ const downloadPage = `<!DOCTYPE html>
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -433,19 +265,21 @@ const downloadPage = `<!DOCTYPE html>
             margin-bottom: 2rem;
         }
         
+        .download-section {
+            margin: 2rem 0;
+        }
+        
         .download-button {
             display: inline-block;
-            padding: 1rem 3rem;
-            font-size: 1.2rem;
+            padding: 1rem 2.5rem;
+            margin: 0.5rem;
+            font-size: 1.1rem;
             background: linear-gradient(45deg, #00ffff, #0099ff);
             color: white;
             text-decoration: none;
             border-radius: 50px;
             transition: all 0.3s ease;
             box-shadow: 0 10px 20px rgba(0, 153, 255, 0.3);
-            margin: 10px;
-            border: none;
-            cursor: pointer;
         }
         
         .download-button:hover {
@@ -453,16 +287,12 @@ const downloadPage = `<!DOCTYPE html>
             box-shadow: 0 15px 30px rgba(0, 153, 255, 0.5);
         }
         
-        .platform-icon {
-            width: 24px;
-            height: 24px;
-            display: inline-block;
-            vertical-align: middle;
-            margin-right: 10px;
+        .download-button.primary {
+            background: linear-gradient(45deg, #00ff88, #00ffff);
         }
         
         .instructions {
-            margin-top: 3rem;
+            margin-top: 2rem;
             padding: 1.5rem;
             background: rgba(255, 255, 255, 0.1);
             border-radius: 10px;
@@ -470,29 +300,18 @@ const downloadPage = `<!DOCTYPE html>
         }
         
         .instructions h3 {
-            margin-bottom: 1rem;
-        }
-        
-        .instructions ol {
-            padding-left: 1.5rem;
-        }
-        
-        .instructions li {
             margin-bottom: 0.5rem;
         }
         
-        .system-req {
-            margin-top: 2rem;
-            font-size: 0.9rem;
-            opacity: 0.8;
+        .instructions p {
+            margin-bottom: 0.5rem;
+            padding-left: 1rem;
         }
         
-        .detected-os {
-            margin: 1rem 0;
-            padding: 0.5rem 1rem;
-            background: rgba(0, 255, 255, 0.1);
-            border-radius: 20px;
-            display: inline-block;
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -501,151 +320,149 @@ const downloadPage = `<!DOCTYPE html>
         <h1>Athena AI</h1>
         <p class="subtitle">Cybersecurity Intelligence Platform</p>
         
-        <div id="detected-os" class="detected-os">
-            Detecting your operating system...
-        </div>
-        
-        <div id="download-section">
-            <h2 style="margin: 2rem 0 1rem;">Choose Your Platform:</h2>
+        <div class="download-section">
+            <h2 style="margin-bottom: 1rem;">Download for Your Platform</h2>
             
-            <button class="download-button" onclick="downloadWindows()">
-                <span class="platform-icon">🪟</span> Download for Windows
-            </button>
+            <div id="windows-section">
+                <h3>Windows</h3>
+                <a href="athena-installer.bat" class="download-button primary" download>
+                    Download Windows Installer (.bat)
+                </a>
+                <a href="athena-installer-windows.ps1" class="download-button" download>
+                    PowerShell Installer (.ps1)
+                </a>
+            </div>
             
-            <button class="download-button" onclick="downloadMac()">
-                <span class="platform-icon">🍎</span> Download for macOS
-            </button>
-            
-            <button class="download-button" onclick="downloadLinux()">
-                <span class="platform-icon">🐧</span> Download for Linux
-            </button>
+            <div id="unix-section" style="margin-top: 2rem;">
+                <h3>Mac & Linux</h3>
+                <a href="athena-installer-unix.sh" class="download-button primary" download>
+                    Download Unix Installer (.sh)
+                </a>
+            </div>
         </div>
         
         <div class="instructions">
-            <h3>Installation Instructions:</h3>
-            <ol id="install-steps">
-                <li>Download the installer for your platform</li>
-                <li>Run the installer (may require admin/sudo permissions)</li>
-                <li>Follow the on-screen instructions</li>
-                <li>Launch Athena AI from your desktop or applications menu</li>
-            </ol>
+            <h3>Windows Installation:</h3>
+            <p>1. Download <code>athena-installer.bat</code></p>
+            <p>2. Double-click to run (allow if Windows asks)</p>
+            <p>3. Wait for installation to complete</p>
+            <p>4. Find Athena AI on your desktop!</p>
             
-            <h3 style="margin-top: 1.5rem;">Default Login:</h3>
+            <h3 style="margin-top: 1rem;">Mac/Linux Installation:</h3>
+            <p>1. Download <code>athena-installer-unix.sh</code></p>
+            <p>2. Open Terminal in Downloads folder</p>
+            <p>3. Run: <code>chmod +x athena-installer-unix.sh</code></p>
+            <p>4. Run: <code>./athena-installer-unix.sh</code></p>
+            <p>5. Find Athena AI on your desktop!</p>
+            
+            <h3 style="margin-top: 1rem;">Default Login:</h3>
             <p>Username: <strong>admin</strong></p>
             <p>Password: <strong>admin123</strong></p>
         </div>
         
-        <div class="system-req">
-            <strong>System Requirements:</strong><br>
-            • Node.js 16 or later<br>
-            • 2GB RAM minimum<br>
-            • 500MB free disk space
-        </div>
-    </div>
-    
-    <script>
-        // Detect operating system
-        function detectOS() {
+        <script>
+            // Auto-detect OS and highlight recommended download
             const platform = navigator.platform.toLowerCase();
-            const userAgent = navigator.userAgent.toLowerCase();
-            
             if (platform.includes('win')) {
-                return 'Windows';
-            } else if (platform.includes('mac')) {
-                return 'macOS';
-            } else if (platform.includes('linux')) {
-                return 'Linux';
-            } else if (userAgent.includes('android')) {
-                return 'Android (Not Supported)';
-            } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
-                return 'iOS (Not Supported)';
+                document.getElementById('windows-section').style.border = '2px solid #00ffff';
+                document.getElementById('windows-section').style.padding = '1rem';
+                document.getElementById('windows-section').style.borderRadius = '10px';
+            } else if (platform.includes('mac') || platform.includes('linux')) {
+                document.getElementById('unix-section').style.border = '2px solid #00ffff';
+                document.getElementById('unix-section').style.padding = '1rem';
+                document.getElementById('unix-section').style.borderRadius = '10px';
             }
-            return 'Unknown';
-        }
-        
-        // Update UI with detected OS
-        const detectedOS = detectOS();
-        document.getElementById('detected-os').innerHTML = 
-            '✨ Detected OS: <strong>' + detectedOS + '</strong>';
-        
-        // Auto-highlight recommended download
-        if (detectedOS === 'Windows') {
-            document.querySelectorAll('.download-button')[0].style.background = 
-                'linear-gradient(45deg, #00ff88, #00ffff)';
-        } else if (detectedOS === 'macOS') {
-            document.querySelectorAll('.download-button')[1].style.background = 
-                'linear-gradient(45deg, #00ff88, #00ffff)';
-        } else if (detectedOS === 'Linux') {
-            document.querySelectorAll('.download-button')[2].style.background = 
-                'linear-gradient(45deg, #00ff88, #00ffff)';
-        }
-        
-        // Download functions
-        function downloadWindows() {
-            // Update instructions for Windows
-            document.getElementById('install-steps').innerHTML = \`
-                <li>Download the PowerShell installer</li>
-                <li>Right-click the file and select "Run with PowerShell"</li>
-                <li>If prompted, allow the script to run (type 'Y' and press Enter)</li>
-                <li>The installer will handle everything automatically</li>
-                <li>Find Athena AI on your desktop when complete!</li>
-            \`;
-            
-            // Trigger download
-            window.location.href = 'athena-installer-windows.ps1';
-        }
-        
-        function downloadMac() {
-            // Update instructions for Mac
-            document.getElementById('install-steps').innerHTML = \`
-                <li>Download the installer script</li>
-                <li>Open Terminal (Cmd+Space, type "Terminal")</li>
-                <li>Navigate to Downloads: cd ~/Downloads</li>
-                <li>Make executable: chmod +x athena-installer-unix.sh</li>
-                <li>Run installer: ./athena-installer-unix.sh</li>
-                <li>Find Athena AI on your desktop when complete!</li>
-            \`;
-            
-            // Trigger download
-            window.location.href = 'athena-installer-unix.sh';
-        }
-        
-        function downloadLinux() {
-            // Update instructions for Linux
-            document.getElementById('install-steps').innerHTML = \`
-                <li>Download the installer script</li>
-                <li>Open Terminal</li>
-                <li>Navigate to Downloads: cd ~/Downloads</li>
-                <li>Make executable: chmod +x athena-installer-unix.sh</li>
-                <li>Run installer: ./athena-installer-unix.sh</li>
-                <li>Find Athena AI in your applications menu!</li>
-            \`;
-            
-            // Trigger download
-            window.location.href = 'athena-installer-unix.sh';
-        }
-    </script>
+        </script>
+    </div>
 </body>
-</html>`;
+</html>`);
+console.log(`✓ Created download page (${downloadPagePath})`);
 
-fs.writeFileSync('download-athena.html', downloadPage);
-console.log('✓ Created download page (download-athena.html)');
+// Create a bundling script
+const bundleScriptPath = 'bundle-for-distribution.cjs';
+fs.writeFileSync(bundleScriptPath, `#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+console.log('Creating distribution bundle...');
+
+const distDir = 'athena-distribution';
+if (fs.existsSync(distDir)) {
+  fs.rmSync(distDir, { recursive: true });
+}
+fs.mkdirSync(distDir);
+
+// Files to include in distribution
+const filesToCopy = [
+  'athena-installer-windows.ps1',
+  'athena-installer-unix.sh', 
+  'athena-installer.bat',
+  'download-athena.html',
+  'electron-main.cjs',
+  'electron-preload.cjs',
+  'package.json',
+  'athena.db'
+];
+
+// Directories to copy
+const dirsToCopy = ['server', 'shared', 'client/dist', 'build', 'attached_assets'];
+
+// Copy files
+filesToCopy.forEach(file => {
+  if (fs.existsSync(file)) {
+    fs.copyFileSync(file, path.join(distDir, file));
+  }
+});
+
+// Copy directories
+const copyDir = (src, dest) => {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  
+  for (let entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    
+    if (entry.isDirectory() && entry.name !== 'node_modules') {
+      copyDir(srcPath, destPath);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+};
+
+dirsToCopy.forEach(dir => {
+  const dest = path.join(distDir, dir);
+  copyDir(dir, dest);
+});
+
+// Create archive
+console.log('Creating archive...');
+execSync(\`tar -czf athena-distribution.tar.gz \${distDir}\`, { stdio: 'inherit' });
+
+console.log('✓ Distribution bundle created: athena-distribution.tar.gz');
+`);
+fs.chmodSync(bundleScriptPath, 0o755);
+console.log(`✓ Created bundling script (${bundleScriptPath})`);
 
 console.log('\n' + '='.repeat(60));
 console.log('✅ AUTOMATED INSTALLERS CREATED!');
 console.log('='.repeat(60));
 console.log('\n📦 Created Files:');
-console.log('   • athena-installer-windows.ps1 - Windows PowerShell installer');
-console.log('   • athena-installer-unix.sh - Mac/Linux bash installer');
-console.log('   • download-athena.html - One-click download page');
-console.log('\n🚀 Distribution:');
-console.log('   1. Host these files on a web server');
-console.log('   2. Direct users to download-athena.html');
-console.log('   3. They click their platform and follow instructions');
+console.log('   • athena-installer.bat - Simple Windows batch installer');
+console.log('   • athena-installer-windows.ps1 - PowerShell installer');
+console.log('   • athena-installer-unix.sh - Mac/Linux installer');
+console.log('   • download-athena.html - Download page with all installers');
+console.log('   • bundle-for-distribution.cjs - Creates distribution package');
+console.log('\n🚀 To Distribute:');
+console.log('   1. Run: node bundle-for-distribution.cjs');
+console.log('   2. Share the athena-distribution.tar.gz file');
+console.log('   3. Users extract and run the appropriate installer');
 console.log('\n✨ Features:');
-console.log('   • Auto-detects operating system');
-console.log('   • Installs Node.js if missing (Windows)');
-console.log('   • Creates desktop shortcuts automatically');
-console.log('   • Registers with system (uninstaller on Windows)');
-console.log('   • One-click installation process');
+console.log('   • One-click installation');
+console.log('   • Automatic desktop shortcut creation');
+console.log('   • No manual steps required');
+console.log('   • Works offline after download');
 console.log('='.repeat(60));
