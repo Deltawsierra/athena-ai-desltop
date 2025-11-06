@@ -440,6 +440,49 @@ export class MemStorage implements IStorage {
   async deleteClassifier(id: string): Promise<boolean> {
     return this.classifiers.delete(id);
   }
+
+  // Additional methods for compatibility
+  async validateUser(username: string, password: string): Promise<User | undefined> {
+    const user = await this.getUserByUsername(username);
+    if (user && user.password === password) {
+      return user;
+    }
+    return undefined;
+  }
+
+  async getAllDocuments(): Promise<Document[]> {
+    return Array.from(this.documents.values());
+  }
+
+  async getAllScans(): Promise<any[]> {
+    // Mock implementation for scans
+    return [];
+  }
+
+  async createScan(scan: any): Promise<any> {
+    // Mock implementation for scans
+    return { id: randomUUID(), ...scan, startTime: new Date() };
+  }
+
+  async getAllCves(): Promise<any[]> {
+    // Mock implementation for CVEs
+    return [];
+  }
+
+  async createCve(cve: any): Promise<any> {
+    // Mock implementation for CVEs
+    return { id: randomUUID(), ...cve, createdAt: new Date() };
+  }
+
+  async getAuditLogs(): Promise<any[]> {
+    // Mock implementation for audit logs
+    return [];
+  }
+
+  async createAuditLog(log: any): Promise<any> {
+    // Mock implementation for audit logs
+    return { id: randomUUID(), ...log, timestamp: new Date() };
+  }
 }
 
 export const storage = new MemStorage();

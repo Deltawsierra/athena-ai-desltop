@@ -362,6 +362,40 @@ class SqliteStorage implements IStorage {
     return result.changes > 0;
   }
 
+  // Additional methods for compatibility with routes
+  async getAllChatMessages(): Promise<AIChatMessage[]> {
+    return this.getAIChatMessages();
+  }
+
+  async getScanResults(): Promise<any[]> {
+    // Mock implementation - these tables don't exist in current schema
+    return [];
+  }
+
+  async createScanResult(scan: any): Promise<any> {
+    // Mock implementation
+    return { id: crypto.randomUUID(), ...scan, startTime: new Date() };
+  }
+
+  async getCveResults(): Promise<any[]> {
+    // Mock implementation
+    return [];
+  }
+
+  async createCveResult(cve: any): Promise<any> {
+    // Mock implementation
+    return { id: crypto.randomUUID(), ...cve, createdAt: new Date() };
+  }
+
+  async getAuditLogs(): Promise<any[]> {
+    // Mock implementation - using activity logs instead
+    return this.getActivityLogs();
+  }
+
+  async createAuditLog(log: any): Promise<any> {
+    // Mock implementation - using activity logs instead
+    return this.createActivityLog(log);
+  }
 }
 
 // Export singleton instance
