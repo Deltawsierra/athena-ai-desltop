@@ -18,8 +18,8 @@ async function startExpressServer() {
   // In production, the server is bundled with the app
   // In development, we start the existing server
   if (!isDev) {
-    // For production, we'll start the server directly
-    require('./server/index.js');
+    // For production, we'll start the compiled server
+    require('./server-dist/index.js');
   } else {
     // In development, we can use the existing npm run dev setup
     const { spawn } = require('child_process');

@@ -33,7 +33,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // For desktop app, we'll use a simple session-based auth
       // Store user in session (session configured in server/index.ts)
-      (req as any).session = { userId: user.id, username: user.username, role: user.role };
+      const session = (req as any).session;
+      if (session) {
+        session.userId = user.id;
+        session.username = user.username;
+        session.role = user.role;
+      }
       
       // Return user data without password
       res.json({
@@ -53,9 +58,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/auth/logout", async (req, res) => {
-    // Clear session
-    (req as any).session = null;
-    res.json({ success: true });
+    // Properly destroy session
+    const session = (req as any).session;
+    if (session && session.destroy) {
+      session.destroy((err: any) => {
+        if (err) {
+          return res.status(500).json({ message: "Failed to logout" });
+        }
+        res.json({ success: true });
+      });
+    } else {
+      res.json({ success: true });
+    }
   });
   
   app.get("/api/auth/check", async (req, res) => {
