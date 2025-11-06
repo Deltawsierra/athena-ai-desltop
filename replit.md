@@ -13,6 +13,33 @@ Athena AI is a comprehensive cybersecurity platform featuring:
 
 ## Recent Updates
 
+### November 6, 2025 - Admin Features Expansion
+Expanded admin functionality with new pages and reorganized navigation:
+
+**New Admin Pages:**
+- **AI Control Panel** - Emergency kill switch, override mode, system controls
+- **AI Chat Interface** - Real-time chat with AI assistant (with infinite loop protection)
+- **Deletion Management** - Centralized deletion interface for all entities
+- **Classifiers** - ML model management with CRUD operations
+
+**Navigation Improvements:**
+- Reorganized into dropdown menus for better organization
+- "Tests & Documents" dropdown: Pentest, Tests, Documents, Clients, Classifiers, Audit Logs
+- "Admin" dropdown: User Management, AI Health, AI Control Panel, AI Chat, Deletion Management
+- Active state highlighting for current page/section
+
+**New API Endpoints:**
+- GET/PATCH `/api/ai-control` - AI system control settings
+- GET/POST `/api/chat` - AI chat message management
+- GET/POST/PATCH/DELETE `/api/classifiers` - ML classifier CRUD
+
+**Technical Fixes:**
+- Fixed apiRequest parameter order (method, url, data)
+- Implemented controlled Select components for proper form handling
+- Added sender-based conditional logic to prevent AI chat infinite loops
+
+All features tested end-to-end and production-ready.
+
 ### November 5, 2025 - Ultra-Smooth Animation System
 Implemented advanced animation system with performance optimizations:
 
@@ -89,6 +116,14 @@ client/src/
 │   ├── CVEClassifier.tsx - CVE analysis tool
 │   ├── PentestScan.tsx - Penetration testing
 │   ├── AdminPage.tsx - User management
+│   ├── AIHealth.tsx - AI system health monitoring
+│   ├── AIControlPanel.tsx - AI control with kill switch
+│   ├── AIChat.tsx - AI chat interface
+│   ├── DeletionManagement.tsx - Centralized deletion
+│   ├── Classifiers.tsx - ML classifier management
+│   ├── Clients.tsx - Client management
+│   ├── Tests.tsx - Test tracking
+│   ├── Documents.tsx - Document management
 │   └── AuditLogs.tsx - Security audit logs
 ├── lib/
 │   └── queryClient.ts - React Query configuration
@@ -126,6 +161,21 @@ shared/
 - User management (create, edit, delete)
 - Role assignment (admin/user)
 - System configuration
+- AI health monitoring with system metrics
+- AI control panel with emergency shutdown
+- Deletion management for all entities
+
+### AI Features
+- **AI Chat** - Real-time chat interface with automated AI responses
+- **AI Control Panel** - Emergency kill switch, override mode, system controls
+- **AI Health Monitoring** - Track AI system status and performance metrics
+- **ML Classifiers** - Manage machine learning models for threat detection
+
+### Clients & Tests
+- Client management with detailed profiles
+- Security test tracking and assignment
+- Document management and client association
+- Test history and audit trail
 
 ### Audit Logs
 - Comprehensive security event logging
@@ -204,18 +254,61 @@ The application uses a dual-token JWT system:
 - **scanResults** - Pentest scan results
 - **cveResults** - CVE classification results
 - **auditLogs** - Security event logs
+- **clients** - Client information and profiles
+- **tests** - Security tests and assessments
+- **documents** - Client documents and reports
+- **aiControlSettings** - AI system control configuration
+- **aiChatMessages** - AI chat message history
+- **classifiers** - ML classifier models and metadata
 
 ## API Routes
 
+### Authentication
 - `POST /api/auth/login` - User authentication
 - `POST /api/auth/refresh` - Refresh access token
 - `POST /api/auth/logout` - End session
+
+### User Management
 - `GET /api/users` - List users (admin)
 - `POST /api/users` - Create user (admin)
+- `PATCH /api/users/:id` - Update user
+- `DELETE /api/users/:id` - Delete user
+
+### Security Testing
 - `GET /api/scans` - List scan results
 - `POST /api/scans` - Create new scan
 - `GET /api/cve` - List CVE results
 - `POST /api/cve/classify` - Classify CVE
+
+### Client Management
+- `GET /api/clients` - List clients
+- `POST /api/clients` - Create client
+- `PATCH /api/clients/:id` - Update client
+- `DELETE /api/clients/:id` - Delete client
+
+### Test Management
+- `GET /api/tests` - List tests
+- `POST /api/tests` - Create test
+- `PATCH /api/tests/:id` - Update test
+- `DELETE /api/tests/:id` - Delete test
+
+### Document Management
+- `GET /api/documents` - List documents
+- `POST /api/documents` - Create document
+- `PATCH /api/documents/:id` - Update document
+- `DELETE /api/documents/:id` - Delete document
+
+### AI Features
+- `GET /api/ai-control` - Get AI control settings
+- `PATCH /api/ai-control` - Update AI settings
+- `GET /api/chat` - Get chat messages
+- `POST /api/chat` - Send chat message
+- `GET /api/classifiers` - List ML classifiers
+- `POST /api/classifiers` - Create classifier
+- `PATCH /api/classifiers/:id` - Update classifier
+- `DELETE /api/classifiers/:id` - Delete classifier
+
+### Audit Logs
 - `GET /api/audit-logs` - Retrieve audit logs
 
 ## Deployment

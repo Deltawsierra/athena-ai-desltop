@@ -22,24 +22,21 @@ export default function Classifiers() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingClassifier, setEditingClassifier] = useState<Classifier | null>(null);
+  const [createType, setCreateType] = useState("");
+  const [editType, setEditType] = useState("");
 
   const { data: classifiers = [], isLoading } = useQuery<Classifier[]>({
     queryKey: ["/api/classifiers"],
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: FormData) => {
-      const payload = {
-        name: data.get("name") as string,
-        type: data.get("type") as string,
-        accuracy: parseInt(data.get("accuracy") as string),
-        description: data.get("description") as string,
-      };
-      return await apiRequest("/api/classifiers", "POST", payload);
+    mutationFn: async (data: { name: string; type: string; accuracy: number; description: string }) => {
+      return await apiRequest("POST", "/api/classifiers", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/classifiers"] });
       setIsCreateDialogOpen(false);
+      setCreateType("");
       toast({
         title: "Classifier Created",
         description: "New classifier has been added successfully.",
@@ -55,22 +52,14 @@ export default function Classifiers() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: FormData }) => {
-      const payload: any = {};
-      const fields = ["name", "type", "accuracy", "description"];
-      fields.forEach((field) => {
-        const value = data.get(field);
-        if (value !== null && value !== "") {
-          payload[field] = field === "accuracy" ? parseInt(value as string) : value;
-        }
-      });
-
-      return await apiRequest(`/api/classifiers/${id}`, "PATCH", payload);
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      return await apiRequest("PATCH", `/api/classifiers/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/classifiers"] });
       setIsEditDialogOpen(false);
       setEditingClassifier(null);
+      setEditType("");
       toast({
         title: "Classifier Updated",
         description: "Classifier has been updated successfully.",
@@ -87,7 +76,7 @@ export default function Classifiers() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest(`/api/classifiers/${id}`, "DELETE");
+      return await apiRequest("DELETE", `/api/classifiers/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/classifiers"] });
@@ -108,18 +97,31 @@ export default function Classifiers() {
   const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    createMutation.mutate(formData);
+    const payload = {
+      name: formData.get("name") as string,
+      type: createType,
+      accuracy: parseInt(formData.get("accuracy") as string),
+      description: formData.get("description") as string,
+    };
+    createMutation.mutate(payload);
   };
 
   const handleEdit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editingClassifier) return;
     const formData = new FormData(e.currentTarget);
-    updateMutation.mutate({ id: editingClassifier.id, data: formData });
+    const payload: any = {
+      name: formData.get("name") as string,
+      type: editType || editingClassifier.type,
+      accuracy: parseInt(formData.get("accuracy") as string),
+      description: formData.get("description") as string,
+    };
+    updateMutation.mutate({ id: editingClassifier.id, data: payload });
   };
 
   const openEditDialog = (classifier: Classifier) => {
     setEditingClassifier(classifier);
+    setEditType(classifier.type);
     setIsEditDialogOpen(true);
   };
 
@@ -192,7 +194,7 @@ export default function Classifiers() {
 
                   <div className="space-y-2">
                     <Label htmlFor="type">Type *</Label>
-                    <Select name="type" required>
+                    <Select value={createType} onValueChange={setCreateType} required>
                       <SelectTrigger data-testid="select-create-type">
                         <SelectValue placeholder="Select type..." />
                       </SelectTrigger>
@@ -356,7 +358,7 @@ export default function Classifiers() {
 
                 <div className="space-y-2">
                   <Label htmlFor="type">Type *</Label>
-                  <Select name="type" required defaultValue={editingClassifier.type}>
+                  <Select value={editType} onValueChange={setEditType} required>
                     <SelectTrigger data-testid="select-edit-type">
                       <SelectValue />
                     </SelectTrigger>

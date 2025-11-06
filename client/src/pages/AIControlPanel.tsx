@@ -24,7 +24,7 @@ export default function AIControlPanel() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<AIControlSetting>) => {
-      return await apiRequest("/api/ai-control", "PATCH", data);
+      return await apiRequest("PATCH", "/api/ai-control", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai-control"] });

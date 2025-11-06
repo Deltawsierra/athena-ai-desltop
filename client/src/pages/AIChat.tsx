@@ -26,33 +26,35 @@ export default function AIChat() {
 
   const sendMutation = useMutation({
     mutationFn: async (data: { message: string; sender: string; attachments?: any }) => {
-      return await apiRequest("/api/chat", "POST", {
+      return await apiRequest("POST", "/api/chat", {
         userId: "current-user",
         message: data.message,
         sender: data.sender,
         attachments: data.attachments,
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat"] });
       setMessage("");
       
-      // Simulate AI response after a delay
-      setTimeout(() => {
-        const responses = [
-          "I'm analyzing the security data you provided. I've identified several critical vulnerabilities.",
-          "Based on the test results, I recommend prioritizing the high-severity findings first.",
-          "The penetration test has been scheduled. I'll monitor the progress and alert you of any issues.",
-          "I've compiled the security report. Would you like me to send it to the client?",
-          "System scan complete. I found 3 critical issues that need immediate attention.",
-        ];
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-        
-        sendMutation.mutate({
-          message: randomResponse,
-          sender: "ai",
-        });
-      }, 1500);
+      // Only simulate AI response for user messages, not AI messages
+      if (variables.sender === "user") {
+        setTimeout(() => {
+          const responses = [
+            "I'm analyzing the security data you provided. I've identified several critical vulnerabilities.",
+            "Based on the test results, I recommend prioritizing the high-severity findings first.",
+            "The penetration test has been scheduled. I'll monitor the progress and alert you of any issues.",
+            "I've compiled the security report. Would you like me to send it to the client?",
+            "System scan complete. I found 3 critical issues that need immediate attention.",
+          ];
+          const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+          
+          sendMutation.mutate({
+            message: randomResponse,
+            sender: "ai",
+          });
+        }, 1500);
+      }
     },
     onError: (error: Error) => {
       toast({

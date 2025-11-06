@@ -31,7 +31,7 @@ export default function DeletionManagement() {
 
   const deleteMutation = useMutation({
     mutationFn: async ({ type, id }: { type: string; id: string }) => {
-      return await apiRequest(`/api/${type}/${id}`, "DELETE");
+      return await apiRequest("DELETE", `/api/${type}/${id}`);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [`/api/${variables.type}`] });
