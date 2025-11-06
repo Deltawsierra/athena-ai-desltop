@@ -193,12 +193,20 @@ class UnifiedStorage implements IStorage {
     return this.backend.getLatestAIHealthMetrics();
   }
   
+  async getLatestAIHealthMetric(): Promise<AIHealthMetric | undefined> {
+    return this.getLatestAIHealthMetrics();
+  }
+  
   async createAIHealthMetric(metric: InsertAIHealthMetric): Promise<AIHealthMetric> {
     return this.backend.createAIHealthMetric(metric);
   }
   
   async getAllAIHealthMetrics(): Promise<AIHealthMetric[]> {
     return this.backend.getAllAIHealthMetrics?.() || [];
+  }
+  
+  async getAIHealthMetrics(limit?: number): Promise<AIHealthMetric[]> {
+    return this.getAllAIHealthMetrics();
   }
   
   // AI Control operations
