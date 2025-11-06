@@ -1,0 +1,129 @@
+{
+  "appId": "com.athenaai.desktop",
+  "productName": "Athena AI",
+  "directories": {
+    "output": "dist-electron",
+    "buildResources": "build"
+  },
+  "files": [
+    "electron-main.cjs",
+    "electron-preload.cjs",
+    "server/**/*",
+    "shared/**/*",
+    "client/dist/**/*",
+    "athena.db",
+    "node_modules/**/*",
+    "package.json",
+    "!node_modules/**/test/**",
+    "!node_modules/**/tests/**",
+    "!node_modules/**/*.md",
+    "!node_modules/**/LICENSE*",
+    "!**/*.map"
+  ],
+  "extraResources": [
+    {
+      "from": "attached_assets",
+      "to": "attached_assets",
+      "filter": ["**/*"]
+    }
+  ],
+  "mac": {
+    "category": "public.app-category.developer-tools",
+    "icon": "build/icon.icns",
+    "hardenedRuntime": false,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      }
+    ]
+  },
+  "dmg": {
+    "artifactName": "AthenaAI-${version}-${arch}.${ext}",
+    "contents": [
+      {
+        "x": 130,
+        "y": 220
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ],
+    "window": {
+      "width": 540,
+      "height": 400
+    },
+    "icon": "build/icon.icns",
+    "background": "build/background.tiff",
+    "title": "Athena AI ${version}"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icon.ico",
+    "artifactName": "AthenaAI-Setup-${version}.${ext}",
+    "publisherName": "Athena AI Team",
+    "verifyUpdateCodeSignature": false,
+    "requestedExecutionLevel": "asInvoker"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "allowElevation": true,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "installerHeaderIcon": "build/icon.ico",
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "deleteAppDataOnUninstall": false,
+    "runAfterFinish": true,
+    "artifactName": "AthenaAI-Setup-${version}.${ext}",
+    "menuCategory": "Athena AI",
+    "shortcutName": "Athena AI"
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icons",
+    "category": "Development",
+    "desktop": {
+      "Name": "Athena AI",
+      "Comment": "Cybersecurity Intelligence Platform",
+      "Categories": "Development;Security;",
+      "Keywords": "security;cybersecurity;pentest;cve;ai;"
+    },
+    "artifactName": "AthenaAI-${version}-${arch}.${ext}"
+  },
+  "appImage": {
+    "artifactName": "AthenaAI-${version}.${ext}",
+    "desktop": {
+      "Name": "Athena AI",
+      "Comment": "Cybersecurity Intelligence Platform"
+    }
+  },
+  "publish": {
+    "provider": "generic",
+    "url": "https://example.com/releases"
+  },
+  "afterPack": "./scripts/afterPack.js",
+  "afterSign": "./scripts/afterSign.js"
+}
