@@ -21,6 +21,10 @@ import Clients from "@/pages/Clients";
 import Tests from "@/pages/Tests";
 import Documents from "@/pages/Documents";
 import AIHealth from "@/pages/AIHealth";
+import AIControlPanel from "@/pages/AIControlPanel";
+import AIChat from "@/pages/AIChat";
+import DeletionManagement from "@/pages/DeletionManagement";
+import Classifiers from "@/pages/Classifiers";
 import NotFound from "@/pages/not-found";
 import { getAccess, isTokenValid, clearTokens } from "@/utils/auth";
 
@@ -83,6 +87,18 @@ function Router({ isAuthenticated, onLogout }: { isAuthenticated: boolean; onLog
         </Route>
         <Route path="/audit-logs">
           <ProtectedRoute component={AuditLogs} />
+        </Route>
+        <Route path="/ai-control">
+          <ProtectedRoute component={AIControlPanel} />
+        </Route>
+        <Route path="/ai-chat">
+          <ProtectedRoute component={AIChat} />
+        </Route>
+        <Route path="/deletion">
+          <ProtectedRoute component={DeletionManagement} />
+        </Route>
+        <Route path="/classifiers">
+          <ProtectedRoute component={Classifiers} />
         </Route>
         <Route path="/">
           <Redirect to="/dashboard" />

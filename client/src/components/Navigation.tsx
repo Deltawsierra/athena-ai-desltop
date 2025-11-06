@@ -1,29 +1,43 @@
 import { Link, useLocation } from "wouter";
-import { Shield, Activity, Bug, Settings, LogOut, Users, Brain, FileText, ListChecks, FolderOpen } from "lucide-react";
+import { Shield, Activity, Bug, Settings, LogOut, Users, Brain, FileText, ListChecks, FolderOpen, MessageSquare, Trash2, ChevronDown, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import athenaLogo from "@assets/generated_images/Athena_AI_owl_shield_logo_3eda4960.png";
 import ThemeToggle from "./ThemeToggle";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface NavigationProps {
   onLogout?: () => void;
   isAuthenticated?: boolean;
 }
 
-const navLinks = [
-  { path: "/dashboard", label: "Dashboard", icon: Activity },
-  { path: "/clients", label: "Clients", icon: Users },
+const testsDropdownItems = [
+  { path: "/pentest", label: "Pentest", icon: Shield },
   { path: "/tests", label: "Tests", icon: ListChecks },
   { path: "/documents", label: "Documents", icon: FolderOpen },
-  { path: "/pentest", label: "Pentest", icon: Shield },
-  { path: "/classify-cve", label: "CVE Classifier", icon: Bug },
-  { path: "/ai-health", label: "AI Health", icon: Brain },
-  { path: "/audit-logs", label: "Logs", icon: FileText },
-  { path: "/admin", label: "Admin", icon: Settings },
+  { path: "/clients", label: "Clients", icon: Users },
+  { path: "/classifiers", label: "Classifiers", icon: Brain },
+  { path: "/audit-logs", label: "Audit Logs", icon: FileText },
+];
+
+const adminDropdownItems = [
+  { path: "/admin", label: "User Management", icon: Users },
+  { path: "/ai-health", label: "AI Health", icon: Activity },
+  { path: "/ai-control", label: "AI Control Panel", icon: Settings },
+  { path: "/ai-chat", label: "AI Chat", icon: MessageSquare },
+  { path: "/deletion", label: "Deletion Management", icon: Trash2 },
 ];
 
 export default function Navigation({ onLogout, isAuthenticated = true }: NavigationProps) {
   const [location] = useLocation();
+
+  const isTestsMenuActive = testsDropdownItems.some(item => location === item.path);
+  const isAdminMenuActive = adminDropdownItems.some(item => location === item.path);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
@@ -48,29 +62,129 @@ export default function Navigation({ onLogout, isAuthenticated = true }: Navigat
             </Link>
 
             <nav className="hidden md:flex items-center gap-1">
-              {navLinks.map((link) => {
-                const Icon = link.icon;
-                const isActive = location === link.path;
-                return (
-                  <Link key={link.path} href={link.path}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "gap-2 relative",
-                        isActive && "text-primary"
-                      )}
-                      data-testid={`link-${link.label.toLowerCase().replace(/\s+/g, '-')}`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {link.label}
-                      {isActive && (
-                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent" />
-                      )}
-                    </Button>
-                  </Link>
-                );
-              })}
+              {/* Dashboard Link */}
+              <Link href="/dashboard">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "gap-2 relative",
+                    location === "/dashboard" && "text-primary"
+                  )}
+                  data-testid="link-dashboard"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                  {location === "/dashboard" && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent" />
+                  )}
+                </Button>
+              </Link>
+
+              {/* Tests & Documents Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "gap-2 relative",
+                      isTestsMenuActive && "text-primary"
+                    )}
+                    data-testid="dropdown-tests-documents"
+                  >
+                    <Shield className="w-4 h-4" />
+                    Tests & Documents
+                    <ChevronDown className="w-3 h-3" />
+                    {isTestsMenuActive && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {testsDropdownItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location === item.path;
+                    return (
+                      <DropdownMenuItem key={item.path} asChild>
+                        <Link href={item.path}>
+                          <div className={cn(
+                            "flex items-center gap-2 w-full cursor-pointer",
+                            isActive && "text-primary font-semibold"
+                          )}
+                            data-testid={`link-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {item.label}
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* CVE Classifier Link */}
+              <Link href="/classify-cve">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "gap-2 relative",
+                    location === "/classify-cve" && "text-primary"
+                  )}
+                  data-testid="link-cve-classifier"
+                >
+                  <Bug className="w-4 h-4" />
+                  CVE Classifier
+                  {location === "/classify-cve" && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent" />
+                  )}
+                </Button>
+              </Link>
+
+              {/* Admin Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "gap-2 relative",
+                      isAdminMenuActive && "text-primary"
+                    )}
+                    data-testid="dropdown-admin"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Admin
+                    <ChevronDown className="w-3 h-3" />
+                    {isAdminMenuActive && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {adminDropdownItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location === item.path;
+                    return (
+                      <DropdownMenuItem key={item.path} asChild>
+                        <Link href={item.path}>
+                          <div className={cn(
+                            "flex items-center gap-2 w-full cursor-pointer",
+                            isActive && "text-primary font-semibold"
+                          )}
+                            data-testid={`link-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {item.label}
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </nav>
           </div>
 
