@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=Athena AI
-Comment=Cybersecurity Intelligence Platform
-Exec=/home/runner/workspace/athena-ai-desktop/Run-AthenaAI.sh
-Icon=/home/runner/workspace/athena-ai-desktop/build/icon.png
-Terminal=false
-Type=Application
-Categories=Development;Security;
