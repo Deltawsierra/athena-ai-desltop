@@ -5,7 +5,7 @@
     "module": "commonjs",
     "lib": ["ES2020"],
     "outDir": "../server-dist",
-    "rootDir": ".",
+    "rootDir": "../",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -26,8 +26,9 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@shared/*": ["../shared/*"]
-    }
+      "@shared/*": ["./shared/*"]
+    },
+    "moduleResolution": "node"
   },
   "include": [
     "./**/*.ts",
