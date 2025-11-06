@@ -11,7 +11,7 @@ import type {
   AIChatMessage, InsertAIChatMessage,
   Classifier, InsertClassifier,
   AIHealthMetric, InsertAIHealthMetric
-} from './schema-sqlite';
+} from '@shared/schema';
 
 // Check if we're running in Electron (desktop mode)
 const isElectron = process.env.ELECTRON_RUN_AS_NODE === '1' || process.versions?.electron;
