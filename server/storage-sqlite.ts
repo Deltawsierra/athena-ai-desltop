@@ -1,9 +1,9 @@
 import { db, sqlite } from './db-sqlite';
-import * as schema from './schema-sqlite';
+import * as schema from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
 
-// Types imported from schema-sqlite
+// Types imported from schema
 import type {
   User, InsertUser,
   Client, InsertClient,
@@ -14,11 +14,8 @@ import type {
   AIHealthMetric, InsertAIHealthMetric,
   AIControlSetting, InsertAIControlSetting,
   AIChatMessage, InsertAIChatMessage,
-  Classifier, InsertClassifier,
-  ScanResult, InsertScanResult,
-  CveResult, InsertCveResult,
-  AuditLog, InsertAuditLog
-} from './schema-sqlite';
+  Classifier, InsertClassifier
+} from '@shared/schema';
 
 // Helper function to hash passwords
 function hashPassword(password: string): string {
@@ -365,75 +362,6 @@ class SqliteStorage implements IStorage {
     return result.changes > 0;
   }
 
-  // Scan operations
-  async getScanResults(): Promise<ScanResult[]> {
-    const results = await db.select().from(schema.scanResults).all();
-    
-    // Parse findings JSON
-    return results.map(result => {
-      if (result.findings && typeof result.findings === 'string') {
-        try {
-          result.findings = JSON.parse(result.findings);
-        } catch {}
-      }
-      return result;
-    });
-  }
-
-  async getScanResultById(id: string): Promise<ScanResult | undefined> {
-    const results = await db.select().from(schema.scanResults).where(eq(schema.scanResults.id, id)).limit(1);
-    const result = results[0];
-    
-    if (result && result.findings && typeof result.findings === 'string') {
-      try {
-        result.findings = JSON.parse(result.findings);
-      } catch {}
-    }
-    
-    return result;
-  }
-
-  async createScanResult(scan: InsertScanResult): Promise<ScanResult> {
-    const id = crypto.randomUUID();
-    const startTime = new Date();
-    const newScan = { id, ...scan, startTime };
-    
-    // Convert findings to JSON string if it's an object
-    if (newScan.findings && typeof newScan.findings === 'object') {
-      newScan.findings = JSON.stringify(newScan.findings);
-    }
-    
-    await db.insert(schema.scanResults).values(newScan);
-    return newScan as ScanResult;
-  }
-
-  // CVE operations
-  async getCveResults(): Promise<CveResult[]> {
-    return db.select().from(schema.cveResults).all();
-  }
-
-  async createCveResult(cve: InsertCveResult): Promise<CveResult> {
-    const id = crypto.randomUUID();
-    const createdAt = new Date();
-    const newCve = { id, ...cve, createdAt };
-    
-    await db.insert(schema.cveResults).values(newCve);
-    return newCve as CveResult;
-  }
-
-  // Audit log operations
-  async getAuditLogs(): Promise<AuditLog[]> {
-    return db.select().from(schema.auditLogs).orderBy(schema.auditLogs.timestamp).all();
-  }
-
-  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
-    const id = crypto.randomUUID();
-    const timestamp = new Date();
-    const newLog = { id, ...log, timestamp };
-    
-    await db.insert(schema.auditLogs).values(newLog);
-    return newLog as AuditLog;
-  }
 }
 
 // Export singleton instance
