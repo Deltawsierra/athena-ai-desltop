@@ -4,7 +4,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["python3"]
+packages = ["python3", "glib", "gtk3", "nss", "atk", "at-spi2-core", "cups", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXfixes", "xorg.libXrandr", "mesa", "libdrm", "xorg.libxcb", "alsa-lib", "xorg.libXScrnSaver", "xorg.libXtst"]
 
 [deployment]
 deploymentTarget = "autoscale"
