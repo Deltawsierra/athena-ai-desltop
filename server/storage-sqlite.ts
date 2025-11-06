@@ -366,6 +366,21 @@ class SqliteStorage implements IStorage {
   async getAllChatMessages(): Promise<AIChatMessage[]> {
     return this.getAIChatMessages();
   }
+  
+  async getAIChatMessagesByUser(userId: string): Promise<AIChatMessage[]> {
+    const messages = db
+      .select()
+      .from(schema.aiChatMessages)
+      .where(eq(schema.aiChatMessages.userId, userId))
+      .orderBy(schema.aiChatMessages.timestamp)
+      .all();
+    return messages;
+  }
+  
+  async deleteAIChatMessage(id: string): Promise<boolean> {
+    const result = db.delete(schema.aiChatMessages).where(eq(schema.aiChatMessages.id, id)).run();
+    return result.changes > 0;
+  }
 
   async getScanResults(): Promise<any[]> {
     // Mock implementation - these tables don't exist in current schema

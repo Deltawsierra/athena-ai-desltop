@@ -218,8 +218,30 @@ class UnifiedStorage implements IStorage {
     return memStorage.getAllAIChatMessages();
   }
   
+  async getAllChatMessages(): Promise<AIChatMessage[]> {
+    return this.getAllAIChatMessages();
+  }
+  
   async createAIChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage> {
     return this.backend.createAIChatMessage(message);
+  }
+  
+  async createChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage> {
+    return this.createAIChatMessage(message);
+  }
+  
+  async getChatMessagesByUser(userId: string): Promise<AIChatMessage[]> {
+    if (useDesktopStorage) {
+      return sqliteStorage.getAIChatMessagesByUser(userId);
+    }
+    return memStorage.getChatMessagesByUser(userId);
+  }
+  
+  async deleteChatMessage(id: string): Promise<boolean> {
+    if (useDesktopStorage) {
+      return sqliteStorage.deleteAIChatMessage(id);
+    }
+    return memStorage.deleteChatMessage(id);
   }
   
   // Classifier operations
