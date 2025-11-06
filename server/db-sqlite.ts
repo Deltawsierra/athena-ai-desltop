@@ -4,6 +4,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as schema from './schema-sqlite';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -11,20 +12,23 @@ const __dirname = path.dirname(__filename);
 
 // Determine database location based on environment
 const isDevelopment = process.env.NODE_ENV === 'development';
-const isElectron = process.env.ELECTRON_RUN_AS_NODE === '1' || process.versions.electron;
+const isElectron = process.env.ELECTRON_RUN_AS_NODE === '1' || process.versions?.electron;
+const useDesktopStorage = isElectron || process.env.USE_SQLITE === 'true';
 
 // Database path for desktop app
 let dbPath: string;
-if (isElectron) {
-  // In Electron, store in user data directory
-  const { app } = require('electron');
-  const userDataPath = app ? app.getPath('userData') : path.join(process.env.HOME || '', '.athena-ai');
+if (isElectron && process.versions?.electron) {
+  // In Electron, store in user data directory (handled by Electron main process)
+  const userDataPath = path.join(process.env.HOME || '', '.athena-ai');
   if (!fs.existsSync(userDataPath)) {
     fs.mkdirSync(userDataPath, { recursive: true });
   }
   dbPath = path.join(userDataPath, 'athena.db');
+} else if (useDesktopStorage) {
+  // For development/testing with SQLite
+  dbPath = path.join(__dirname, '..', 'athena.db');
 } else {
-  // For development/testing
+  // For regular development
   dbPath = path.join(__dirname, '..', 'athena.db');
 }
 
@@ -205,7 +209,6 @@ export function initDatabase() {
     
     if (userCount.count === 0) {
       console.log('Seeding default users...');
-      const crypto = require('crypto');
       
       // Hash password (simple example - in production use bcrypt)
       const hashPassword = (password: string): string => {
@@ -233,7 +236,6 @@ export function initDatabase() {
     const aiSettingsCount = sqlite.prepare('SELECT COUNT(*) as count FROM ai_control_settings').get() as { count: number };
     
     if (aiSettingsCount.count === 0) {
-      const crypto = require('crypto');
       const settingsId = crypto.randomUUID();
       const now = Date.now();
       
