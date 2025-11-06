@@ -25,13 +25,18 @@ async function startExpressServer() {
     const { spawn } = require('child_process');
     serverProcess = spawn('npm', ['run', 'dev'], {
       shell: true,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: { 
+        ...process.env, 
+        ELECTRON_RUN_AS_NODE: '1',
+        USE_SQLITE: 'true',  // Tell the server to use SQLite storage
+        NODE_ENV: 'development'
+      },
       stdio: 'inherit'
     });
   }
 
   // Wait a bit for the server to start
-  return new Promise(resolve => setTimeout(resolve, 2000));
+  return new Promise(resolve => setTimeout(resolve, 3000));
 }
 
 function createWindow() {

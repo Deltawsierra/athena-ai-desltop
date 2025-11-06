@@ -7,11 +7,15 @@ const path = require('path');
 
 console.log('Starting Athena AI Desktop Application...\n');
 
-// Start the Express server
+// Start the Express server with SQLite enabled
 const serverProcess = spawn('npm', ['run', 'dev'], {
   shell: true,
   stdio: 'inherit',
-  env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+  env: { 
+    ...process.env, 
+    ELECTRON_RUN_AS_NODE: '1',
+    USE_SQLITE: 'true'  // Enable SQLite storage
+  }
 });
 
 // Wait a bit for the server to start
