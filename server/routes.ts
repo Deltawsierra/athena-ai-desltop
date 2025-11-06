@@ -18,6 +18,65 @@ const updateClassifierSchema = insertClassifierSchema.partial();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
+  // ==== AUTHENTICATION API ====
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+      
+      const user = await storage.validateUser(username, password);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // For desktop app, we'll use a simple session-based auth
+      // Store user in session (session configured in server/index.ts)
+      (req as any).session = { userId: user.id, username: user.username, role: user.role };
+      
+      // Return user data without password
+      res.json({
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          email: user.email
+        },
+        // For compatibility with frontend that expects a token
+        token: 'desktop-session',
+        refreshToken: 'desktop-session'
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    // Clear session
+    (req as any).session = null;
+    res.json({ success: true });
+  });
+  
+  app.get("/api/auth/check", async (req, res) => {
+    const session = (req as any).session;
+    if (session?.userId) {
+      const user = await storage.getUser(session.userId);
+      if (user) {
+        return res.json({ 
+          authenticated: true,
+          user: {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            email: user.email
+          }
+        });
+      }
+    }
+    res.json({ authenticated: false });
+  });
+
   // ==== CLIENTS API ====
   app.get("/api/clients", async (req, res) => {
     const clients = await storage.getAllClients();

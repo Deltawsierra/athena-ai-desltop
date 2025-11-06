@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
@@ -9,6 +10,24 @@ declare module 'http' {
     rawBody: unknown
   }
 }
+
+// Configure session for desktop app authentication
+const isDesktop = process.env.ELECTRON_RUN_AS_NODE === '1' || process.env.USE_SQLITE === 'true';
+
+if (isDesktop) {
+  // For desktop app, use memory-based sessions (since it's single-user)
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'athena-ai-desktop-secret-key-2024',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false, // Desktop app doesn't use HTTPS
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    }
+  }));
+}
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
