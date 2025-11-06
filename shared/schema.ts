@@ -92,6 +92,39 @@ export const aiHealthMetrics = pgTable("ai_health_metrics", {
   falsePositiveRate: integer("false_positive_rate").notNull(),
 });
 
+export const aiControlSettings = pgTable("ai_control_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  systemStatus: text("system_status").notNull().default("active"),
+  killSwitchEnabled: boolean("kill_switch_enabled").notNull().default(false),
+  overrideMode: boolean("override_mode").notNull().default(false),
+  activeSystems: text("active_systems").array(),
+  maxConcurrentTests: integer("max_concurrent_tests").notNull().default(5),
+  autoShutdownThreshold: integer("auto_shutdown_threshold").notNull().default(90),
+  lastModifiedBy: varchar("last_modified_by"),
+  lastModifiedAt: timestamp("last_modified_at").notNull().defaultNow(),
+});
+
+export const aiChatMessages = pgTable("ai_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  message: text("message").notNull(),
+  sender: text("sender").notNull(),
+  attachments: jsonb("attachments"),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+export const classifiers = pgTable("classifiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  accuracy: integer("accuracy").notNull(),
+  status: text("status").notNull().default("active"),
+  trainingDataSize: integer("training_data_size").notNull().default(0),
+  lastTrainedAt: timestamp("last_trained_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  description: text("description"),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true, createdAt: true });
 export const insertSiteSchema = createInsertSchema(sites).omit({ id: true, createdAt: true });
@@ -99,6 +132,9 @@ export const insertTestSchema = createInsertSchema(tests).omit({ id: true, start
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({ id: true, timestamp: true });
 export const insertAIHealthMetricSchema = createInsertSchema(aiHealthMetrics).omit({ id: true, timestamp: true });
+export const insertAIControlSettingSchema = createInsertSchema(aiControlSettings).omit({ id: true, lastModifiedAt: true });
+export const insertAIChatMessageSchema = createInsertSchema(aiChatMessages).omit({ id: true, timestamp: true });
+export const insertClassifierSchema = createInsertSchema(classifiers).omit({ id: true, createdAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -114,3 +150,9 @@ export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 export type ActivityLog = typeof activityLogs.$inferSelect;
 export type InsertAIHealthMetric = z.infer<typeof insertAIHealthMetricSchema>;
 export type AIHealthMetric = typeof aiHealthMetrics.$inferSelect;
+export type InsertAIControlSetting = z.infer<typeof insertAIControlSettingSchema>;
+export type AIControlSetting = typeof aiControlSettings.$inferSelect;
+export type InsertAIChatMessage = z.infer<typeof insertAIChatMessageSchema>;
+export type AIChatMessage = typeof aiChatMessages.$inferSelect;
+export type InsertClassifier = z.infer<typeof insertClassifierSchema>;
+export type Classifier = typeof classifiers.$inferSelect;

@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { 
   insertClientSchema, insertSiteSchema, insertTestSchema, 
   insertDocumentSchema, insertActivityLogSchema, insertAIHealthMetricSchema,
-  insertUserSchema 
+  insertUserSchema, insertAIControlSettingSchema, insertAIChatMessageSchema,
+  insertClassifierSchema
 } from "@shared/schema";
 
 const updateClientSchema = insertClientSchema.partial();
@@ -12,6 +13,8 @@ const updateSiteSchema = insertSiteSchema.partial();
 const updateTestSchema = insertTestSchema.partial();
 const updateDocumentSchema = insertDocumentSchema.partial();
 const updateUserSchema = insertUserSchema.partial();
+const updateAIControlSettingSchema = insertAIControlSettingSchema.partial();
+const updateClassifierSchema = insertClassifierSchema.partial();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -354,6 +357,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await storage.createActivityLog({
       action: "deleted",
       entityType: "user",
+      entityId: req.params.id
+    });
+    res.json({ success: true });
+  });
+
+  // ==== AI CONTROL API ====
+  app.get("/api/ai-control", async (req, res) => {
+    const settings = await storage.getAIControlSettings();
+    res.json(settings);
+  });
+
+  app.patch("/api/ai-control", async (req, res) => {
+    try {
+      const data = updateAIControlSettingSchema.parse(req.body);
+      const settings = await storage.updateAIControlSettings(data);
+      await storage.createActivityLog({
+        action: "updated",
+        entityType: "ai_control",
+        entityId: settings.id,
+        details: data
+      });
+      res.json(settings);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ==== AI CHAT API ====
+  app.get("/api/chat", async (req, res) => {
+    const messages = await storage.getAllChatMessages();
+    res.json(messages);
+  });
+
+  app.post("/api/chat", async (req, res) => {
+    try {
+      const data = insertAIChatMessageSchema.parse(req.body);
+      const message = await storage.createChatMessage(data);
+      res.json(message);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/chat/:id", async (req, res) => {
+    const success = await storage.deleteChatMessage(req.params.id);
+    if (!success) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+    res.json({ success: true });
+  });
+
+  // ==== CLASSIFIERS API ====
+  app.get("/api/classifiers", async (req, res) => {
+    const classifiers = await storage.getAllClassifiers();
+    res.json(classifiers);
+  });
+
+  app.get("/api/classifiers/:id", async (req, res) => {
+    const classifier = await storage.getClassifier(req.params.id);
+    if (!classifier) {
+      return res.status(404).json({ message: "Classifier not found" });
+    }
+    res.json(classifier);
+  });
+
+  app.post("/api/classifiers", async (req, res) => {
+    try {
+      const data = insertClassifierSchema.parse(req.body);
+      const classifier = await storage.createClassifier(data);
+      await storage.createActivityLog({
+        action: "created",
+        entityType: "classifier",
+        entityId: classifier.id,
+        details: { name: classifier.name, type: classifier.type }
+      });
+      res.json(classifier);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/classifiers/:id", async (req, res) => {
+    try {
+      const data = updateClassifierSchema.parse(req.body);
+      const classifier = await storage.updateClassifier(req.params.id, data);
+      if (!classifier) {
+        return res.status(404).json({ message: "Classifier not found" });
+      }
+      await storage.createActivityLog({
+        action: "updated",
+        entityType: "classifier",
+        entityId: classifier.id
+      });
+      res.json(classifier);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/classifiers/:id", async (req, res) => {
+    const success = await storage.deleteClassifier(req.params.id);
+    if (!success) {
+      return res.status(404).json({ message: "Classifier not found" });
+    }
+    await storage.createActivityLog({
+      action: "deleted",
+      entityType: "classifier",
       entityId: req.params.id
     });
     res.json({ success: true });
