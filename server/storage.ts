@@ -353,6 +353,15 @@ export class MemStorage implements IStorage {
     return metric;
   }
 
+  async getLatestAIHealthMetrics(): Promise<AIHealthMetric | undefined> {
+    return this.getLatestAIHealthMetric();
+  }
+
+  async getAllAIHealthMetrics(): Promise<AIHealthMetric[]> {
+    return Array.from(this.aiHealthMetrics.values())
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  }
+
   async getAIControlSettings(): Promise<AIControlSetting | undefined> {
     return this.aiControlSettings;
   }

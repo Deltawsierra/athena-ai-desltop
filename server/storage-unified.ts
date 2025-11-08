@@ -190,7 +190,10 @@ class UnifiedStorage implements IStorage {
   
   // AI Health operations
   async getLatestAIHealthMetrics(): Promise<AIHealthMetric | undefined> {
-    return this.backend.getLatestAIHealthMetrics();
+    if (useDesktopStorage) {
+      return sqliteStorage.getLatestAIHealthMetric();
+    }
+    return memStorage.getLatestAIHealthMetrics();
   }
   
   async getLatestAIHealthMetric(): Promise<AIHealthMetric | undefined> {
@@ -198,11 +201,17 @@ class UnifiedStorage implements IStorage {
   }
   
   async createAIHealthMetric(metric: InsertAIHealthMetric): Promise<AIHealthMetric> {
-    return this.backend.createAIHealthMetric(metric);
+    if (useDesktopStorage) {
+      return sqliteStorage.createAIHealthMetric(metric);
+    }
+    return memStorage.createAIHealthMetric(metric);
   }
   
   async getAllAIHealthMetrics(): Promise<AIHealthMetric[]> {
-    return this.backend.getAllAIHealthMetrics?.() || [];
+    if (useDesktopStorage) {
+      return sqliteStorage.getAllAIHealthMetrics();
+    }
+    return memStorage.getAllAIHealthMetrics();
   }
   
   async getAIHealthMetrics(limit?: number): Promise<AIHealthMetric[]> {
@@ -211,11 +220,17 @@ class UnifiedStorage implements IStorage {
   
   // AI Control operations
   async getAIControlSettings(): Promise<AIControlSetting | undefined> {
-    return this.backend.getAIControlSettings();
+    if (useDesktopStorage) {
+      return sqliteStorage.getAIControlSettings();
+    }
+    return memStorage.getAIControlSettings();
   }
   
   async updateAIControlSettings(id: string, settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting | undefined> {
-    return this.backend.updateAIControlSettings(id, settings);
+    if (useDesktopStorage) {
+      return sqliteStorage.updateAIControlSettings(id, settings);
+    }
+    return memStorage.updateAIControlSettings(id, settings);
   }
   
   // AI Chat operations

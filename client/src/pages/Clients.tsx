@@ -22,6 +22,7 @@ export default function Clients() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [formStatus, setFormStatus] = useState<string>("active");
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
@@ -32,17 +33,24 @@ export default function Clients() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: InsertClient) => apiRequest("/api/clients", "POST", data),
+    mutationFn: async (data: InsertClient) => {
+      console.log("Creating client with data:", data);
+      return apiRequest("POST", "/api/clients", data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       setIsDialogOpen(false);
       toast({ title: "Client created successfully" });
     },
+    onError: (error) => {
+      console.error("Error creating client:", error);
+      toast({ title: "Error creating client", description: error.message, variant: "destructive" });
+    },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertClient> }) =>
-      apiRequest(`/api/clients/${id}`, "PATCH", data),
+      apiRequest("PATCH", `/api/clients/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       setIsDialogOpen(false);
@@ -52,7 +60,7 @@ export default function Clients() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => apiRequest(`/api/clients/${id}`, "DELETE"),
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/clients/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       toast({ title: "Client deleted successfully" });
@@ -61,20 +69,34 @@ export default function Clients() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    console.log("Form submitted, formStatus:", formStatus);
     const formData = new FormData(e.currentTarget);
     const data = {
       name: formData.get("name") as string,
       company: formData.get("company") as string,
       email: formData.get("email") as string,
       phone: formData.get("phone") as string,
-      status: formData.get("status") as string,
+      status: formStatus,
       notes: formData.get("notes") as string,
     };
+    console.log("Form data collected:", data);
 
     if (editingClient) {
+      console.log("Updating existing client");
       updateMutation.mutate({ id: editingClient.id, data });
     } else {
+      console.log("Creating new client");
       createMutation.mutate(data);
+    }
+  };
+  
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingClient(null);
+      setFormStatus("active");
+    } else if (editingClient) {
+      setFormStatus(editingClient.status);
     }
   };
 
@@ -105,12 +127,15 @@ export default function Clients() {
                 Manage clients, sites, and security assessments
               </p>
             </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button
                   size="default"
                   data-testid="button-add-client"
-                  onClick={() => setEditingClient(null)}
+                  onClick={() => {
+                    setEditingClient(null);
+                    setFormStatus("active");
+                  }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Client
@@ -163,7 +188,7 @@ export default function Clients() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="status">Status</Label>
-                    <Select name="status" defaultValue={editingClient?.status || "active"}>
+                    <Select value={formStatus} onValueChange={setFormStatus}>
                       <SelectTrigger data-testid="select-client-status">
                         <SelectValue />
                       </SelectTrigger>
