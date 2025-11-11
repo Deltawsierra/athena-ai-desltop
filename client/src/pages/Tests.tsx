@@ -61,39 +61,39 @@ export default function Tests() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: InsertTest) => apiRequest("/api/tests", "POST", data),
+    mutationFn: async (data: InsertTest) => apiRequest("POST", "/api/tests", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
       toast({ title: "Test created successfully" });
       setIsCreateDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Failed to create test", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to create test", description: error.message, variant: "destructive" });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Test> }) =>
-      apiRequest(`/api/tests/${id}`, "PATCH", data),
+      apiRequest("PATCH", `/api/tests/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
       toast({ title: "Test updated successfully" });
       setIsEditDialogOpen(false);
       setEditingTest(null);
     },
-    onError: () => {
-      toast({ title: "Failed to update test", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to update test", description: error.message, variant: "destructive" });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => apiRequest(`/api/tests/${id}`, "DELETE"),
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/tests/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
       toast({ title: "Test deleted successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete test", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to delete test", description: error.message, variant: "destructive" });
     },
   });
 

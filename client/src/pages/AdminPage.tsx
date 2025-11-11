@@ -52,38 +52,38 @@ export default function AdminPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: InsertUser) => apiRequest("/api/users", "POST", data),
+    mutationFn: async (data: InsertUser) => apiRequest("POST", "/api/users", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({ title: "User created successfully" });
       setIsCreateDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Failed to create user", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to create user", description: error.message, variant: "destructive" });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<User> }) => 
-      apiRequest(`/api/users/${id}`, "PATCH", data),
+      apiRequest("PATCH", `/api/users/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({ title: "User updated successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to update user", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to update user", description: error.message, variant: "destructive" });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => apiRequest(`/api/users/${id}`, "DELETE"),
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/users/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({ title: "User deleted successfully" });
       setUserToDelete(null);
     },
-    onError: () => {
-      toast({ title: "Failed to delete user", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to delete user", description: error.message, variant: "destructive" });
     },
   });
 

@@ -191,7 +191,7 @@ class UnifiedStorage implements IStorage {
   // AI Health operations
   async getLatestAIHealthMetrics(): Promise<AIHealthMetric | undefined> {
     if (useDesktopStorage) {
-      return sqliteStorage.getLatestAIHealthMetric();
+      return sqliteStorage.getLatestAIHealthMetrics();
     }
     return memStorage.getLatestAIHealthMetrics();
   }
@@ -209,7 +209,7 @@ class UnifiedStorage implements IStorage {
   
   async getAllAIHealthMetrics(): Promise<AIHealthMetric[]> {
     if (useDesktopStorage) {
-      return sqliteStorage.getAllAIHealthMetrics();
+      return sqliteStorage.getAIHealthMetrics();
     }
     return memStorage.getAllAIHealthMetrics();
   }
@@ -226,11 +226,11 @@ class UnifiedStorage implements IStorage {
     return memStorage.getAIControlSettings();
   }
   
-  async updateAIControlSettings(id: string, settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting | undefined> {
+  async updateAIControlSettings(settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting | undefined> {
     if (useDesktopStorage) {
-      return sqliteStorage.updateAIControlSettings(id, settings);
+      return sqliteStorage.updateAIControlSettings(settings);
     }
-    return memStorage.updateAIControlSettings(id, settings);
+    return memStorage.updateAIControlSettings(settings);
   }
   
   // AI Chat operations

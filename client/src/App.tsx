@@ -11,6 +11,7 @@ import HolographicBackground from "@/components/HolographicBackground";
 import MagneticCursor from "@/components/MagneticCursor";
 import CursorGlow from "@/components/CursorGlow";
 import SmoothScroll from "@/components/SmoothScroll";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import PentestScan from "@/pages/PentestScan";
@@ -130,18 +131,20 @@ function App() {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <SmoothScroll>
-          <HolographicBackground />
-          <MagneticCursor />
-          <CursorGlow />
-          <TokenRefresher />
-          <Toaster />
-          <Router isAuthenticated={isAuthenticated} onLogout={handleLogout} />
-        </SmoothScroll>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <SmoothScroll>
+            <HolographicBackground />
+            <MagneticCursor />
+            <CursorGlow />
+            <TokenRefresher />
+            <Toaster />
+            <Router isAuthenticated={isAuthenticated} onLogout={handleLogout} />
+          </SmoothScroll>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

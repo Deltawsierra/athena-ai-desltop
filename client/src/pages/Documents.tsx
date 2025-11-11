@@ -46,39 +46,39 @@ export default function Documents() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: InsertDocument) => apiRequest("/api/documents", "POST", data),
+    mutationFn: async (data: InsertDocument) => apiRequest("POST", "/api/documents", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       toast({ title: "Document created successfully" });
       setIsCreateDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Failed to create document", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to create document", description: error.message, variant: "destructive" });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Document> }) =>
-      apiRequest(`/api/documents/${id}`, "PATCH", data),
+      apiRequest("PATCH", `/api/documents/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       toast({ title: "Document updated successfully" });
       setIsEditDialogOpen(false);
       setEditingDocument(null);
     },
-    onError: () => {
-      toast({ title: "Failed to update document", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to update document", description: error.message, variant: "destructive" });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => apiRequest(`/api/documents/${id}`, "DELETE"),
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/documents/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       toast({ title: "Document deleted successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete document", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: "Failed to delete document", description: error.message, variant: "destructive" });
     },
   });
 
