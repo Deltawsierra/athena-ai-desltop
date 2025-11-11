@@ -18,12 +18,26 @@ async function startExpressServer() {
   // In production, the server is bundled with the app
   // In development, we start the existing server
   if (!isDev) {
-    // For production, we'll start the server (handles both .js and .ts)
+    // For production, run the bundled server
     try {
-      require('./server-dist/index.js');
+      // Set environment for production server
+      process.env.NODE_ENV = 'production';
+      process.env.USE_SQLITE = 'true';
+      
+      // Import and start the production server
+      const serverPath = path.join(__dirname, 'dist', 'index.js');
+      if (require('fs').existsSync(serverPath)) {
+        await import(serverPath);
+        console.log('Production server started');
+      } else {
+        console.error('Production server bundle not found. Run npm run build first.');
+        app.quit();
+        return;
+      }
     } catch (err) {
-      // If JS doesn't exist, try TypeScript with tsx
-      require('./server-dist/index.ts');
+      console.error('Failed to start production server:', err);
+      app.quit();
+      return;
     }
   } else {
     // In development, we can use the existing npm run dev setup
@@ -159,7 +173,7 @@ function createWindow() {
   // Load the app
   const startUrl = isDev 
     ? 'http://localhost:5000' 
-    : `file://${path.join(__dirname, 'client/dist/index.html')}`;
+    : 'http://localhost:5000';  // In production, we still use the local server
   
   mainWindow.loadURL(startUrl);
 
