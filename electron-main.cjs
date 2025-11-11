@@ -25,19 +25,33 @@ async function startExpressServer() {
       process.env.USE_SQLITE = 'true';
       
       // Import and start the production server
+      const { pathToFileURL } = require('url');
+      const fs = require('fs');
       const serverPath = path.join(__dirname, 'dist', 'index.js');
-      if (require('fs').existsSync(serverPath)) {
-        await import(serverPath);
-        console.log('Production server started');
+      
+      console.log('Looking for production server at:', serverPath);
+      
+      if (fs.existsSync(serverPath)) {
+        // Convert Windows path to file URL for proper import
+        const serverUrl = pathToFileURL(serverPath).href;
+        console.log('Loading production server from:', serverUrl);
+        
+        await import(serverUrl);
+        console.log('Production server started successfully');
       } else {
-        console.error('Production server bundle not found. Run npm run build first.');
+        const errorMsg = `Production server bundle not found at: ${serverPath}\nPlease run 'npm run build' first.`;
+        console.error(errorMsg);
+        const { dialog } = require('electron');
+        dialog.showErrorBox('Athena AI - Server Error', errorMsg);
         app.quit();
-        return;
+        throw new Error(errorMsg);
       }
     } catch (err) {
       console.error('Failed to start production server:', err);
+      const { dialog } = require('electron');
+      dialog.showErrorBox('Athena AI - Startup Error', `Failed to start server:\n${err.message}`);
       app.quit();
-      return;
+      throw err;
     }
   } else {
     // In development, we can use the existing npm run dev setup

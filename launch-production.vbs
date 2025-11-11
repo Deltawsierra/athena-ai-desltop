@@ -32,6 +32,7 @@ End If
 objShell.Run "cmd /c set NODE_ENV=production && npx electron electron-main.cjs", 0, False
 
 ' Optional: Show a brief notification that the app is launching
-MsgBox "Athena AI is starting..." & vbCrLf & _
-       "The application will open momentarily.", _
-       vbInformation, "Athena AI", 2  ' Auto-close after 2 seconds
+' Using Popup instead of MsgBox for the timeout feature
+objShell.Popup "Athena AI is starting..." & vbCrLf & _
+               "The application will open momentarily.", _
+               2, "Athena AI", vbInformation
