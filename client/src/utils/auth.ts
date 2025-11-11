@@ -73,7 +73,13 @@ export async function refreshAccessIfNeeded(verbose = false): Promise<TokenPair>
   const refresh = getRefresh();
   if (!refresh) throw new Error("No refresh token available");
 
-  const res = await fetch("/api/token/refresh/", {
+  // Handle Electron custom protocol - need absolute URL for API calls
+  const isElectronProduction = window.location.protocol === 'app:';
+  const apiUrl = isElectronProduction 
+    ? 'http://localhost:5000/api/token/refresh/' 
+    : '/api/token/refresh/';
+
+  const res = await fetch(apiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh }),

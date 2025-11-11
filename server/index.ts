@@ -36,6 +36,26 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
+// Configure CORS for Electron custom protocol
+app.use((req, res, next) => {
+  // Allow requests from Electron app using custom protocol
+  const origin = req.headers.origin;
+  if (origin === 'app://athena' || origin === 'http://localhost:5000') {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  
+  next();
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;

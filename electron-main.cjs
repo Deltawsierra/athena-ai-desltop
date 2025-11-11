@@ -226,6 +226,36 @@ function createWindow() {
     event.preventDefault();
     shell.openExternal(url);
   });
+  
+  // Configure security policies for production
+  if (!isDev) {
+    // Set Content Security Policy for the custom protocol
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self' app://athena http://localhost:5000; " +
+            "script-src 'self' app://athena 'unsafe-inline'; " +
+            "style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com; " +
+            "font-src 'self' app://athena https://fonts.gstatic.com data:; " +
+            "img-src 'self' app://athena data: blob:; " +
+            "connect-src 'self' http://localhost:5000 ws://localhost:5000"
+          ]
+        }
+      });
+    });
+    
+    // Allow API requests from app:// to http://localhost:5000
+    mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
+      { urls: ['http://localhost:5000/*'] },
+      (details, callback) => {
+        // Ensure the Origin header is set properly for CORS
+        details.requestHeaders['Origin'] = 'app://athena';
+        callback({ requestHeaders: details.requestHeaders });
+      }
+    );
+  }
 }
 
 // Register the custom protocol handler
