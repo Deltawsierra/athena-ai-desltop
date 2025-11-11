@@ -234,6 +234,26 @@ function createWindow() {
   
   // Configure security policies for production
   if (!isDev) {
+    // Set proper Content Security Policy for production
+    // Note: 'unsafe-eval' is required for React Query and Vite's production build
+    // This is a known limitation when using modern bundlers with Electron
+    const cspPolicy = 
+      "default-src 'self' app://athena http://localhost:5000; " +
+      "script-src 'self' app://athena 'unsafe-eval'; " +  // unsafe-eval required for React Query
+      "style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com; " +
+      "font-src 'self' app://athena https://fonts.gstatic.com data:; " +
+      "img-src 'self' app://athena data: blob:; " +
+      "connect-src 'self' http://localhost:5000 ws://localhost:5000";
+    
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [cspPolicy]
+        }
+      });
+    });
+    
     // Allow API requests from app:// to http://localhost:5000
     mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
       { urls: ['http://localhost:5000/*'] },
