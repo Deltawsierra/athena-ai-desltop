@@ -98,7 +98,10 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'electron-preload.cjs')
+      preload: path.join(__dirname, 'electron-preload.cjs'),
+      // Allow the CSP to be controlled by the HTML meta tag
+      webSecurity: !isDev,  // Disable web security in dev for easier debugging
+      allowRunningInsecureContent: false
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: '#0a0a0a',
@@ -229,23 +232,6 @@ function createWindow() {
   
   // Configure security policies for production
   if (!isDev) {
-    // Set Content Security Policy for the custom protocol
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self' app://athena http://localhost:5000; " +
-            "script-src 'self' app://athena; " +  // Removed 'unsafe-inline' for better security
-            "style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com; " +  // Keep for Tailwind
-            "font-src 'self' app://athena https://fonts.gstatic.com data:; " +
-            "img-src 'self' app://athena data: blob:; " +
-            "connect-src 'self' http://localhost:5000 ws://localhost:5000"
-          ]
-        }
-      });
-    });
-    
     // Allow API requests from app:// to http://localhost:5000
     mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
       { urls: ['http://localhost:5000/*'] },
