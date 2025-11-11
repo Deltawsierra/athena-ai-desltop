@@ -99,8 +99,10 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'electron-preload.cjs'),
-      // Allow the CSP to be controlled by the HTML meta tag
-      webSecurity: !isDev,  // Disable web security in dev for easier debugging
+      // SECURITY: Always enable webSecurity in production
+      // In development, we keep it enabled for security testing
+      webSecurity: true,  // Critical: Must be true in production for security
+      sandbox: true,      // Enable sandboxing for additional security
       allowRunningInsecureContent: false
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
