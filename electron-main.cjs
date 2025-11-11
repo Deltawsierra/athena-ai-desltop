@@ -278,16 +278,29 @@ function registerCustomProtocol() {
         pathname = 'index.html';
       }
       
-      // Define the allowed public directory
+      // Define the allowed public directory with normalized separator
       const publicDir = path.resolve(__dirname, 'dist', 'public');
       
       // Construct and normalize the full file path
       const requestedPath = path.resolve(publicDir, pathname);
       
       // SECURITY: Ensure the resolved path is within the public directory
-      if (!requestedPath.startsWith(publicDir)) {
-        console.error(`[Security] Path traversal attempt blocked: ${request.url}`);
+      // Use path.relative to check if path escapes the public directory
+      const relativePath = path.relative(publicDir, requestedPath);
+      
+      // If relative path starts with .. or is absolute, it's trying to escape
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        console.error(`[Security] Path traversal attempt blocked: ${request.url} -> ${relativePath}`);
         callback({ error: -6 }); // FILE_NOT_FOUND
+        return;
+      }
+      
+      // Additional check: ensure the normalized path is actually inside publicDir
+      const normalizedPublic = path.normalize(publicDir + path.sep);
+      const normalizedRequest = path.normalize(requestedPath + path.sep);
+      if (!normalizedRequest.startsWith(normalizedPublic)) {
+        console.error(`[Security] Path escape attempt blocked: ${request.url}`);
+        callback({ error: -6 }); // FILE_NOT_FOUND  
         return;
       }
       
