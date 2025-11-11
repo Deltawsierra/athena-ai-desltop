@@ -1,10 +1,25 @@
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, protocol, net } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
+const fs = require('fs');
+const { pathToFileURL } = require('url');
 
 // Keep a global reference of the window object
 let mainWindow;
 let serverProcess;
+
+// Register custom protocol scheme before app is ready
+protocol.registerSchemesAsPrivileged([
+  { 
+    scheme: 'app', 
+    privileges: { 
+      secure: true, 
+      standard: true, 
+      supportFetchAPI: true,
+      corsEnabled: true 
+    } 
+  }
+]);
 
 // Enable live reload for Electron in development
 if (isDev) {
@@ -184,10 +199,10 @@ function createWindow() {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 
-  // Load the app
+  // Load the app - use custom protocol in production
   const startUrl = isDev 
-    ? 'http://localhost:5000' 
-    : 'http://localhost:5000';  // In production, we still use the local server
+    ? 'http://localhost:5000'  // Development: use Vite dev server for HMR
+    : 'app://athena/index.html';  // Production: use custom protocol
   
   mainWindow.loadURL(startUrl);
 
@@ -213,8 +228,46 @@ function createWindow() {
   });
 }
 
+// Register the custom protocol handler
+function registerCustomProtocol() {
+  protocol.registerFileProtocol('app', (request, callback) => {
+    // Extract the path from the URL (remove app://athena prefix)
+    let url = request.url;
+    
+    // Remove the protocol and domain part
+    url = url.replace('app://athena/', '');
+    
+    // Default to index.html if no path specified
+    if (url === '' || url === 'athena/' || url === 'athena') {
+      url = 'index.html';
+    }
+    
+    // Construct the full file path
+    const filePath = path.join(__dirname, 'dist', 'public', url);
+    
+    // Check if the file exists
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      callback({ path: filePath });
+    } else {
+      // If file doesn't exist, serve index.html for client-side routing
+      const indexPath = path.join(__dirname, 'dist', 'public', 'index.html');
+      if (fs.existsSync(indexPath)) {
+        callback({ path: indexPath });
+      } else {
+        // Return 404 error
+        callback({ error: -6 }); // FILE_NOT_FOUND
+      }
+    }
+  });
+}
+
 // This method will be called when Electron has finished initialization
 app.whenReady().then(async () => {
+  // Register the custom protocol for production
+  if (!isDev) {
+    registerCustomProtocol();
+  }
+  
   // Start Express server first
   console.log('Starting Express server...');
   await startExpressServer();
