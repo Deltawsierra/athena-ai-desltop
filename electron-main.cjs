@@ -236,8 +236,8 @@ function createWindow() {
           ...details.responseHeaders,
           'Content-Security-Policy': [
             "default-src 'self' app://athena http://localhost:5000; " +
-            "script-src 'self' app://athena 'unsafe-inline'; " +
-            "style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com; " +
+            "script-src 'self' app://athena; " +  // Removed 'unsafe-inline' for better security
+            "style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com; " +  // Keep for Tailwind
             "font-src 'self' app://athena https://fonts.gstatic.com data:; " +
             "img-src 'self' app://athena data: blob:; " +
             "connect-src 'self' http://localhost:5000 ws://localhost:5000"
@@ -261,32 +261,52 @@ function createWindow() {
 // Register the custom protocol handler
 function registerCustomProtocol() {
   protocol.registerFileProtocol('app', (request, callback) => {
-    // Extract the path from the URL (remove app://athena prefix)
-    let url = request.url;
-    
-    // Remove the protocol and domain part
-    url = url.replace('app://athena/', '');
-    
-    // Default to index.html if no path specified
-    if (url === '' || url === 'athena/' || url === 'athena') {
-      url = 'index.html';
-    }
-    
-    // Construct the full file path
-    const filePath = path.join(__dirname, 'dist', 'public', url);
-    
-    // Check if the file exists
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-      callback({ path: filePath });
-    } else {
-      // If file doesn't exist, serve index.html for client-side routing
-      const indexPath = path.join(__dirname, 'dist', 'public', 'index.html');
-      if (fs.existsSync(indexPath)) {
-        callback({ path: indexPath });
-      } else {
-        // Return 404 error
-        callback({ error: -6 }); // FILE_NOT_FOUND
+    try {
+      // Parse the URL properly
+      const parsedUrl = new URL(request.url);
+      
+      // Get the pathname and decode it (handles %20 etc)
+      let pathname = decodeURIComponent(parsedUrl.pathname);
+      
+      // Remove leading slash if present
+      if (pathname.startsWith('/')) {
+        pathname = pathname.slice(1);
       }
+      
+      // Default to index.html if no path specified
+      if (pathname === '' || pathname === 'athena' || pathname === 'athena/') {
+        pathname = 'index.html';
+      }
+      
+      // Define the allowed public directory
+      const publicDir = path.resolve(__dirname, 'dist', 'public');
+      
+      // Construct and normalize the full file path
+      const requestedPath = path.resolve(publicDir, pathname);
+      
+      // SECURITY: Ensure the resolved path is within the public directory
+      if (!requestedPath.startsWith(publicDir)) {
+        console.error(`[Security] Path traversal attempt blocked: ${request.url}`);
+        callback({ error: -6 }); // FILE_NOT_FOUND
+        return;
+      }
+      
+      // Check if the file exists and is a file (not directory)
+      if (fs.existsSync(requestedPath) && fs.statSync(requestedPath).isFile()) {
+        callback({ path: requestedPath });
+      } else {
+        // For client-side routing, serve index.html for non-existent paths
+        const indexPath = path.join(publicDir, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          callback({ path: indexPath });
+        } else {
+          console.error(`[Protocol] File not found: ${requestedPath}`);
+          callback({ error: -6 }); // FILE_NOT_FOUND
+        }
+      }
+    } catch (err) {
+      console.error('[Protocol] Error handling request:', err);
+      callback({ error: -6 }); // FILE_NOT_FOUND
     }
   });
 }
