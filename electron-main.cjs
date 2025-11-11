@@ -244,12 +244,12 @@ function createWindow() {
     // Note: 'unsafe-eval' is required for React Query and Vite's production build
     // This is a known limitation when using modern bundlers with Electron
     const cspPolicy = 
-      "default-src 'self' app://athena http://localhost:5000; " +
+      "default-src 'self' app://athena; " +  // Tightened: removed localhost from default-src
       "script-src 'self' app://athena 'unsafe-eval'; " +  // unsafe-eval required for React Query
       "style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com; " +
       "font-src 'self' app://athena https://fonts.gstatic.com data:; " +
       "img-src 'self' app://athena data: blob:; " +
-      "connect-src 'self' http://localhost:5000 ws://localhost:5000";
+      "connect-src 'self' http://localhost:5000 ws://localhost:5000";  // API calls only need connect-src
     
     mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
       callback({
