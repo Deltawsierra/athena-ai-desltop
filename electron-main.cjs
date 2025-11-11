@@ -8,6 +8,12 @@ const { pathToFileURL } = require('url');
 let mainWindow;
 let serverProcess;
 
+// In production, disable security warnings since we've made conscious security decisions
+// We use 'unsafe-eval' for React Query/Vite compatibility which triggers warnings
+if (!isDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+}
+
 // Register custom protocol scheme before app is ready
 protocol.registerSchemesAsPrivileged([
   { 

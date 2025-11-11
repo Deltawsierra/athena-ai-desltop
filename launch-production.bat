@@ -24,5 +24,6 @@ if not exist "node_modules" (
 REM Launch in production mode
 echo Starting Athena AI...
 set NODE_ENV=production
+set ELECTRON_DISABLE_SECURITY_WARNINGS=true
 start "" /MIN cmd /c npx electron electron-main.cjs
 exit

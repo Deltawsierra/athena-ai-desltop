@@ -29,7 +29,8 @@ End If
 
 ' Launch Electron in production mode (hidden window)
 ' The 0 parameter hides the console window
-objShell.Run "cmd /c set NODE_ENV=production && npx electron electron-main.cjs", 0, False
+' Set ELECTRON_DISABLE_SECURITY_WARNINGS to suppress known warnings (we use unsafe-eval for React Query)
+objShell.Run "cmd /c set NODE_ENV=production && set ELECTRON_DISABLE_SECURITY_WARNINGS=true && npx electron electron-main.cjs", 0, False
 
 ' Optional: Show a brief notification that the app is launching
 ' Using Popup instead of MsgBox for the timeout feature
