@@ -3,6 +3,11 @@
 ## Overview
 This document explains the security decisions made in the Athena AI desktop application and why certain trade-offs were necessary for functionality.
 
+## Critical Fix (November 2024)
+- **Issue:** Invalid Electron version 39.1.0 (doesn't exist) caused security warnings
+- **Solution:** Installed correct Electron version 33.0.0 (latest stable)
+- **Result:** All security settings now properly applied
+
 ## Security Configuration
 
 ### 1. Web Security
