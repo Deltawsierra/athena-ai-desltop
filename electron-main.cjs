@@ -47,25 +47,37 @@ async function startExpressServer() {
       process.env.NODE_ENV = 'production';
       process.env.USE_SQLITE = 'true';
       
-      // Import and start the production server
-      const { pathToFileURL } = require('url');
       const fs = require('fs');
-      const serverPath = path.join(__dirname, 'dist', 'index.js');
       
-      console.log('Looking for production server at:', serverPath);
+      // Try different server locations
+      const serverCjsPath = path.join(__dirname, 'dist', 'server.cjs');
+      const bundledServerPath = path.join(__dirname, 'dist', 'server-bundled.cjs');
+      const regularServerPath = path.join(__dirname, 'dist', 'index.js');
       
-      if (fs.existsSync(serverPath)) {
-        // Convert Windows path to file URL for proper import
-        const serverUrl = pathToFileURL(serverPath).href;
-        console.log('Loading production server from:', serverUrl);
+      // First, try the CJS bundled server
+      if (fs.existsSync(serverCjsPath)) {
+        console.log('Loading CJS server from:', serverCjsPath);
+        require(serverCjsPath);
+        console.log('Production server started successfully (CJS bundle)');
+      } else if (fs.existsSync(bundledServerPath)) {
+        console.log('Loading bundled server from:', bundledServerPath);
+        require(bundledServerPath);
+        console.log('Production server started successfully (bundled)');
+      } else if (fs.existsSync(regularServerPath)) {
+        // Fallback to the regular build - but warn it might fail
+        console.log('Loading server from:', regularServerPath);
+        console.warn('Warning: Using unbundled server, dependencies might be missing');
         
+        // For ESM module, we need to import it differently
+        const { pathToFileURL } = require('url');
+        const serverUrl = pathToFileURL(regularServerPath).href;
         await import(serverUrl);
-        console.log('Production server started successfully');
+        console.log('Production server started (unbundled - may fail)');
       } else {
-        const errorMsg = `Production server bundle not found at: ${serverPath}\nPlease run 'npm run build' first.`;
+        const errorMsg = `Production server not found.\nPlease run the build process first.\nLooking in:\n- ${bundledServerPath}\n- ${regularServerPath}`;
         console.error(errorMsg);
         const { dialog } = require('electron');
-        dialog.showErrorBox('Athena AI - Server Error', errorMsg);
+        dialog.showErrorBox('Athena AI - Build Required', errorMsg);
         app.quit();
         throw new Error(errorMsg);
       }
