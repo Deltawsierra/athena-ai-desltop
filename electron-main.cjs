@@ -49,32 +49,36 @@ async function startExpressServer() {
       
       const fs = require('fs');
       
-      // Try different server locations
-      const serverCjsPath = path.join(__dirname, 'dist', 'server.cjs');
-      const bundledServerPath = path.join(__dirname, 'dist', 'server-bundled.cjs');
-      const regularServerPath = path.join(__dirname, 'dist', 'index.js');
+      // Load the ESM Electron server bundle
+      const electronServerPath = path.join(__dirname, 'dist', 'server-electron.mjs');
+      const fallbackServerPath = path.join(__dirname, 'dist', 'index.js');
       
-      // First, try the CJS bundled server
-      if (fs.existsSync(serverCjsPath)) {
-        console.log('Loading CJS server from:', serverCjsPath);
-        require(serverCjsPath);
-        console.log('Production server started successfully (CJS bundle)');
-      } else if (fs.existsSync(bundledServerPath)) {
-        console.log('Loading bundled server from:', bundledServerPath);
-        require(bundledServerPath);
-        console.log('Production server started successfully (bundled)');
-      } else if (fs.existsSync(regularServerPath)) {
-        // Fallback to the regular build - but warn it might fail
-        console.log('Loading server from:', regularServerPath);
-        console.warn('Warning: Using unbundled server, dependencies might be missing');
+      // Use the properly bundled ESM server for Electron
+      if (fs.existsSync(electronServerPath)) {
+        console.log('Loading Electron server from:', electronServerPath);
         
-        // For ESM module, we need to import it differently
+        // Use dynamic import for ESM module
         const { pathToFileURL } = require('url');
-        const serverUrl = pathToFileURL(regularServerPath).href;
+        const serverUrl = pathToFileURL(electronServerPath).href;
+        
+        try {
+          await import(serverUrl);
+          console.log('✅ Electron server started successfully');
+        } catch (importErr) {
+          console.error('Failed to import server module:', importErr);
+          throw importErr;
+        }
+      } else if (fs.existsSync(fallbackServerPath)) {
+        // Fallback to regular build (may fail due to missing dependencies)
+        console.warn('⚠️ Electron server bundle not found, falling back to regular build');
+        console.warn('This may fail - run: node build-electron-server.cjs');
+        
+        const { pathToFileURL } = require('url');
+        const serverUrl = pathToFileURL(fallbackServerPath).href;
         await import(serverUrl);
-        console.log('Production server started (unbundled - may fail)');
+        console.log('Fallback server started (may have issues)');
       } else {
-        const errorMsg = `Production server not found.\nPlease run the build process first.\nLooking in:\n- ${bundledServerPath}\n- ${regularServerPath}`;
+        const errorMsg = `Production server not found!\n\nPlease build the Electron server:\n1. Run: node build-electron-server.cjs\n2. Then run: npx vite build\n\nLooking for:\n- ${electronServerPath}`;
         console.error(errorMsg);
         const { dialog } = require('electron');
         dialog.showErrorBox('Athena AI - Build Required', errorMsg);
