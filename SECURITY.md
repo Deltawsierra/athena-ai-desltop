@@ -34,24 +34,24 @@ This document explains the security decisions made in the Athena AI desktop appl
 
 ### Current CSP Configuration
 ```javascript
-default-src 'self' app://athena http://localhost:5000;
-script-src 'self' app://athena 'unsafe-eval';
+default-src 'self' app://athena;
+script-src 'self' app://athena;
 style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com;
 font-src 'self' app://athena https://fonts.gstatic.com data:;
 img-src 'self' app://athena data: blob:;
 connect-src 'self' http://localhost:5000 ws://localhost:5000
 ```
 
-### Important Trade-offs
+### Security Compliance
 
-#### 'unsafe-eval' in script-src
-- **Required For:** React Query, Vite production builds, and other modern JavaScript frameworks
-- **Risk:** Allows dynamic code evaluation
-- **Mitigation:** 
-  - Only local, bundled code is executed
-  - No remote scripts are loaded
-  - App runs entirely offline
-  - Custom protocol prevents external script injection
+#### Strict CSP Without 'unsafe-eval'
+- **Status:** ✅ RESOLVED
+- **Previous Issue:** React Query and Vite were thought to require 'unsafe-eval'
+- **Solution:** Removed 'unsafe-eval' from CSP - app works without it
+- **Result:** 
+  - No security warnings in Electron console
+  - Fully compliant with Electron security best practices
+  - All scripts run from trusted sources only
 
 #### 'unsafe-inline' in style-src
 - **Required For:** Tailwind CSS, Framer Motion animations, inline styles
@@ -85,9 +85,9 @@ connect-src 'self' http://localhost:5000 ws://localhost:5000
 
 ## Known Limitations
 
-1. **'unsafe-eval' requirement:** Modern bundlers and frameworks often require eval for optimal performance. Future versions of React Query or alternative state management solutions might eliminate this need.
+1. **Bundle Size:** Main JavaScript bundle is 1.1MB. While not a security issue, code splitting would improve load times.
 
-2. **Bundle Size:** Main JavaScript bundle is 1.1MB. While not a security issue, code splitting would improve load times.
+2. **'unsafe-inline' styles:** Required for Tailwind CSS and Framer Motion animations. This is a common requirement for modern CSS frameworks.
 
 ## Security Best Practices Followed
 
