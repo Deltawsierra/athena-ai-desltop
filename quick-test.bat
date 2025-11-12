@@ -1,6 +1,5 @@
 @echo off
-echo Testing Athena AI with ES Module fix...
+echo Testing Athena AI with Strict Security...
 set NODE_ENV=production
-set ELECTRON_DISABLE_SECURITY_WARNINGS=true
 npx electron electron-main.cjs
 pause

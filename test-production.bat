@@ -20,7 +20,6 @@ REM Set production environment
 echo Setting production environment...
 set NODE_ENV=production
 set ELECTRON_IS_DEV=0
-set ELECTRON_DISABLE_SECURITY_WARNINGS=true
 
 echo.
 echo Starting Athena AI in production mode...

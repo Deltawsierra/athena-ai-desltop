@@ -9,11 +9,8 @@ const { pathToFileURL } = require('url');
 let mainWindow;
 let serverProcess;
 
-// In production, disable security warnings since we've made conscious security decisions
-// We use 'unsafe-eval' for React Query/Vite compatibility which triggers warnings
-if (!isDev) {
-  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
-}
+// Security warnings are no longer suppressed since we've fixed the issues
+// The app now uses strict CSP without 'unsafe-eval'
 
 // Register custom protocol scheme before app is ready
 protocol.registerSchemesAsPrivileged([
@@ -246,15 +243,14 @@ function createWindow() {
   // Configure security policies for production
   if (!isDev) {
     // Set proper Content Security Policy for production
-    // Note: 'unsafe-eval' is required for React Query and Vite's production build
-    // This is a known limitation when using modern bundlers with Electron
+    // Strict CSP without 'unsafe-eval' to eliminate security warnings
     const cspPolicy = 
-      "default-src 'self' app://athena; " +  // Tightened: removed localhost from default-src
-      "script-src 'self' app://athena 'unsafe-eval'; " +  // unsafe-eval required for React Query
+      "default-src 'self' app://athena; " +
+      "script-src 'self' app://athena; " +  // Removed 'unsafe-eval' to fix security warning
       "style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com; " +
       "font-src 'self' app://athena https://fonts.gstatic.com data:; " +
       "img-src 'self' app://athena data: blob:; " +
-      "connect-src 'self' http://localhost:5000 ws://localhost:5000";  // API calls only need connect-src
+      "connect-src 'self' http://localhost:5000 ws://localhost:5000";
     
     mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
       callback({

@@ -1,0 +1,204 @@
+You’re getting those warnings because your Electron window is configured insecurely:
+
+webSecurity is turned off for that renderer.
+
+There is no CSP, or your CSP allows 'unsafe-eval'.
+
+Electron detects both and prints exactly the warnings you’re seeing.
+
+These are dev-time warnings, but the configuration behind them is genuinely dangerous and is almost certainly why your app behaves differently in Electron than in a normal browser.
+
+1. What the warnings actually mean
+“Disabled webSecurity”
+
+This warning only appears when webSecurity: false is set in BrowserWindow.webPreferences or you use <webview disablewebsecurity>.
+
+Electron’s docs are blunt: do not disable webSecurity – it turns off the same-origin policy and automatically enables allowRunningInsecureContent, effectively allowing insecure code from other domains to run in your app. 
+Electron
++1
+
+So somewhere you have code like:
+
+new BrowserWindow({
+  webPreferences: {
+    webSecurity: false,   // <- this is the cause
+    // maybe also: allowRunningInsecureContent: true
+  }
+})
+
+
+or in HTML:
+
+<webview disablewebsecurity src="..."></webview>
+
+“Insecure Content-Security-Policy”
+
+Electron shows this when:
+
+there is no CSP at all, or
+
+the CSP includes 'unsafe-eval'.
+
+The security checklist explicitly recommends defining a restrictive CSP (for example, a script-src 'self' style rule) for all content you load in Electron. 
+Electron
++1
+
+content-security-policy.com shows the exact wording of the warning you screenshotted and notes that it appears when CSP is missing or too permissive (e.g., 'unsafe-eval'). 
+Content Security Policy
+
+2. Why it “works on localhost” but not in Electron
+
+Typical pattern:
+
+In the browser you hit http://localhost:3000, everything runs with normal browser defaults.
+
+In Electron you:
+
+load the same app (maybe via file:// or http://localhost),
+
+to dodge CORS or other issues you added webSecurity: false,
+
+you never added a CSP (or you copied one with 'unsafe-eval').
+
+Now Electron’s security checks fire, and the same misconfig that triggers the warnings can also break things (for example, unexpected origins, mixed content, or brittle assumptions about CSP).
+
+The warnings themselves don’t stop Electron from running; they’re just console messages. The real problem is that you’ve put the renderer in an unsupported / fragile configuration.
+
+3. Concrete fixes
+3.1. Remove the insecure webSecurity override
+
+Go to where you create your main window and strip out the webSecurity: false and related flags.
+
+Bad (what you probably have):
+
+const mainWindow = new BrowserWindow({
+  width: 800,
+  height: 600,
+  webPreferences: {
+    webSecurity: false,
+    allowRunningInsecureContent: true, // sometimes added too
+    nodeIntegration: true,             // also risky if loading remote
+    contextIsolation: false
+  }
+})
+
+
+Good (aligned with the docs):
+
+const mainWindow = new BrowserWindow({
+  width: 800,
+  height: 600,
+  webPreferences: {
+    // use the *defaults* — webSecurity stays true
+    preload: path.join(__dirname, 'preload.js'),
+    contextIsolation: true,     // recommended
+    nodeIntegration: false      // especially if you ever load remote content
+  }
+})
+
+
+Electron’s security guide explicitly says “Do not disable webSecurity” and explains that doing so disables the same-origin policy and turns on allowRunningInsecureContent. 
+Electron
++1
+
+If you disabled webSecurity to “fix CORS”, that’s the wrong fix. Instead:
+
+Configure CORS correctly on your API. 
+Wikipedia
+
+Or make network calls from the main process / a Node context and pass data to the renderer via IPC, which is a common pattern to avoid browser CORS altogether. 
+Medium
+
+3.2. Add a proper Content Security Policy
+
+Right now Electron is complaining that you have no CSP or a weak one. The security checklist recommends:
+
+Define a CSP, and
+
+Use restrictive rules, e.g. script-src 'self' https://apis.example.com. 
+Electron
++1
+
+For apps loaded via file://, they show adding CSP via a <meta> tag in your HTML. 
+Electron
+
+In your index.html (or main HTML file), add something like:
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Your App</title>
+
+  <!-- Example CSP: adjust to match what your app actually uses -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="
+      default-src 'self';
+      script-src 'self';
+      style-src  'self' 'unsafe-inline';
+      img-src    'self' data:;
+      connect-src 'self' https://api.your-domain.com;
+      font-src   'self';
+    "
+  />
+</head>
+
+
+Key ideas:
+
+No 'unsafe-eval' — that’s exactly what triggers the warning. 
+Content Security Policy
+
+Only whitelist the domains you actually use (e.g. your API, Sentry, analytics, etc.).
+
+If your bundler or dev setup relies on eval-based source maps, use the non-eval modes in production builds so you don’t need 'unsafe-eval'.
+
+3.3. Make sure you’re not doing anything else sketchy
+
+While you’re in there, align with the rest of Electron’s security checklist:
+
+Only load HTTPS or local bundled content, not arbitrary http:// URLs. 
+Electron
+
+Keep contextIsolation: true and sandboxing enabled. 
+Electron
+
+Don’t turn on experimentalFeatures / enableBlinkFeatures unless you really know why. 
+Electron
+
+4. “Can I just hide the warnings?”
+
+Yes, but that does nothing for security.
+
+You can suppress them in dev with:
+
+process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+
+
+or via an environment variable before you start Electron. This is mentioned in CSP/Electron resources as a way to hide the messages. 
+csplite.com
+
+Use that only if the warnings are cluttering your dev console and you’re sure you’ve fixed the underlying issues (webSecurity left at default, proper CSP, etc.). Hiding them on top of broken security is just shooting the messenger.
+
+5. Checklist for you
+
+Go through this in your project:
+
+Search for webSecurity and disablewebsecurity.
+
+Delete them or set webSecurity: true.
+
+Search for allowRunningInsecureContent, experimentalFeatures, enableBlinkFeatures.
+
+Remove them unless you have a very specific, justified need.
+
+Add a CSP <meta> to your main HTML with:
+
+default-src 'self'
+
+script-src 'self' (plus any specific additional origins)
+
+other directives tailored to your app.
+
+Fix CORS properly (server config or IPC pattern) instead of relying on webSecurity: false.
+
+Re-run the app in Electron and check the console — the two warnings in your screenshot should be gone, and your app should run under sane, future-proof settings.
