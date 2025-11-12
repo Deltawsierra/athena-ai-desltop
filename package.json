@@ -116,7 +116,6 @@
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.4",
     "electron-builder": "^26.0.12",
-    "electron-is-dev": "^3.0.1",
     "electron-reload": "^2.0.0-alpha.1",
     "esbuild": "^0.25.0",
     "postcss": "^8.4.47",

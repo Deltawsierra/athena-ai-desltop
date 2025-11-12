@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, shell, protocol, net } = require('electron');
 const path = require('path');
-const isDev = require('electron-is-dev');
+// Simple check for development mode - electron-is-dev is ESM-only
+const isDev = process.env.NODE_ENV !== 'production';
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 
@@ -29,10 +30,14 @@ protocol.registerSchemesAsPrivileged([
 
 // Enable live reload for Electron in development
 if (isDev) {
-  require('electron-reload')(__dirname, {
-    electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
-    hardResetMethod: 'exit'
-  });
+  try {
+    require('electron-reload')(__dirname, {
+      electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
+      hardResetMethod: 'exit'
+    });
+  } catch (err) {
+    console.log('electron-reload not available in production');
+  }
 }
 
 async function startExpressServer() {
