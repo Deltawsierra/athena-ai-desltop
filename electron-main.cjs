@@ -240,27 +240,32 @@ function createWindow() {
     shell.openExternal(url);
   });
   
-  // Configure security policies for production
-  if (!isDev) {
-    // Set proper Content Security Policy for production
-    // Strict CSP without 'unsafe-eval' to eliminate security warnings
-    const cspPolicy = 
-      "default-src 'self' app://athena; " +
-      "script-src 'self' app://athena; " +  // Removed 'unsafe-eval' to fix security warning
-      "style-src 'self' app://athena 'unsafe-inline' https://fonts.googleapis.com; " +
-      "font-src 'self' app://athena https://fonts.gstatic.com data:; " +
-      "img-src 'self' app://athena data: blob:; " +
-      "connect-src 'self' http://localhost:5000 ws://localhost:5000";
-    
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [cspPolicy]
-        }
-      });
+  // Configure Content Security Policy for ALL modes to prevent security warnings
+  // Build CSP based on whether we're in dev or prod
+  const cspSources = isDev 
+    ? "'self' http://localhost:5000"  // Dev: localhost sources
+    : "'self' app://athena";          // Prod: app protocol sources
+  
+  const cspPolicy = 
+    `default-src ${cspSources}; ` +
+    `script-src ${cspSources}; ` +  // No 'unsafe-eval' to prevent warnings
+    `style-src ${cspSources} 'unsafe-inline' https://fonts.googleapis.com; ` +
+    `font-src ${cspSources} https://fonts.gstatic.com data:; ` +
+    `img-src ${cspSources} data: blob:; ` +
+    `connect-src 'self' http://localhost:5000 ws://localhost:5000`;
+  
+  // Apply CSP to all responses regardless of dev/prod mode
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [cspPolicy]
+      }
     });
-    
+  });
+  
+  // Configure CORS headers for API requests
+  if (!isDev) {
     // Allow API requests from app:// to http://localhost:5000
     mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
       { urls: ['http://localhost:5000/*'] },
