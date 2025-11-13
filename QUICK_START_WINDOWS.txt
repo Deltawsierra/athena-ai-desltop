@@ -1,0 +1,31 @@
+ATHENA AI DESKTOP - WINDOWS QUICK START
+========================================
+
+STEP 1: Install dependencies (run in Command Prompt)
+------------------------------------------------------
+npm install
+npm install esbuild electron
+
+STEP 2: Build the app
+---------------------
+Double-click: build-electron-windows.bat
+OR run: build-electron-windows.bat
+
+STEP 3: Run the app
+-------------------
+npm run electron
+
+LOGIN CREDENTIALS:
+-----------------
+Username: admin
+Password: admin123
+
+That's it! The app should now be running.
+
+TROUBLESHOOTING:
+---------------
+If you see "Cannot find module" errors:
+1. Run: npm install
+2. Try building again
+
+For detailed instructions, see README-WINDOWS.md

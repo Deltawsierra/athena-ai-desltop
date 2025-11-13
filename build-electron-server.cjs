@@ -45,7 +45,7 @@ async function buildElectronServer() {
       fs.mkdirSync(path.join('dist', 'node_modules'), { recursive: true });
     }
     
-    // Simple copy function for native modules
+    // Simple copy function for native modules with error handling
     function copyDir(src, dest) {
       fs.mkdirSync(dest, { recursive: true });
       const entries = fs.readdirSync(src, { withFileTypes: true });
@@ -54,10 +54,31 @@ async function buildElectronServer() {
         const srcPath = path.join(src, entry.name);
         const destPath = path.join(dest, entry.name);
         
-        if (entry.isDirectory()) {
-          copyDir(srcPath, destPath);
-        } else {
-          fs.copyFileSync(srcPath, destPath);
+        try {
+          if (entry.isDirectory()) {
+            // Skip problematic directories
+            if (entry.name === 'node_gyp_bins' || entry.name === '.git') {
+              continue;
+            }
+            copyDir(srcPath, destPath);
+          } else {
+            // Only copy essential files
+            if (entry.name.endsWith('.node') || 
+                entry.name.endsWith('.js') || 
+                entry.name.endsWith('.json') ||
+                entry.name.endsWith('.dll') ||
+                entry.name.endsWith('.so') ||
+                entry.name.endsWith('.dylib')) {
+              fs.copyFileSync(srcPath, destPath);
+            }
+          }
+        } catch (err) {
+          // Log but don't fail on permission errors for non-essential files
+          if (err.code === 'EACCES') {
+            console.log(`  Skipping file due to permissions: ${entry.name}`);
+          } else {
+            throw err;
+          }
         }
       }
     }
