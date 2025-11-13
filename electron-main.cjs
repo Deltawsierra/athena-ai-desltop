@@ -260,13 +260,13 @@ function createWindow() {
   // Build CSP based on whether we're in dev or prod
   const cspSources = isDev 
     ? "'self' http://localhost:5000"  // Dev: localhost sources
-    : "'self' app://athena";          // Prod: app protocol sources
+    : "'self' app://athena file:";    // Prod: app protocol and file sources
   
   const cspPolicy = 
     `default-src ${cspSources}; ` +
     `script-src ${cspSources}; ` +  // No 'unsafe-eval' to prevent warnings
-    `style-src ${cspSources} 'unsafe-inline' https://fonts.googleapis.com; ` +
-    `font-src ${cspSources} https://fonts.gstatic.com data:; ` +
+    `style-src ${cspSources} 'unsafe-inline'; ` +  // Removed external fonts
+    `font-src ${cspSources} data:; ` +              // Only local fonts
     `img-src ${cspSources} data: blob:; ` +
     `connect-src 'self' http://localhost:5000 ws://localhost:5000`;
   

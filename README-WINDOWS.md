@@ -49,12 +49,28 @@ set NODE_ENV=production
 npx electron electron-main.cjs
 ```
 
+## Running the App - Quick Options
+
+### Quick Run Script (Double-click):
+- **`run-production.bat`** - Launches app in production mode
+- **`test-electron-windows.bat`** - Tests the app with console output
+
 ## Troubleshooting
 
 ### "Cannot find module 'esbuild'" Error
 Run:
 ```cmd
 npm install esbuild
+```
+
+### ERR_BLOCKED_BY_RESPONSE or Content Security Policy Error
+This has been fixed! The app now:
+- Uses system fonts instead of Google Fonts
+- Works completely offline
+- Has proper CSP configuration
+Make sure to rebuild if you still see this error:
+```cmd
+build-electron-windows.bat
 ```
 
 ### "Cannot find module 'electron'" Error
