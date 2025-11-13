@@ -62,3 +62,6 @@ vite.config.ts.*
 
 # Temporary/Archive files
 docs/archive/
+
+# IDE junk
+.vs/
