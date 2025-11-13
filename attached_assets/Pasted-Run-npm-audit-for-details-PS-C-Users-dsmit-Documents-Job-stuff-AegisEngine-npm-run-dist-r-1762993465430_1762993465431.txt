@@ -1,0 +1,410 @@
+Run `npm audit` for details.
+PS C:\Users\dsmit\Documents\Job stuff\AegisEngine> npm run dist
+
+> rest-express@1.0.0 dist
+> npm run build:client && npm run build:server && electron-builder
+
+
+> rest-express@1.0.0 build:client
+> vite build
+
+vite v5.4.21 building for production...
+transforming (4) src\App.tsx
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+✓ 3194 modules transformed.
+../dist/public/index.html                                                  0.76 kB │ gzip:   0.45 kB
+../dist/public/assets/Athena_AI_owl_shield_logo_3eda4960-DT6SbkEm.png    381.13 kB
+../dist/public/assets/index-BJr05EoC.css                                  88.01 kB │ gzip:  14.17 kB
+../dist/public/assets/index-Bdz7VV4i.js                                1,107.49 kB │ gzip: 312.08 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 7.13s
+
+> rest-express@1.0.0 build:server
+> tsc --project server/tsconfig.json --outDir server-dist
+
+server/db-sqlite.ts:10:34 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+10 const __filename = fileURLToPath(import.meta.url);
+                                    ~~~~~~~~~~~
+
+server/index-electron.ts:12:34 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+12 const __filename = fileURLToPath(import.meta.url);
+                                    ~~~~~~~~~~~
+
+server/routes.ts:22:31 - error TS7030: Not all code paths return a value.
+
+22   app.post("/api/auth/login", async (req, res) => {
+                                 ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:64:23 - error TS7030: Not all code paths return a value.
+
+64       session.destroy((err: any) => {
+                         ~~~~~~~~~~~~~~~
+
+server/routes.ts:75:30 - error TS7030: Not all code paths return a value.
+
+75   app.get("/api/auth/check", async (req, res) => {
+                                ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:100:31 - error TS7030: Not all code paths return a value.
+
+100   app.get("/api/clients/:id", async (req, res) => {
+                                  ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:124:33 - error TS7030: Not all code paths return a value.
+
+124   app.patch("/api/clients/:id", async (req, res) => {
+                                    ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:142:34 - error TS7030: Not all code paths return a value.
+
+142   app.delete("/api/clients/:id", async (req, res) => {
+                                     ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:156:25 - error TS7030: Not all code paths return a value.
+
+156   app.get("/api/sites", async (req, res) => {
+                            ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:159:35 - error TS2551: Property 'getSitesByClient' does not exist on type 'UnifiedStorage'. Did you mean 'getSitesByClientId'?
+
+159       const sites = await storage.getSitesByClient(clientId as string);
+                                      ~~~~~~~~~~~~~~~~
+
+  server/storage-unified.ts:98:9
+    98   async getSitesByClientId(clientId: string): Promise<any[]> {
+               ~~~~~~~~~~~~~~~~~~
+    'getSitesByClientId' is declared here.
+
+server/routes.ts:181:31 - error TS7030: Not all code paths return a value.
+
+181   app.patch("/api/sites/:id", async (req, res) => {
+                                  ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:199:32 - error TS7030: Not all code paths return a value.
+
+199   app.delete("/api/sites/:id", async (req, res) => {
+                                   ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:213:25 - error TS7030: Not all code paths return a value.
+
+213   app.get("/api/tests", async (req, res) => {
+                            ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:216:35 - error TS2551: Property 'getTestsByClient' does not exist on type 'UnifiedStorage'. Did you mean 'getTestsByClientId'?
+
+216       const tests = await storage.getTestsByClient(clientId as string);
+                                      ~~~~~~~~~~~~~~~~
+
+  server/storage-unified.ts:129:9
+    129   async getTestsByClientId(clientId: string): Promise<Test[]> {
+                ~~~~~~~~~~~~~~~~~~
+    'getTestsByClientId' is declared here.
+
+server/routes.ts:220:35 - error TS2339: Property 'getTestsBySite' does not exist on type 'UnifiedStorage'.
+
+220       const tests = await storage.getTestsBySite(siteId as string);
+                                      ~~~~~~~~~~~~~~
+
+server/routes.ts:227:29 - error TS7030: Not all code paths return a value.
+
+227   app.get("/api/tests/:id", async (req, res) => {
+                                ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:251:31 - error TS7030: Not all code paths return a value.
+
+251   app.patch("/api/tests/:id", async (req, res) => {
+                                  ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:269:32 - error TS7030: Not all code paths return a value.
+
+269   app.delete("/api/tests/:id", async (req, res) => {
+                                   ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:283:29 - error TS7030: Not all code paths return a value.
+
+283   app.get("/api/documents", async (req, res) => {
+                                ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:286:39 - error TS2551: Property 'getDocumentsByClient' does not exist on type 'UnifiedStorage'. Did you mean 'getDocumentsByClientId'?
+
+286       const documents = await storage.getDocumentsByClient(clientId as string);
+                                          ~~~~~~~~~~~~~~~~~~~~
+
+  server/storage-unified.ts:160:9
+    160   async getDocumentsByClientId(clientId: string): Promise<Document[]> {
+                ~~~~~~~~~~~~~~~~~~~~~~
+    'getDocumentsByClientId' is declared here.
+
+server/routes.ts:308:35 - error TS7030: Not all code paths return a value.
+
+308   app.patch("/api/documents/:id", async (req, res) => {
+                                      ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:326:36 - error TS7030: Not all code paths return a value.
+
+326   app.delete("/api/documents/:id", async (req, res) => {
+                                       ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:340:24 - error TS7030: Not all code paths return a value.
+
+340   app.get("/api/logs", async (req, res) => {
+                           ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:343:34 - error TS2339: Property 'getActivityLogsByEntity' does not exist on type 'UnifiedStorage'.
+
+343       const logs = await storage.getActivityLogsByEntity(entityType as string, entityId as string);
+                                     ~~~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:361:36 - error TS7030: Not all code paths return a value.
+
+361   app.get("/api/ai-health/latest", async (req, res) => {
+                                       ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:407:31 - error TS7030: Not all code paths return a value.
+
+407   app.patch("/api/users/:id", async (req, res) => {
+                                  ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:425:32 - error TS7030: Not all code paths return a value.
+
+425   app.delete("/api/users/:id", async (req, res) => {
+                                   ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:451:19 - error TS18048: 'settings' is possibly 'undefined'.
+
+451         entityId: settings.id,
+                      ~~~~~~~~
+
+server/routes.ts:476:31 - error TS7030: Not all code paths return a value.
+
+476   app.delete("/api/chat/:id", async (req, res) => {
+                                  ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:490:35 - error TS7030: Not all code paths return a value.
+
+490   app.get("/api/classifiers/:id", async (req, res) => {
+                                      ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:514:37 - error TS7030: Not all code paths return a value.
+
+514   app.patch("/api/classifiers/:id", async (req, res) => {
+                                        ~~~~~~~~~~~~~~~~~~~~~
+
+server/routes.ts:532:38 - error TS7030: Not all code paths return a value.
+
+532   app.delete("/api/classifiers/:id", async (req, res) => {
+                                         ~~~~~~~~~~~~~~~~~~~~~
+
+server/storage-sqlite.ts:83:29 - error TS2304: Cannot find name 'ScanResult'.
+
+83   getScanResults(): Promise<ScanResult[]>;
+                               ~~~~~~~~~~
+
+server/storage-sqlite.ts:84:42 - error TS2304: Cannot find name 'ScanResult'.
+
+84   getScanResultById(id: string): Promise<ScanResult | undefined>;
+                                            ~~~~~~~~~~
+
+server/storage-sqlite.ts:85:26 - error TS2304: Cannot find name 'InsertScanResult'.
+
+85   createScanResult(scan: InsertScanResult): Promise<ScanResult>;
+                            ~~~~~~~~~~~~~~~~
+
+server/storage-sqlite.ts:85:53 - error TS2304: Cannot find name 'ScanResult'.
+
+85   createScanResult(scan: InsertScanResult): Promise<ScanResult>;
+                                                       ~~~~~~~~~~
+
+server/storage-sqlite.ts:88:28 - error TS2304: Cannot find name 'CveResult'.
+
+88   getCveResults(): Promise<CveResult[]>;
+                              ~~~~~~~~~
+
+server/storage-sqlite.ts:89:24 - error TS2304: Cannot find name 'InsertCveResult'.
+
+89   createCveResult(cve: InsertCveResult): Promise<CveResult>;
+                          ~~~~~~~~~~~~~~~
+
+server/storage-sqlite.ts:89:50 - error TS2304: Cannot find name 'CveResult'.
+
+89   createCveResult(cve: InsertCveResult): Promise<CveResult>;
+                                                    ~~~~~~~~~
+
+server/storage-sqlite.ts:92:27 - error TS2304: Cannot find name 'AuditLog'.
+
+92   getAuditLogs(): Promise<AuditLog[]>;
+                             ~~~~~~~~
+
+server/storage-sqlite.ts:93:23 - error TS2304: Cannot find name 'InsertAuditLog'.
+
+93   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+                         ~~~~~~~~~~~~~~
+
+server/storage-sqlite.ts:93:48 - error TS2304: Cannot find name 'AuditLog'.
+
+93   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+                                                  ~~~~~~~~
+
+server/storage-sqlite.ts:96:7 - error TS2420: Class 'SqliteStorage' incorrectly implements interface 'IStorage'.
+  Property 'getScanResultById' is missing in type 'SqliteStorage' but required in type 'IStorage'.
+
+96 class SqliteStorage implements IStorage {
+         ~~~~~~~~~~~~~
+
+  server/storage-sqlite.ts:84:3
+    84   getScanResultById(id: string): Promise<ScanResult | undefined>;
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    'getScanResultById' is declared here.
+
+server/storage-sqlite.ts:255:16 - error TS2769: No overload matches this call.
+  Overload 1 of 2, '(builder: (aliases: { id: PgColumn<{ name: "id"; tableName: "ai_health_metrics"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; ... 5 more ...; generated: undefined; }, {}, { ...; }>; ... 10 more ...; falsePositiveRate: PgColumn<...>; }) => ValueOrArray<...>): Omit<...>', gave the following error.
+    Argument of type 'PgColumn<{ name: "timestamp"; tableName: "ai_health_metrics"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type '(aliases: { id: PgColumn<{ name: "id"; tableName: "ai_health_metrics"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, { ...; }>; ... 10 more ...; falsePositiveRat...'.
+      Type 'PgColumn<{ name: "timestamp"; tableName: "ai_health_metrics"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' provides no match for the signature '(aliases: { id: PgColumn<{ name: "id"; tableName: "ai_health_metrics"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, { ...; }>; ... 10 more ...; falsePositiveRate: PgColumn<...>; }): ValueOrArray<...>'.
+  Overload 2 of 2, '(...columns: (SQL<unknown> | SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>)[]): Omit<SQLiteSelectBase<"ai_health_metrics", "sync", ... 7 more ..., { ...; }>, "orderBy">', gave the following error.
+    Argument of type 'PgColumn<{ name: "timestamp"; tableName: "ai_health_metrics"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'SQL<unknown> | SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>'.
+      Type 'PgColumn<{ name: "timestamp"; tableName: "ai_health_metrics"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to type 'SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>'.
+        Types of property '_' are incompatible.
+          Type 'ColumnTypeConfig<{ name: "timestamp"; tableName: "ai_health_metrics"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {} & { ...; }>' is not assignable to type 'ColumnTypeConfig<ColumnBaseConfig<ColumnDataType, string>, { dialect: "sqlite"; }>'.
+            Type 'ColumnTypeConfig<{ name: "timestamp"; tableName: "ai_health_metrics"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {} & { ...; }>' is not assignable to type '{ dialect: "sqlite"; }'.
+              Types of property 'dialect' are incompatible.
+                Type '"pg"' is not assignable to type '"sqlite"'.
+
+255       .orderBy(schema.aiHealthMetrics.timestamp)
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+server/storage-sqlite.ts:267:7 - error TS2322: Type 'string' is not assignable to type 'string[]'.
+
+267       newMetric.modelsLoaded = JSON.stringify(newMetric.modelsLoaded);
+          ~~~~~~~~~~~~~~~~~~~~~~
+
+server/storage-sqlite.ts:295:7 - error TS2322: Type 'string' is not assignable to type 'string[]'.
+
+295       updateData.activeSystems = JSON.stringify(updateData.activeSystems);
+          ~~~~~~~~~~~~~~~~~~~~~~~~
+
+server/storage-sqlite.ts:308:16 - error TS2769: No overload matches this call.
+  Overload 1 of 2, '(builder: (aliases: { id: PgColumn<{ name: "id"; tableName: "ai_chat_messages"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, { ...; }>; ... 4 more ...; timestamp: PgColumn<...>; }) => ValueOrArray<...>): Omit<...>', gave the following error.
+    Argument of type 'PgColumn<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type '(aliases: { id: PgColumn<{ name: "id"; tableName: "ai_chat_messages"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, { ...; }>; ... 4 more ...; timestamp: PgColum...'.
+      Type 'PgColumn<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' provides no match for the signature '(aliases: { id: PgColumn<{ name: "id"; tableName: "ai_chat_messages"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, { ...; }>; ... 4 more ...; timestamp: PgColumn<...>; }): ValueOrArray<...>'.
+  Overload 2 of 2, '(...columns: (SQL<unknown> | SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>)[]): Omit<SQLiteSelectBase<"ai_chat_messages", "sync", ... 7 more ..., { ...; }>, "orderBy">', gave the following error.
+    Argument of type 'PgColumn<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'SQL<unknown> | SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>'.
+      Type 'PgColumn<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to type 'SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>'.
+        Types of property '_' are incompatible.
+          Type 'ColumnTypeConfig<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {} & { ...; }>' is not assignable to type 'ColumnTypeConfig<ColumnBaseConfig<ColumnDataType, string>, { dialect: "sqlite"; }>'.
+            Type 'ColumnTypeConfig<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {} & { ...; }>' is not assignable to type '{ dialect: "sqlite"; }'.
+              Types of property 'dialect' are incompatible.
+                Type '"pg"' is not assignable to type '"sqlite"'.
+
+308       .orderBy(schema.aiChatMessages.timestamp)
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+server/storage-sqlite.ts:375:16 - error TS2769: No overload matches this call.
+  Overload 1 of 2, '(builder: (aliases: { id: PgColumn<{ name: "id"; tableName: "ai_chat_messages"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, { ...; }>; ... 4 more ...; timestamp: PgColumn<...>; }) => ValueOrArray<...>): Omit<...>', gave the following error.
+    Argument of type 'PgColumn<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type '(aliases: { id: PgColumn<{ name: "id"; tableName: "ai_chat_messages"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, { ...; }>; ... 4 more ...; timestamp: PgColum...'.
+      Type 'PgColumn<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' provides no match for the signature '(aliases: { id: PgColumn<{ name: "id"; tableName: "ai_chat_messages"; dataType: "string"; columnType: "PgVarchar"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, { ...; }>; ... 4 more ...; timestamp: PgColumn<...>; }): ValueOrArray<...>'.
+  Overload 2 of 2, '(...columns: (SQL<unknown> | SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>)[]): Omit<SQLiteSelectBase<"ai_chat_messages", "sync", ... 7 more ..., { ...; }>, "where" | "orderBy">', gave the following error.
+    Argument of type 'PgColumn<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'SQL<unknown> | SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>'.
+      Type 'PgColumn<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {}, {}>' is not assignable to type 'SQLiteColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}>'.
+        Types of property '_' are incompatible.
+          Type 'ColumnTypeConfig<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {} & { ...; }>' is not assignable to type 'ColumnTypeConfig<ColumnBaseConfig<ColumnDataType, string>, { dialect: "sqlite"; }>'.
+            Type 'ColumnTypeConfig<{ name: "timestamp"; tableName: "ai_chat_messages"; dataType: "date"; columnType: "PgTimestamp"; data: Date; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: false; ... 5 more ...; generated: undefined; }, {} & { ...; }>' is not assignable to type '{ dialect: "sqlite"; }'.
+              Types of property 'dialect' are incompatible.
+                Type '"pg"' is not assignable to type '"sqlite"'.
+
+375       .orderBy(schema.aiChatMessages.timestamp)
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+server/storage-sqlite.ts:407:17 - error TS2339: Property 'getActivityLogs' does not exist on type 'SqliteStorage'.
+
+407     return this.getActivityLogs();
+                    ~~~~~~~~~~~~~~~
+
+server/storage-sqlite.ts:412:17 - error TS2339: Property 'createActivityLog' does not exist on type 'SqliteStorage'.
+
+412     return this.createActivityLog(log);
+                    ~~~~~~~~~~~~~~~~~
+
+server/storage-unified.ts:212:28 - error TS2551: Property 'getAIHealthMetrics' does not exist on type 'SqliteStorage'. Did you mean 'getLatestAIHealthMetrics'?
+
+212       return sqliteStorage.getAIHealthMetrics();
+                               ~~~~~~~~~~~~~~~~~~
+
+  server/storage-sqlite.ts:253:9
+    253   async getLatestAIHealthMetrics(): Promise<AIHealthMetric | undefined> {
+                ~~~~~~~~~~~~~~~~~~~~~~~~
+    'getLatestAIHealthMetrics' is declared here.
+
+server/storage-unified.ts:229:9 - error TS2416: Property 'updateAIControlSettings' in type 'UnifiedStorage' is not assignable to the same property in base type 'IStorage'.
+  Type '(settings: Partial<{ systemStatus?: string | undefined; killSwitchEnabled?: boolean | undefined; overrideMode?: boolean | undefined; activeSystems?: string[] | null | undefined; maxConcurrentTests?: number | undefined; autoShutdownThreshold?: number | undefined; lastModifiedBy?: string | ... 1 more ... | undefined; ...' is not assignable to type '(settings: Partial<{ systemStatus?: string | undefined; killSwitchEnabled?: boolean | undefined; overrideMode?: boolean | undefined; activeSystems?: string[] | null | undefined; maxConcurrentTests?: number | undefined; autoShutdownThreshold?: number | undefined; lastModifiedBy?: string | ... 1 more ... | undefined; ...'. Two different types with this name exist, but they are unrelated.
+    Type 'Promise<{ id: string; systemStatus: string; killSwitchEnabled: boolean; overrideMode: boolean; activeSystems: string[] | null; maxConcurrentTests: number; autoShutdownThreshold: number; lastModifiedBy: string | null; lastModifiedAt: Date; } | undefined>' is not assignable to type 'Promise<{ id: string; systemStatus: string; killSwitchEnabled: boolean; overrideMode: boolean; activeSystems: string[] | null; maxConcurrentTests: number; autoShutdownThreshold: number; lastModifiedBy: string | null; lastModifiedAt: Date; }>'.
+      Type '{ id: string; systemStatus: string; killSwitchEnabled: boolean; overrideMode: boolean; activeSystems: string[] | null; maxConcurrentTests: number; autoShutdownThreshold: number; lastModifiedBy: string | null; lastModifiedAt: Date; } | undefined' is not assignable to type '{ id: string; systemStatus: string; killSwitchEnabled: boolean; overrideMode: boolean; activeSystems: string[] | null; maxConcurrentTests: number; autoShutdownThreshold: number; lastModifiedBy: string | null; lastModifiedAt: Date; }'.
+        Type 'undefined' is not assignable to type '{ id: string; systemStatus: string; killSwitchEnabled: boolean; overrideMode: boolean; activeSystems: string[] | null; maxConcurrentTests: number; autoShutdownThreshold: number; lastModifiedBy: string | null; lastModifiedAt: Date; }'.
+
+229   async updateAIControlSettings(settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting | undefined> {
+            ~~~~~~~~~~~~~~~~~~~~~~~
+
+server/storage-unified.ts:231:28 - error TS2554: Expected 2 arguments, but got 1.
+
+231       return sqliteStorage.updateAIControlSettings(settings);
+                               ~~~~~~~~~~~~~~~~~~~~~~~
+
+  server/storage-sqlite.ts:289:45
+    289   async updateAIControlSettings(id: string, settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting | undefined> {
+                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    An argument for 'settings' was not provided.
+
+server/vite.ts:49:9 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+49         import.meta.dirname,
+           ~~~~~~~~~~~
+
+server/vite.ts:71:33 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+71   const distPath = path.resolve(import.meta.dirname, "public");
+                                   ~~~~~~~~~~~
+
+vite.config.ts:24:25 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+24       "@": path.resolve(import.meta.dirname, "client", "src"),
+                           ~~~~~~~~~~~
+
+vite.config.ts:25:31 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+25       "@shared": path.resolve(import.meta.dirname, "shared"),
+                                 ~~~~~~~~~~~
+
+vite.config.ts:26:31 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+26       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+                                 ~~~~~~~~~~~
+
+vite.config.ts:29:22 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+29   root: path.resolve(import.meta.dirname, "client"),
+                        ~~~~~~~~~~~
+
+vite.config.ts:31:26 - error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', or 'nodenext'.
+
+31     outDir: path.resolve(import.meta.dirname, "dist/public"),
+                            ~~~~~~~~~~~
+
+
+Found 60 errors in 7 files.
+
+Errors  Files
+     1  server/db-sqlite.ts:10
+     1  server/index-electron.ts:12
+    30  server/routes.ts:22
+    18  server/storage-sqlite.ts:83
+     3  server/storage-unified.ts:212
+     2  server/vite.ts:49
+     5  vite.config.ts:24
