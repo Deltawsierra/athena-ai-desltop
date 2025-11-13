@@ -38,78 +38,77 @@ if (isDev) {
 }
 
 async function startExpressServer() {
-  // In production, the server is bundled with the app
-  // In development, we start the existing server
-  if (!isDev) {
-    // For production, run the bundled server
-    try {
-      // Set environment for production server
-      process.env.NODE_ENV = 'production';
-      process.env.USE_SQLITE = 'true';
-      
-      const fs = require('fs');
-      
-      // Load the ESM Electron server bundle
-      const electronServerPath = path.join(__dirname, 'dist', 'server-electron.mjs');
-      const fallbackServerPath = path.join(__dirname, 'dist', 'index.js');
-      
-      // Use the properly bundled ESM server for Electron
-      if (fs.existsSync(electronServerPath)) {
-        console.log('Loading Electron server from:', electronServerPath);
-        
-        // Use dynamic import for ESM module
-        const { pathToFileURL } = require('url');
-        const serverUrl = pathToFileURL(electronServerPath).href;
-        
+    // In production, the server is bundled with the app
+    // In development, we start the existing server
+    if (!isDev) {
         try {
-          await import(serverUrl);
-          console.log('✅ Electron server started successfully');
-        } catch (importErr) {
-          console.error('Failed to import server module:', importErr);
-          throw importErr;
-        }
-      } else if (fs.existsSync(fallbackServerPath)) {
-        // Fallback to regular build (may fail due to missing dependencies)
-        console.warn('⚠️ Electron server bundle not found, falling back to regular build');
-        console.warn('This may fail - run: node build-electron-server.cjs');
-        
-        const { pathToFileURL } = require('url');
-        const serverUrl = pathToFileURL(fallbackServerPath).href;
-        await import(serverUrl);
-        console.log('Fallback server started (may have issues)');
-      } else {
-        const errorMsg = `Production server not found!\n\nPlease build the Electron server:\n1. Run: node build-electron-server.cjs\n2. Then run: npx vite build\n\nLooking for:\n- ${electronServerPath}`;
-        console.error(errorMsg);
-        const { dialog } = require('electron');
-        dialog.showErrorBox('Athena AI - Build Required', errorMsg);
-        app.quit();
-        throw new Error(errorMsg);
-      }
-    } catch (err) {
-      console.error('Failed to start production server:', err);
-      const { dialog } = require('electron');
-      dialog.showErrorBox('Athena AI - Startup Error', `Failed to start server:\n${err.message}`);
-      app.quit();
-      throw err;
-    }
-  } else {
-    // In development, we can use the existing npm run dev setup
-    const { spawn } = require('child_process');
-    serverProcess = spawn('npm', ['run', 'dev'], {
-      shell: true,
-      env: { 
-        ...process.env, 
-        ELECTRON_RUN_AS_NODE: '1',
-        USE_SQLITE: 'true',  // Tell the server to use SQLite storage
-        NODE_ENV: 'development'
-      },
-      stdio: 'inherit'
-    });
-  }
+            // Set environment for production server
+            process.env.NODE_ENV = 'production';
+            process.env.USE_SQLITE = 'true';
 
-  // Wait a bit for the server to start
-  return new Promise(resolve => setTimeout(resolve, 3000));
+            const fs = require('fs');
+
+            // Load the CommonJS Electron server bundle
+            const electronServerPath = path.join(__dirname, 'dist', 'server-electron.cjs'); // <-- now .cjs
+            const fallbackServerPath = path.join(__dirname, 'dist', 'index.js');
+
+            if (fs.existsSync(electronServerPath)) {
+                console.log('Loading Electron server from:', electronServerPath);
+
+                try {
+                    // CJS bundle: just require it; it starts the Express server as a side effect
+                    require(electronServerPath);
+                    console.log('✅ Electron server started successfully');
+                } catch (requireErr) {
+                    console.error('Failed to load server module:', requireErr);
+                    throw requireErr;
+                }
+            } else if (fs.existsSync(fallbackServerPath)) {
+                console.warn('⚠️ Electron server bundle not found, falling back to regular build');
+                console.warn('This may fail - run: node build-electron-server.cjs');
+
+                require(fallbackServerPath);
+                console.log('Fallback server started (may have issues)');
+            } else {
+                const errorMsg =
+                    `Production server not found!\n\n` +
+                    `Please build the Electron server:\n` +
+                    `1. Run: node build-electron-server.cjs\n` +
+                    `2. Then run: npx vite build\n\n` +
+                    `Looking for:\n- ${electronServerPath}`;
+
+                console.error(errorMsg);
+                const { dialog } = require('electron');
+                dialog.showErrorBox('Athena AI - Build Required', errorMsg);
+                app.quit();
+                throw new Error(errorMsg);
+            }
+        } catch (err) {
+            console.error('Failed to start production server:', err);
+            const { dialog } = require('electron');
+            dialog.showErrorBox('Athena AI - Startup Error', `Failed to start server:\n${err.message}`);
+            app.quit();
+            throw err;
+        }
+    } else {
+        // In development, we can use the existing npm run dev setup
+        const { spawn } = require('child_process');
+        serverProcess = spawn('npm', ['run', 'dev'], {
+            shell: true,
+            env: {
+                ...process.env,
+                ELECTRON_RUN_AS_NODE: '1',
+                USE_SQLITE: 'true',
+                NODE_ENV: 'development',
+            },
+            stdio: 'inherit',
+        });
+    }
+
+    // Wait a bit for the server to start
+    return new Promise((resolve) => setTimeout(resolve, 3000));
 }
+
 
 function createWindow() {
   // Create the browser window
