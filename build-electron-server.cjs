@@ -1,5 +1,4 @@
 // Build script for Electron production server
-// Build script for Electron production server
 const { build } = require('esbuild');
 const path = require('path');
 const fs = require('fs');
