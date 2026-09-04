@@ -8,7 +8,9 @@ import type { PublicUser } from "@shared/schema";
  * Every question about identity goes to the server.
  */
 
-const API_BASE = window.location.protocol === "app:" ? "http://localhost:5000" : "";
+// The page and the API are served from the same origin, in development
+// and in the packaged app alike, so requests are relative.
+const API_BASE = "";
 
 function apiUrl(path: string): string {
   return path.startsWith("http") ? path : `${API_BASE}${path}`;

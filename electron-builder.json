@@ -15,7 +15,9 @@
     {
       "from": "attached_assets/generated_images",
       "to": "attached_assets/generated_images",
-      "filter": ["**/*"]
+      "filter": [
+        "**/*"
+      ]
     }
   ],
   "mac": {
@@ -26,7 +28,10 @@
     "target": [
       {
         "target": "dmg",
-        "arch": ["x64", "arm64"]
+        "arch": [
+          "x64",
+          "arm64"
+        ]
       }
     ]
   },
@@ -54,7 +59,9 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ],
     "icon": "build/icon.ico",
@@ -79,11 +86,15 @@
     "target": [
       {
         "target": "AppImage",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       },
       {
         "target": "deb",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ],
     "category": "Development",
@@ -100,5 +111,8 @@
   "appImage": {
     "artifactName": "AthenaAI-${version}.${ext}"
   },
-  "publish": null
+  "publish": null,
+  "asarUnpack": [
+    "node_modules/better-sqlite3/**"
+  ]
 }

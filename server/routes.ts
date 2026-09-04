@@ -10,6 +10,14 @@ import {
   type User, type PublicUser,
 } from "@shared/schema";
 
+/**
+ * Attribution comes from the session, so these fields are not accepted from the
+ * request body at all. Taking `data.executedBy ?? session` let the client win,
+ * and in an audit product "who ran this test" is evidence.
+ */
+const createTestSchema = insertTestSchema.omit({ executedBy: true });
+const createDocumentSchema = insertDocumentSchema.omit({ createdBy: true });
+
 const updateClientSchema = insertClientSchema.partial();
 const updateSiteSchema = insertSiteSchema.partial();
 const updateTestSchema = insertTestSchema.partial();
@@ -37,7 +45,56 @@ const loginSchema = z.object({
   password: z.string().min(1).max(256),
 });
 
-const ALLOWED_ORIGINS = new Set(["app://athena"]);
+// The renderer is same-origin now, so no cross-origin browser client is
+// expected. The set is kept empty rather than removed so that adding one
+// later is a one-line change rather than a rediscovery.
+const ALLOWED_ORIGINS = new Set<string>([]);
+
+/**
+ * Login throttling.
+ *
+ * There was none: 200 failed sign-ins in seven seconds all answered 401 and the
+ * account still worked afterwards. Failures are counted per address and
+ * username; a successful sign-in clears the counter.
+ */
+const LOGIN_MAX_FAILURES = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const loginFailures = new Map<string, { count: number; first: number }>();
+
+function loginKey(req: Request, username: string): string {
+  return `${req.ip ?? "unknown"}|${username.toLowerCase()}`;
+}
+
+function loginBlocked(key: string, now: number): boolean {
+  const entry = loginFailures.get(key);
+  if (!entry) return false;
+  if (now - entry.first > LOGIN_WINDOW_MS) {
+    loginFailures.delete(key);
+    return false;
+  }
+  return entry.count >= LOGIN_MAX_FAILURES;
+}
+
+function recordLoginFailure(key: string, now: number): void {
+  const entry = loginFailures.get(key);
+  if (!entry || now - entry.first > LOGIN_WINDOW_MS) {
+    loginFailures.set(key, { count: 1, first: now });
+    return;
+  }
+  entry.count += 1;
+
+  // Bound the map so a spray across many usernames cannot grow it without end.
+  if (loginFailures.size > 10_000) {
+    Array.from(loginFailures.entries()).forEach(([k, v]) => {
+      if (now - v.first > LOGIN_WINDOW_MS) loginFailures.delete(k);
+    });
+  }
+}
+
+/** Exported for tests, which need a clean slate between cases. */
+export function resetLoginThrottle(): void {
+  loginFailures.clear();
+}
 
 function publicUser(user: User): PublicUser {
   const { password: _password, ...rest } = user;
@@ -91,12 +148,21 @@ export function registerRoutes(app: Express): void {
         res.status(400).json({ message: "Username and password are required" });
         return;
       }
+      const now = Date.now();
+      const key = loginKey(req, parsed.data.username);
+      if (loginBlocked(key, now)) {
+        res.status(429).json({ message: "Too many failed sign-in attempts. Try again later." });
+        return;
+      }
+
       const user = await storage.validateUser(parsed.data.username, parsed.data.password);
       if (!user || !user.isActive) {
+        recordLoginFailure(key, now);
         res.status(401).json({ message: "Invalid username or password" });
         return;
       }
 
+      loginFailures.delete(key);
       await regenerateSession(req);
       req.session.userId = user.id;
       req.session.username = user.username;
@@ -118,10 +184,16 @@ export function registerRoutes(app: Express): void {
   app.post(
     "/api/auth/logout",
     asyncHandler(async (req, res) => {
+      const who = actor(req);
       if (req.session) {
         await destroySession(req);
       }
       res.clearCookie("athena.sid");
+      if (who.userId) {
+        await storage.createActivityLog({
+          action: "logout", entityType: "user", entityId: who.userId, details: null, ...who,
+        });
+      }
       res.json({ success: true });
     }),
   );
@@ -227,7 +299,9 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/tests", asyncHandler(async (req, res) => {
     const data = insertTestSchema.parse(req.body);
-    const test = await storage.createTest({ ...data, executedBy: data.executedBy ?? req.session.userId ?? null });
+    // Attribution is evidence in an audit product, so it comes from the
+    // session. `data.executedBy ?? session` let the client win and forge it.
+    const test = await storage.createTest({ ...data, executedBy: req.session.userId ?? null });
     await storage.createActivityLog({
       action: "created", entityType: "test", entityId: test.id,
       details: { testType: test.testType, clientId: test.clientId }, ...actor(req),
@@ -257,8 +331,8 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.post("/api/documents", asyncHandler(async (req, res) => {
-    const data = insertDocumentSchema.parse(req.body);
-    const document = await storage.createDocument({ ...data, createdBy: data.createdBy ?? req.session.userId ?? null });
+    const data = createDocumentSchema.parse(req.body);
+    const document = await storage.createDocument({ ...data, createdBy: req.session.userId ?? null });
     await storage.createActivityLog({
       action: "created", entityType: "document", entityId: document.id,
       details: { title: document.title, clientId: document.clientId }, ...actor(req),
@@ -282,7 +356,9 @@ export function registerRoutes(app: Express): void {
   }));
 
   // ==== ACTIVITY LOGS (read-only; entries are written by the server) ====
-  app.get("/api/logs", asyncHandler(async (req, res) => {
+  // Admin-only: the log carries every user's id, IP address and sign-in
+  // times, and the user administration it describes is itself admin-only.
+  app.get("/api/logs", requireAdmin, asyncHandler(async (req, res) => {
     const entityType = typeof req.query.entityType === "string" ? req.query.entityType : undefined;
     const entityId = typeof req.query.entityId === "string" ? req.query.entityId : undefined;
     if (entityType && entityId) {
@@ -306,7 +382,12 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/ai-health", requireAdmin, asyncHandler(async (req, res) => {
     const data = insertAIHealthMetricSchema.parse(req.body);
-    res.status(201).json(await storage.createAIHealthMetric(data));
+    const metric = await storage.createAIHealthMetric(data);
+    await storage.createActivityLog({
+      action: "created", entityType: "ai_health_metric", entityId: metric.id,
+      details: null, ...actor(req),
+    });
+    res.status(201).json(metric);
   }));
 
   // ==== USERS (admin only) ====
@@ -377,12 +458,26 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/chat", asyncHandler(async (req, res) => {
     const data = insertAIChatMessageSchema.parse({ ...req.body, userId: req.session.userId });
-    res.status(201).json(await storage.createChatMessage(data));
+    const message = await storage.createChatMessage(data);
+    await storage.createActivityLog({
+      action: "created", entityType: "chat_message", entityId: message.id,
+      details: null, ...actor(req),
+    });
+    res.status(201).json(message);
   }));
 
   app.delete("/api/chat/:id", asyncHandler(async (req, res) => {
+    // GET scopes to the session's own messages; DELETE did not, so any
+    // authenticated user could delete anyone else's chat history by id.
+    const message = await storage.getChatMessage(req.params.id);
+    if (!message || message.userId !== req.session.userId) return notFound(res, "Message");
+
     const success = await storage.deleteChatMessage(req.params.id);
     if (!success) return notFound(res, "Message");
+    await storage.createActivityLog({
+      action: "deleted", entityType: "chat_message", entityId: req.params.id,
+      details: null, ...actor(req),
+    });
     res.json({ success: true });
   }));
 
@@ -422,8 +517,10 @@ export function registerRoutes(app: Express): void {
     res.json({ success: true });
   }));
 
-  // Unknown API paths must not fall through to the SPA catch-all.
-  app.all("/api/*", (_req, res) => {
+  // Unknown API paths must not fall through to the SPA catch-all. The literal
+  // "/api/*" pattern missed "//api/clients" and "/api%2fclients", which matched
+  // no handler and were answered with the SPA's HTML and a 200.
+  app.all(/^\/+api(\/|%2f|$)/i, (_req, res) => {
     res.status(404).json({ message: "Not found" });
   });
 }

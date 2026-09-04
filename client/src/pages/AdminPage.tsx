@@ -37,11 +37,16 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { USER_ROLES } from "@shared/schema";
-import type { User, InsertUser } from "@shared/schema";
+import type { PublicUser, InsertUser } from "@shared/schema";
 
 /** Form values arrive as strings; keep only the roles the API accepts. */
 function toRole(value: FormDataEntryValue | null): (typeof USER_ROLES)[number] {
   return value === "admin" ? "admin" : "user";
+}
+
+/** Title case for a role name, so the options read the way they used to. */
+function roleLabel(role: string): string {
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 export default function AdminPage() {
@@ -49,11 +54,11 @@ export default function AdminPage() {
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<PublicUser | null>(null);
+  const [userToDelete, setUserToDelete] = useState<PublicUser | null>(null);
   const { toast } = useToast();
 
-  const { data: users = [], isLoading } = useQuery<User[]>({
+  const { data: users = [], isLoading } = useQuery<PublicUser[]>({
     queryKey: ["/api/users"],
   });
 
@@ -70,7 +75,7 @@ export default function AdminPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<User> }) => 
+    mutationFn: async ({ id, data }: { id: string; data: Partial<PublicUser> & { password?: string } }) => 
       apiRequest("PATCH", `/api/users/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -119,14 +124,14 @@ export default function AdminPage() {
     setSelectedUser(null);
   };
 
-  const toggleUserStatus = (user: User) => {
+  const toggleUserStatus = (user: PublicUser) => {
     updateMutation.mutate({
       id: user.id,
       data: { isActive: !user.isActive },
     });
   };
 
-  const updateUserRole = (user: User, newRole: string) => {
+  const updateUserRole = (user: PublicUser, newRole: string) => {
     updateMutation.mutate({
       id: user.id,
       data: { role: newRole },
@@ -145,8 +150,6 @@ export default function AdminPage() {
     switch (role) {
       case "admin":
         return "destructive";
-      case "analyst":
-        return "default";
       case "user":
         return "secondary";
       default:
@@ -158,8 +161,6 @@ export default function AdminPage() {
     switch (role) {
       case "admin":
         return <ShieldCheck className="w-4 h-4" />;
-      case "analyst":
-        return <Shield className="w-4 h-4" />;
       default:
         return <UserX className="w-4 h-4" />;
     }
@@ -228,9 +229,11 @@ export default function AdminPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="analyst">Analyst</SelectItem>
-                        <SelectItem value="user">User</SelectItem>
+                        {USER_ROLES.map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {roleLabel(role)}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -267,9 +270,11 @@ export default function AdminPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="analyst">Analyst</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
+                  {USER_ROLES.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {roleLabel(role)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -345,9 +350,11 @@ export default function AdminPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="analyst">Analyst</SelectItem>
-                        <SelectItem value="user">User</SelectItem>
+                        {USER_ROLES.map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {roleLabel(role)}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Button

@@ -3,7 +3,7 @@ import * as schema from "@shared/schema";
 import { and, desc, eq } from "drizzle-orm";
 import crypto from "crypto";
 import type { IStorage } from "./storage";
-import { hashPassword, verifyPassword } from "./password";
+import { hashPassword, verifyPassword, dummyVerify } from "./password";
 import type {
   User, InsertUser,
   Client, InsertClient,
@@ -21,6 +21,22 @@ import type {
  * SQLite backend. All methods are synchronous under the hood (better-sqlite3)
  * but exposed as async to satisfy IStorage.
  */
+/** The settings table holds one row, and this is its id. */
+const AI_CONTROL_ID = "singleton";
+
+/**
+ * The keys of an update that actually carry a value.
+ *
+ * Counting keys instead meant `{ phone: undefined }` looked like a change and
+ * reached drizzle's set() as an empty object, which throws "No values to set"
+ * and surfaced as a 500.
+ */
+function definedKeys(updates: object): string[] {
+  return Object.entries(updates)
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key);
+}
+
 export class SqliteStorage implements IStorage {
   // Users
   async getUser(id: string): Promise<User | undefined> {
@@ -42,12 +58,12 @@ export class SqliteStorage implements IStorage {
       createdAt: new Date(),
     };
     db.insert(schema.users).values(row).run();
-    return row;
+    return (await this.getUser(row.id))!;
   }
   async updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined> {
     const updates = { ...user };
     if (updates.password) updates.password = hashPassword(updates.password);
-    if (Object.keys(updates).length > 0) {
+    if (definedKeys(updates).length > 0) {
       db.update(schema.users).set(updates).where(eq(schema.users.id, id)).run();
     }
     return this.getUser(id);
@@ -57,7 +73,13 @@ export class SqliteStorage implements IStorage {
   }
   async validateUser(username: string, password: string): Promise<User | undefined> {
     const user = await this.getUserByUsername(username);
-    if (!user) return undefined;
+    if (!user) {
+      // Spend the same work as a real check. Returning immediately made login
+      // timing a username oracle: an unknown name answered in about a
+      // twentieth of the time a real one took.
+      dummyVerify(password);
+      return undefined;
+    }
     const result = verifyPassword(password, user.password);
     if (!result.ok) return undefined;
     if (result.needsRehash) {
@@ -86,16 +108,25 @@ export class SqliteStorage implements IStorage {
       createdAt: new Date(),
     };
     db.insert(schema.clients).values(row).run();
-    return row;
+    return (await this.getClient(row.id))!;
   }
   async updateClient(id: string, client: Partial<InsertClient>): Promise<Client | undefined> {
-    if (Object.keys(client).length > 0) {
+    if (definedKeys(client).length > 0) {
       db.update(schema.clients).set(client).where(eq(schema.clients.id, id)).run();
     }
     return this.getClient(id);
   }
   async deleteClient(id: string): Promise<boolean> {
-    return db.delete(schema.clients).where(eq(schema.clients.id, id)).run().changes > 0;
+    // There are no foreign keys, so the children are removed here. Without
+    // this, deleting a client orphaned its tests, sites and documents, which
+    // then referenced an id that no longer existed.
+    const removed = db.transaction(() => {
+      db.delete(schema.tests).where(eq(schema.tests.clientId, id)).run();
+      db.delete(schema.sites).where(eq(schema.sites.clientId, id)).run();
+      db.delete(schema.documents).where(eq(schema.documents.clientId, id)).run();
+      return db.delete(schema.clients).where(eq(schema.clients.id, id)).run().changes > 0;
+    });
+    return removed;
   }
 
   // Sites
@@ -117,10 +148,10 @@ export class SqliteStorage implements IStorage {
       createdAt: new Date(),
     };
     db.insert(schema.sites).values(row).run();
-    return row;
+    return (await this.getSite(row.id))!;
   }
   async updateSite(id: string, site: Partial<InsertSite>): Promise<Site | undefined> {
-    if (Object.keys(site).length > 0) {
+    if (definedKeys(site).length > 0) {
       db.update(schema.sites).set(site).where(eq(schema.sites.id, id)).run();
     }
     return this.getSite(id);
@@ -161,10 +192,10 @@ export class SqliteStorage implements IStorage {
       startedAt: new Date(),
     };
     db.insert(schema.tests).values(row).run();
-    return row;
+    return (await this.getTest(row.id))!;
   }
   async updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined> {
-    if (Object.keys(test).length > 0) {
+    if (definedKeys(test).length > 0) {
       db.update(schema.tests).set(test).where(eq(schema.tests.id, id)).run();
     }
     return this.getTest(id);
@@ -195,7 +226,7 @@ export class SqliteStorage implements IStorage {
       updatedAt: now,
     };
     db.insert(schema.documents).values(row).run();
-    return row;
+    return (await this.getDocument(row.id))!;
   }
   async updateDocument(id: string, document: Partial<InsertDocument>): Promise<Document | undefined> {
     db.update(schema.documents)
@@ -231,7 +262,7 @@ export class SqliteStorage implements IStorage {
       timestamp: new Date(),
     };
     db.insert(schema.activityLogs).values(row).run();
-    return row;
+    return db.select().from(schema.activityLogs).where(eq(schema.activityLogs.id, row.id)).get()!;
   }
 
   // AI health
@@ -257,12 +288,21 @@ export class SqliteStorage implements IStorage {
       timestamp: new Date(),
     };
     db.insert(schema.aiHealthMetrics).values(row).run();
-    return row;
+    return db.select().from(schema.aiHealthMetrics).where(eq(schema.aiHealthMetrics.id, row.id)).get()!;
   }
 
-  // AI control (single row, created on first update)
+  // AI control: exactly one row, under a fixed id.
+  //
+  // It used to be "the first row we find", created on first update with a
+  // random id and no constraint, so two concurrent updates each inserted a row
+  // and one of the two settings was silently lost. Later writes then updated
+  // only one of the duplicates.
   async getAIControlSettings(): Promise<AIControlSetting | undefined> {
-    return db.select().from(schema.aiControlSettings).limit(1).get();
+    return db
+      .select()
+      .from(schema.aiControlSettings)
+      .where(eq(schema.aiControlSettings.id, AI_CONTROL_ID))
+      .get();
   }
   async updateAIControlSettings(settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting> {
     const existing = await this.getAIControlSettings();
@@ -277,11 +317,14 @@ export class SqliteStorage implements IStorage {
         autoShutdownThreshold: 90,
         lastModifiedBy: null,
         ...settings,
-        id: crypto.randomUUID(),
+        id: AI_CONTROL_ID,
         lastModifiedAt: now,
       };
-      db.insert(schema.aiControlSettings).values(row).run();
-      return row;
+      db.insert(schema.aiControlSettings).values(row).onConflictDoUpdate({
+        target: schema.aiControlSettings.id,
+        set: { ...settings, lastModifiedAt: now },
+      }).run();
+      return (await this.getAIControlSettings())!;
     }
     db.update(schema.aiControlSettings)
       .set({ ...settings, lastModifiedAt: now })
@@ -291,6 +334,9 @@ export class SqliteStorage implements IStorage {
   }
 
   // Chat
+  async getChatMessage(id: string): Promise<AIChatMessage | undefined> {
+    return db.select().from(schema.aiChatMessages).where(eq(schema.aiChatMessages.id, id)).get();
+  }
   async getAllChatMessages(): Promise<AIChatMessage[]> {
     return db.select().from(schema.aiChatMessages).orderBy(schema.aiChatMessages.timestamp).all();
   }
@@ -310,7 +356,7 @@ export class SqliteStorage implements IStorage {
       timestamp: new Date(),
     };
     db.insert(schema.aiChatMessages).values(row).run();
-    return row;
+    return (await this.getChatMessage(row.id))!;
   }
   async deleteChatMessage(id: string): Promise<boolean> {
     return db.delete(schema.aiChatMessages).where(eq(schema.aiChatMessages.id, id)).run().changes > 0;
@@ -334,10 +380,10 @@ export class SqliteStorage implements IStorage {
       createdAt: new Date(),
     };
     db.insert(schema.classifiers).values(row).run();
-    return row;
+    return (await this.getClassifier(row.id))!;
   }
   async updateClassifier(id: string, classifier: Partial<InsertClassifier>): Promise<Classifier | undefined> {
-    if (Object.keys(classifier).length > 0) {
+    if (definedKeys(classifier).length > 0) {
       db.update(schema.classifiers).set(classifier).where(eq(schema.classifiers.id, id)).run();
     }
     return this.getClassifier(id);

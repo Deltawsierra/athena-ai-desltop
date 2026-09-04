@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, customType } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -13,7 +13,29 @@ import { z } from "zod";
 const id = () => text("id").primaryKey();
 const timestamp = (name: string) => integer(name, { mode: "timestamp_ms" });
 const bool = (name: string) => integer(name, { mode: "boolean" });
-const json = <T>(name: string) => text(name, { mode: "json" }).$type<T>();
+/**
+ * A JSON column that tolerates a value it did not write.
+ *
+ * drizzle's own json mode calls JSON.parse on every read, so one malformed cell
+ * left by an earlier version of the schema made every request that touched the
+ * table answer 500, with no way back short of editing the database by hand.
+ * A cell that will not parse reads as null.
+ */
+const jsonColumn = customType<{ data: unknown; driverData: string }>({
+  dataType: () => "text",
+  toDriver: (value) => JSON.stringify(value),
+  fromDriver: (value) => {
+    if (value === null || value === undefined) return value as unknown;
+    try {
+      return JSON.parse(value as string);
+    } catch {
+      console.warn("[schema] ignoring a JSON column that could not be parsed");
+      return null;
+    }
+  },
+});
+
+const json = <T>(name: string) => jsonColumn(name).$type<T>();
 
 export const USER_ROLES = ["admin", "user"] as const;
 export type UserRole = (typeof USER_ROLES)[number];

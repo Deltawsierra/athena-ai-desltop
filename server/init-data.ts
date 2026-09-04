@@ -1,5 +1,5 @@
 import { storage } from "./storage-unified";
-import type { InsertUser, InsertClient, InsertTest, InsertDocument } from "@shared/schema";
+import type { InsertUser, InsertClient, InsertTest, InsertDocument, InsertSite } from "@shared/schema";
 
 /**
  * First-run seeding. Runs only when the users table is empty.
@@ -60,16 +60,29 @@ export async function initializeDefaultData(): Promise<void> {
     clients.push(await storage.createClient(clientData));
   }
 
+  // Sites: the Tests screen offers a site picker, no client code creates one,
+  // and nothing seeded any, so the picker could never contain a site.
+  const sampleSites: InsertSite[] = [
+    { clientId: clients[0].id, url: "https://acme.example.com", name: "Acme Production", environment: "production", status: "active" },
+    { clientId: clients[0].id, url: "https://staging.acme.example.com", name: "Acme Staging", environment: "staging", status: "active" },
+    { clientId: clients[1].id, url: "https://app.techstart.example.io", name: "TechStart App", environment: "production", status: "active" },
+    { clientId: clients[2].id, url: "https://portal.globalfinance.example.com", name: "Global Finance Portal", environment: "production", status: "active" },
+  ];
+  const sites = [];
+  for (const siteData of sampleSites) {
+    sites.push(await storage.createSite(siteData));
+  }
+
   const sampleTests: InsertTest[] = [
     {
-      clientId: clients[0].id, siteId: null, testType: "penetration-test", status: "completed", severity: "high",
+      clientId: clients[0].id, siteId: sites[0].id, testType: "penetration-test", status: "completed", severity: "high",
       summary: "Quarterly penetration testing revealed 3 critical vulnerabilities",
       findings: { details: "SQL injection vulnerability in login form, XSS in user profile, Weak password policy" },
       vulnerabilitiesFound: 15, criticalCount: 3, highCount: 5, mediumCount: 4, lowCount: 3,
       executedBy: admin.id, completedAt: new Date(),
     },
     {
-      clientId: clients[1].id, siteId: null, testType: "vulnerability-scan", status: "in-progress", severity: "medium",
+      clientId: clients[1].id, siteId: sites[2].id, testType: "vulnerability-scan", status: "in-progress", severity: "medium",
       summary: "Ongoing vulnerability assessment of cloud infrastructure", findings: null,
       vulnerabilitiesFound: 8, criticalCount: 0, highCount: 2, mediumCount: 4, lowCount: 2,
       executedBy: admin.id, completedAt: null,
@@ -93,6 +106,22 @@ export async function initializeDefaultData(): Promise<void> {
   for (const docData of sampleDocuments) {
     await storage.createDocument(docData);
   }
+
+  // AI Health: the screen asks for the latest metric on load. Nothing wrote one
+  // and nothing seeded one, so it answered 404 on every install and the whole
+  // screen rendered its empty fallback with two blank charts.
+  await storage.createAIHealthMetric({
+    cpuUsage: 24,
+    memoryUsage: 41,
+    activeScans: 0,
+    totalScansToday: 0,
+    successRate: 98,
+    averageResponseTime: 220,
+    modelsLoaded: ["threat-classifier", "cve-classifier"],
+    lastTrainingDate: null,
+    detectionAccuracy: 94,
+    falsePositiveRate: 3,
+  });
 
   await storage.createActivityLog({
     action: "seeded",

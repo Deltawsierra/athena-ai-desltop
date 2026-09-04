@@ -2,7 +2,11 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 // In the packaged Electron app the renderer is served from app://athena, so API
 // calls need an absolute URL. In the browser they are same-origin.
-const API_BASE = window.location.protocol === "app:" ? "http://localhost:5000" : "";
+// 127.0.0.1, not localhost: the packaged app's Content-Security-Policy names a
+// host literally, and the two spellings do not match each other.
+// The page and the API are served from the same origin, in development
+// and in the packaged app alike, so requests are relative.
+const API_BASE = "";
 
 function getApiUrl(url: string): string {
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -17,9 +21,32 @@ export class UnauthorizedError extends Error {
   }
 }
 
+type UnauthorizedListener = () => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+
+/**
+ * Be told when a request comes back 401.
+ *
+ * UnauthorizedError was defined and thrown but never caught, so an expired
+ * session left the app believing it was signed in: every screen rendered its
+ * "no records found" empty state and the user had no way to tell that their
+ * session, rather than the database, was the problem.
+ */
+export function onUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener);
+  return () => unauthorizedListeners.delete(listener);
+}
+
+function notifyUnauthorized(): void {
+  unauthorizedListeners.forEach((listener) => listener());
+}
+
 async function throwIfResNotOk(res: Response): Promise<void> {
   if (res.ok) return;
-  if (res.status === 401) throw new UnauthorizedError();
+  if (res.status === 401) {
+    notifyUnauthorized();
+    throw new UnauthorizedError();
+  }
 
   // Prefer the server's JSON message; fall back to text, then status.
   const body = await res.clone().json().catch(() => null);

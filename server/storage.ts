@@ -11,7 +11,7 @@ import {
   type Classifier, type InsertClassifier,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { hashPassword, verifyPassword } from "./password";
+import { hashPassword, verifyPassword, dummyVerify } from "./password";
 
 /**
  * The single storage contract. Both the SQLite backend (production) and the
@@ -76,6 +76,7 @@ export interface IStorage {
   updateAIControlSettings(settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting>;
 
   // Chat
+  getChatMessage(id: string): Promise<AIChatMessage | undefined>;
   getAllChatMessages(): Promise<AIChatMessage[]>;
   getChatMessagesByUser(userId: string): Promise<AIChatMessage[]>;
   createChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage>;
@@ -104,6 +105,18 @@ function defaultControlSettings(): AIControlSetting {
 }
 
 /** In-memory backend. Used by tests and by ATHENA_STORAGE=memory. */
+
+/**
+ * Return a copy, never the stored object.
+ *
+ * The in-memory backend used to hand out live references, so a caller that
+ * mutated a returned record rewrote the store behind everyone's back. The
+ * SQLite backend cannot do that, and the two must behave alike.
+ */
+function copy<T>(value: T | undefined): T | undefined {
+  return value === undefined ? undefined : ({ ...(value as object) } as T);
+}
+
 export class MemStorage implements IStorage {
   private users = new Map<string, User>();
   private clients = new Map<string, Client>();
@@ -123,6 +136,18 @@ export class MemStorage implements IStorage {
   }
   async getAllUsers() { return Array.from(this.users.values()); }
   async createUser(insertUser: InsertUser): Promise<User> {
+    // SQLite enforces users.username UNIQUE and this backend did not, so the
+    // two disagreed about a duplicate: here the second row was accepted and
+    // could then never sign in, because the lookup returns the first.
+    const clash = Array.from(this.users.values()).some(
+      (existing) => existing.username === insertUser.username,
+    );
+    if (clash) {
+      const error = new Error("UNIQUE constraint failed: users.username") as Error & { code?: string };
+      error.code = "SQLITE_CONSTRAINT_UNIQUE";
+      throw error;
+    }
+
     const user: User = {
       email: null,
       isActive: true,
@@ -146,7 +171,13 @@ export class MemStorage implements IStorage {
   async deleteUser(id: string) { return this.users.delete(id); }
   async validateUser(username: string, password: string) {
     const user = await this.getUserByUsername(username);
-    if (!user) return undefined;
+    if (!user) {
+      // Spend the same work as a real check. Returning immediately made login
+      // timing a username oracle: an unknown name answered in about a
+      // twentieth of the time a real one took.
+      dummyVerify(password);
+      return undefined;
+    }
     const result = verifyPassword(password, user.password);
     if (!result.ok) return undefined;
     if (result.needsRehash) {
@@ -179,7 +210,19 @@ export class MemStorage implements IStorage {
     this.clients.set(id, updated);
     return updated;
   }
-  async deleteClient(id: string) { return this.clients.delete(id); }
+  async deleteClient(id: string) {
+    // Match the SQLite backend, which removes the client's children with it.
+    for (const [testId, test] of Array.from(this.tests.entries())) {
+      if (test.clientId === id) this.tests.delete(testId);
+    }
+    for (const [siteId, site] of Array.from(this.sites.entries())) {
+      if (site.clientId === id) this.sites.delete(siteId);
+    }
+    for (const [docId, doc] of Array.from(this.documents.entries())) {
+      if (doc.clientId === id) this.documents.delete(docId);
+    }
+    return this.clients.delete(id);
+  }
 
   // Sites
   async getSite(id: string) { return this.sites.get(id); }
@@ -277,9 +320,14 @@ export class MemStorage implements IStorage {
 
   // Activity logs
   async getAllActivityLogs() {
-    return Array.from(this.activityLogs.values()).sort(
-      (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
-    );
+    // Reverse before sorting so that entries written in the same millisecond
+    // come back newest first, matching SQLite's rowid tiebreak. Sorting the
+    // insertion order directly returned same-millisecond ties oldest first, so
+    // "newest first" meant the opposite thing in tests and in production.
+    return Array.from(this.activityLogs.values())
+      .reverse()
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .map((log) => ({ ...log }));
   }
   async getActivityLogsByEntity(entityType: string, entityId: string) {
     return (await this.getAllActivityLogs()).filter(
@@ -305,9 +353,13 @@ export class MemStorage implements IStorage {
     return (await this.getAIHealthMetrics(1))[0];
   }
   async getAIHealthMetrics(limit: number) {
+    // Same clamp as the SQLite backend, which bounded it to 1..1000.
+    const bounded = Math.min(Math.max(Number.isFinite(limit) ? limit : 50, 1), 1000);
     return Array.from(this.aiHealthMetrics.values())
+      .reverse()
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-      .slice(0, limit);
+      .slice(0, bounded)
+      .map((metric) => ({ ...metric }));
   }
   async createAIHealthMetric(insertMetric: InsertAIHealthMetric): Promise<AIHealthMetric> {
     const metric: AIHealthMetric = {
@@ -332,6 +384,7 @@ export class MemStorage implements IStorage {
   }
 
   // Chat
+  async getChatMessage(id: string) { return copy(this.chatMessages.get(id)); }
   async getAllChatMessages() {
     return Array.from(this.chatMessages.values()).sort(
       (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),

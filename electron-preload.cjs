@@ -2,7 +2,7 @@
 // This runs in the renderer process but has access to Node.js APIs
 // It's used to safely expose certain functionality to the renderer
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge } = require('electron');
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -21,9 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   
   // Window controls (if needed)
-  minimizeWindow: () => ipcRenderer.send('minimize-window'),
-  maximizeWindow: () => ipcRenderer.send('maximize-window'),
-  closeWindow: () => ipcRenderer.send('close-window'),
   
   // Check if running in Electron
   isElectron: true

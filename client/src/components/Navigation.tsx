@@ -24,14 +24,16 @@ const testsDropdownItems = [
   { path: "/documents", label: "Documents", icon: FolderOpen },
   { path: "/clients", label: "Clients", icon: Users },
   { path: "/classifiers", label: "Classifiers", icon: Brain },
-  { path: "/audit-logs", label: "Audit Logs", icon: FileText },
+  // AI Health and AI Chat are open to any signed-in user, and used to be linked
+  // only from the admin menu: two working screens with no way to reach them.
+  { path: "/ai-health", label: "AI Health", icon: Activity },
+  { path: "/ai-chat", label: "AI Chat", icon: MessageSquare },
 ];
 
 const adminDropdownItems = [
   { path: "/admin", label: "User Management", icon: Users },
-  { path: "/ai-health", label: "AI Health", icon: Activity },
   { path: "/ai-control", label: "AI Control Panel", icon: Settings },
-  { path: "/ai-chat", label: "AI Chat", icon: MessageSquare },
+  { path: "/audit-logs", label: "Audit Logs", icon: FileText },
   { path: "/deletion", label: "Deletion Management", icon: Trash2 },
 ];
 

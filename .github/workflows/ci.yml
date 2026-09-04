@@ -30,3 +30,24 @@ jobs:
 
       - name: Build server bundle
         run: npm run build:server
+
+      # The packaged app shipped broken while every check above was green: the
+      # native module was unreachable inside the asar and the app hung on start.
+      # Packaging is the only check that would have caught it.
+      - name: Package the desktop app
+        run: npx electron-builder --dir --linux
+
+      - name: Confirm the packaged app starts and serves
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          HOME="$(mktemp -d)" xvfb-run -a ./dist-electron/linux-unpacked/athena-ai-desktop --no-sandbox &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5000/health > /dev/null; then
+              echo "the packaged app is serving"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the packaged app did not serve within 60 seconds"
+          exit 1

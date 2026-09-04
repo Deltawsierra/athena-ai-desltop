@@ -36,57 +36,20 @@ async function buildElectronServer() {
 
         console.log('✓ Server bundled successfully to dist/server-electron.cjs');
 
-        // ---- copy better-sqlite3 native module into dist ----
-        const sqliteSource = path.join('node_modules', 'better-sqlite3');
-        const sqliteDest = path.join('dist', 'node_modules', 'better-sqlite3');
-
-        if (!fs.existsSync(path.join('dist', 'node_modules'))) {
-            fs.mkdirSync(path.join('dist', 'node_modules'), { recursive: true });
-        }
-
-        function copyDir(src, dest) {
-            fs.mkdirSync(dest, { recursive: true });
-            const entries = fs.readdirSync(src, { withFileTypes: true });
-
-            for (const entry of entries) {
-                const srcPath = path.join(src, entry.name);
-                const destPath = path.join(dest, entry.name);
-
-                try {
-                    if (entry.isDirectory()) {
-                        // Skip junk dirs
-                        if (entry.name === 'node_gyp_bins' || entry.name === '.git') continue;
-                        copyDir(srcPath, destPath);
-                    } else if (
-                        entry.name.endsWith('.node') ||
-                        entry.name.endsWith('.js') ||
-                        entry.name.endsWith('.json') ||
-                        entry.name.endsWith('.dll') ||
-                        entry.name.endsWith('.so') ||
-                        entry.name.endsWith('.dylib')
-                    ) {
-                        fs.copyFileSync(srcPath, destPath);
-                    }
-                } catch (err) {
-                    if (err.code === 'EACCES') {
-                        console.log(` Skipping file due to permissions: ${entry.name}`);
-                    } else {
-                        throw err;
-                    }
-                }
-            }
-        }
-
-        if (fs.existsSync(sqliteSource)) {
-            console.log('Copying better-sqlite3 native module...');
-            copyDir(sqliteSource, sqliteDest);
-            console.log('✓ Native modules copied to dist/node_modules');
-        }
+        // better-sqlite3 is deliberately NOT copied into dist/node_modules.
+        //
+        // The copy shadowed the real one: require('better-sqlite3') from
+        // dist/server-electron.cjs resolved to dist/node_modules first, and that
+        // copy was taken before electron-builder rebuilt the native module, so
+        // the packaged app loaded a binary built for Node's ABI and died on
+        // startup with NODE_MODULE_VERSION 127 against Electron's 130. Without
+        // the copy the require walks up to the top-level node_modules that
+        // electron-builder rebuilds and unpacks for us.
 
         console.log('\n✅ Electron server build complete!');
         console.log('Files created:');
         console.log(' - dist/server-electron.cjs (bundled server)');
-        console.log(' - dist/node_modules/better-sqlite3/ (native module)');
+        console.log(' - better-sqlite3 is resolved from node_modules, rebuilt by electron-builder');
     } catch (error) {
         console.error('Build failed:', error);
         process.exit(1);

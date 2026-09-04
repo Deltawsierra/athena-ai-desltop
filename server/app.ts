@@ -17,15 +17,28 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
  *   3. a random per-process secret in development
  * Production without any of the above is a configuration error.
  */
+const MIN_SECRET_LENGTH = 32;
+
 export function resolveSessionSecret(): string {
-  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  const fromEnv = process.env.SESSION_SECRET;
+  if (fromEnv) {
+    // The persisted-file path already enforced a length; the environment
+    // variable was taken at any length, so SESSION_SECRET=x was accepted in
+    // production.
+    if (fromEnv.length < MIN_SECRET_LENGTH) {
+      throw new Error(
+        `SESSION_SECRET must be at least ${MIN_SECRET_LENGTH} characters (got ${fromEnv.length})`,
+      );
+    }
+    return fromEnv;
+  }
 
   const userData = process.env.ATHENA_USER_DATA;
   if (userData) {
     const file = path.join(userData, "session-secret");
     try {
       const existing = fs.readFileSync(file, "utf8").trim();
-      if (existing.length >= 32) return existing;
+      if (existing.length >= MIN_SECRET_LENGTH) return existing;
     } catch {
       // fall through and create one
     }
@@ -56,6 +69,8 @@ export function createApp(): Express {
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
+        // The renderer is served by this server, so requests are same-site and
+        // a Lax cookie is attached to them.
         sameSite: "lax",
         secure: process.env.COOKIE_SECURE === "true",
         maxAge: SEVEN_DAYS_MS,
@@ -96,6 +111,13 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 
   if (err && typeof err === "object" && "type" in err && (err as { type?: string }).type === "entity.too.large") {
     res.status(413).json({ message: "Request body too large" });
+    return;
+  }
+
+  // The body parser's own message was echoed verbatim, which is the one place
+  // an internal error string reached a client.
+  if (err && typeof err === "object" && "type" in err && (err as { type?: string }).type === "entity.parse.failed") {
+    res.status(400).json({ message: "Malformed JSON body" });
     return;
   }
 

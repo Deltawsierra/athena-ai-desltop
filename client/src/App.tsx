@@ -1,5 +1,5 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { queryClient, onUnauthorized } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -50,16 +50,12 @@ function AppRoutes({ admin }: { admin: boolean }) {
       <Route path="/pentest" component={PentestScan} />
       <Route path="/classify-cve" component={CVEClassifier} />
       <Route path="/ai-health" component={AIHealth} />
-      <Route path="/audit-logs" component={AuditLogs} />
+      {admin && <Route path="/audit-logs" component={AuditLogs} />}
       <Route path="/ai-chat" component={AIChat} />
       <Route path="/classifiers" component={Classifiers} />
       {admin && <Route path="/admin" component={AdminPage} />}
       {admin && <Route path="/ai-control" component={AIControlPanel} />}
       {admin && <Route path="/deletion" component={DeletionManagement} />}
-      {/* The packaged app loads app://athena/index.html, so wouter sees /index.html. */}
-      <Route path="/index.html">
-        <Redirect to="/dashboard" />
-      </Route>
       <Route path="/">
         <Redirect to="/dashboard" />
       </Route>
@@ -89,6 +85,20 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  // A session can expire, or the server restart, while the app is open. Without
+  // this the app stayed in its authenticated state and every screen showed an
+  // empty list, which reads as lost data rather than as a lost session.
+  useEffect(
+    () =>
+      onUnauthorized(() => {
+        queryClient.clear();
+        setUser(null);
+        setStatus("anonymous");
+        setLocation("/login");
+      }),
+    [setLocation],
+  );
 
   const handleAuthenticated = useCallback(
     (nextUser: PublicUser) => {

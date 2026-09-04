@@ -1,7 +1,6 @@
-const { app, BrowserWindow, Menu, shell, protocol, net, dialog } = require('electron');
+const { app, BrowserWindow, Menu, shell, net, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { pathToFileURL } = require('url');
 
 // `app.isPackaged` is the only reliable signal: an installed app never sets
 // NODE_ENV, so the old `NODE_ENV !== 'production'` check made every shipped
@@ -10,17 +9,32 @@ const isDev = !app.isPackaged;
 
 const SERVER_PORT = process.env.PORT || '5000';
 const SERVER_ORIGIN = `http://127.0.0.1:${SERVER_PORT}`;
-const APP_ORIGIN = 'app://athena';
+// The renderer loads from the bundled server, so page and API share an
+// origin. Serving the page from a custom app:// scheme made every API call
+// cross-site: the session cookie could not travel, the Content-Security-Policy
+// had to name a second host, and the scheme needed its own file handler.
+const APP_ORIGIN = SERVER_ORIGIN;
 
 let mainWindow;
 let devServerProcess;
 
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'app',
-    privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true },
-  },
-]);
+/**
+ * Report a fatal startup problem and exit.
+ *
+ * showErrorBox blocks until the user dismisses it, so calling app.quit() after
+ * it meant the quit never ran on an unattended machine: the process stayed
+ * resident with no window and no way to tell what had happened. app.exit ends
+ * it regardless.
+ */
+function fail(title, message) {
+  console.error(`[electron] ${title}: ${message}`);
+  try {
+    dialog.showErrorBox(title, message);
+  } catch {
+    // No display, or too early for a dialog. The log line above still stands.
+  }
+  app.exit(1);
+}
 
 /**
  * Starts the API. In a packaged app the bundled CommonJS server is required
@@ -43,16 +57,14 @@ async function startExpressServer() {
         'The application server bundle is missing.\n\n' +
         'Build it with:\n  npm run build\n\n' +
         `Expected at:\n${serverPath}`;
-      dialog.showErrorBox('Athena AI cannot start', message);
-      app.quit();
+      fail('Athena AI cannot start', message);
       throw new Error(message);
     }
 
     try {
       require(serverPath);
     } catch (err) {
-      dialog.showErrorBox('Athena AI cannot start', `The server failed to start:\n${err.message}`);
-      app.quit();
+      fail('Athena AI cannot start', `The server failed to start:\n${err.message}`);
       throw err;
     }
   } else {
@@ -74,8 +86,14 @@ async function waitForServer(timeoutMs = 30000) {
     try {
       const res = await net.fetch(`${SERVER_ORIGIN}/health`);
       if (res.ok) return;
-    } catch {
-      // Not listening yet.
+    } catch (err) {
+      // Not listening yet. Log the reason once so a poll that can never
+      // succeed is distinguishable from one that is merely early: a missing
+      // module here failed silently every time and looked like a dead server.
+      if (!waitForServer.reported) {
+        waitForServer.reported = true;
+        console.log(`[electron] waiting for the server: ${err.message}`);
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -156,14 +174,17 @@ function createWindow() {
 
   // Content Security Policy. `file:` is deliberately absent: everything the
   // renderer needs is served over app:// or from the local API.
-  const pageOrigin = isDev ? `'self' ${SERVER_ORIGIN}` : `'self' ${APP_ORIGIN}`;
+  const pageOrigin = `'self' ${SERVER_ORIGIN}`;
   const cspPolicy = [
     `default-src ${pageOrigin}`,
     `script-src ${pageOrigin}`,
     `style-src ${pageOrigin} 'unsafe-inline'`,
     `font-src ${pageOrigin} data:`,
     `img-src ${pageOrigin} data: blob:`,
-    `connect-src 'self' ${SERVER_ORIGIN} ws://127.0.0.1:${SERVER_PORT}`,
+    // Host-source matching is textual, so this has to name exactly what the
+    // client fetches. It listed only 127.0.0.1 while the client called
+    // localhost, which would have blocked every API call in the packaged app.
+    `connect-src 'self' ${SERVER_ORIGIN} http://localhost:${SERVER_PORT} ws://127.0.0.1:${SERVER_PORT} ws://localhost:${SERVER_PORT}`,
     `object-src 'none'`,
     `base-uri 'none'`,
     `frame-ancestors 'none'`,
@@ -175,18 +196,6 @@ function createWindow() {
     });
   });
 
-  // The renderer is served from app://, so API calls are cross-origin. Stamping
-  // the Origin lets the server's allowlist recognize them.
-  if (!isDev) {
-    mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
-      { urls: [`${SERVER_ORIGIN}/*`, `http://localhost:${SERVER_PORT}/*`] },
-      (details, callback) => {
-        details.requestHeaders['Origin'] = APP_ORIGIN;
-        callback({ requestHeaders: details.requestHeaders });
-      },
-    );
-  }
-
   // Open external links in the real browser, never in an app window.
   // (`new-window` was removed in Electron 22; this is its replacement.)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -197,17 +206,34 @@ function createWindow() {
   });
 
   // Block in-page navigation away from the app's own origins.
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = isDev ? [SERVER_ORIGIN, `http://localhost:${SERVER_PORT}`] : [APP_ORIGIN];
-    if (!allowed.some((origin) => url.startsWith(origin))) {
+  // Block in-page navigation away from the app's own origins. Comparing string
+  // prefixes let "http://127.0.0.1:5000@evil.com/" through, because the part
+  // that looks like the allowed origin is userinfo, not the host.
+  const allowedOrigins = [SERVER_ORIGIN, `http://localhost:${SERVER_PORT}`];
+
+  const blockForeignNavigation = (event, url) => {
+    let origin;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      event.preventDefault();
+      return;
+    }
+    if (!allowedOrigins.includes(origin)) {
       event.preventDefault();
     }
+  };
+
+  mainWindow.webContents.on('will-navigate', blockForeignNavigation);
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    blockForeignNavigation(event, event.url);
   });
+  mainWindow.webContents.on('will-redirect', blockForeignNavigation);
 
   // Load the root, not /index.html: the client router matches on the pathname,
   // and "/index.html" matched no route, which is why the packaged app opened
   // on the 404 screen.
-  mainWindow.loadURL(isDev ? `${SERVER_ORIGIN}/` : `${APP_ORIGIN}/`);
+  mainWindow.loadURL(`${SERVER_ORIGIN}/`);
 
   if (isDev) {
     mainWindow.webContents.openDevTools();
@@ -223,40 +249,11 @@ function createWindow() {
  * Serves the built client over app://, confined to dist/public, with an
  * index.html fallback so client-side routes resolve.
  */
-function registerCustomProtocol() {
-  const publicDir = path.resolve(__dirname, 'dist', 'public');
-
-  protocol.handle('app', (request) => {
-    let filePath;
-    try {
-      const url = new URL(request.url);
-      const pathname = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-      const candidate = path.resolve(publicDir, pathname);
-
-      // Refuse anything that resolves outside the public directory.
-      const relative = path.relative(publicDir, candidate);
-      const escapes = relative.startsWith('..') || path.isAbsolute(relative);
-
-      filePath =
-        !escapes && pathname !== '' && fs.existsSync(candidate) && fs.statSync(candidate).isFile()
-          ? candidate
-          : path.join(publicDir, 'index.html');
-    } catch {
-      filePath = path.join(publicDir, 'index.html');
-    }
-
-    return net.fetch(pathToFileURL(filePath).toString());
-  });
-}
-
 app.whenReady().then(async () => {
-  if (!isDev) {
-    registerCustomProtocol();
-  }
   try {
     await startExpressServer();
   } catch (err) {
-    console.error('[electron] server startup failed:', err);
+    fail('Athena AI cannot start', `The application server did not come up:\n${err.message}`);
     return;
   }
   createWindow();

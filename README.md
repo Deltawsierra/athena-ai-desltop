@@ -44,9 +44,12 @@ npm run dist         # build and package with electron-builder
 Platform installers: `npm run dist:win`, `npm run dist:mac`, `npm run dist:linux`.
 Output goes to `dist-electron/`.
 
-> After `npm run dist`, electron-builder rebuilds `better-sqlite3` against
-> Electron's ABI, so `npm test` will fail to load it. Restore the Node build with
-> `npm rebuild better-sqlite3` before running the tests again.
+> `better-sqlite3` is a native module, so it has to be built for whichever
+> runtime is loading it: Electron's ABI when the app is packaged, Node's when the
+> tests run. Both are scripted, and neither has to be remembered: `npm run dist`
+> runs `rebuild:electron` first, and `npm test` runs `rebuild:node` first. Run
+> `npm run rebuild:node` by hand if a stray packaging run has left the Electron
+> build in place.
 
 ## Checks
 

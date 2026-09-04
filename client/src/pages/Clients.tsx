@@ -34,7 +34,6 @@ export default function Clients() {
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertClient) => {
-      console.log("Creating client with data:", data);
       return apiRequest("POST", "/api/clients", data);
     },
     onSuccess: () => {
@@ -69,23 +68,19 @@ export default function Clients() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log("Form submitted, formStatus:", formStatus);
     const formData = new FormData(e.currentTarget);
     const data = {
       name: formData.get("name") as string,
       company: formData.get("company") as string,
       email: formData.get("email") as string,
-      phone: formData.get("phone") as string,
+      phone: (formData.get("phone") as string) || null,
       status: formStatus,
-      notes: formData.get("notes") as string,
+      notes: (formData.get("notes") as string) || null,
     };
-    console.log("Form data collected:", data);
 
     if (editingClient) {
-      console.log("Updating existing client");
       updateMutation.mutate({ id: editingClient.id, data });
     } else {
-      console.log("Creating new client");
       createMutation.mutate(data);
     }
   };

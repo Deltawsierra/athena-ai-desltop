@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import type { Database as DatabaseType } from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "@shared/schema";
 import path from "path";
@@ -30,20 +31,55 @@ export function resolveDbPath(): string {
   return path.resolve(process.cwd(), "athena.db");
 }
 
-const dbPath = resolveDbPath();
-if (dbPath !== ":memory:") {
-  console.log(`[db] SQLite database: ${dbPath}`);
+/**
+ * The connection is opened on first use, not on import.
+ *
+ * Opening it at module load meant that importing this file for any reason
+ * created and locked a database: ATHENA_STORAGE=memory still wrote ./athena.db,
+ * and every forked test worker contended on the developer's real database file.
+ */
+type Connection = { sqlite: DatabaseType; db: ReturnType<typeof drizzle> };
+
+let connection: Connection | null = null;
+
+function connect(): Connection {
+  if (connection) return connection;
+
+  const dbPath = resolveDbPath();
+  if (dbPath !== ":memory:") {
+    console.log(`[db] SQLite database: ${dbPath}`);
+  }
+
+  const handle = new Database(dbPath);
+  handle.pragma("journal_mode = WAL");
+  handle.pragma("busy_timeout = 5000");
+
+  createSchema(handle);
+  connection = { sqlite: handle, db: drizzle(handle, { schema }) };
+  return connection;
 }
 
-export const sqlite = new Database(dbPath);
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("busy_timeout = 5000");
+/** Open the database now, rather than on the first query. */
+export function openDatabase(): void {
+  connect();
+}
 
-export const db = drizzle(sqlite, { schema });
+function lazy<T extends object>(pick: (c: Connection) => T): T {
+  return new Proxy({} as T, {
+    get(_target, property, receiver) {
+      const value = Reflect.get(pick(connect()) as object, property, receiver);
+      return typeof value === "function" ? value.bind(pick(connect())) : value;
+    },
+    has: (_target, property) => property in (pick(connect()) as object),
+  });
+}
+
+export const sqlite: DatabaseType = lazy((c) => c.sqlite);
+export const db = lazy((c) => c.db) as ReturnType<typeof drizzle>;
 
 /** Create tables and indexes if they do not exist. Idempotent. */
-export function initDatabase(): void {
-  sqlite.exec(`
+function createSchema(handle: DatabaseType): void {
+  handle.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
@@ -176,4 +212,7 @@ export function initDatabase(): void {
   `);
 }
 
-initDatabase();
+/** Open the connection and create the schema if it is not there yet. */
+export function initDatabase(): void {
+  connect();
+}
