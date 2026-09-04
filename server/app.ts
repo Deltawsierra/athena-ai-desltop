@@ -54,7 +54,16 @@ export function resolveSessionSecret(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-export function createApp(): Express {
+interface CreateAppOptions {
+  /**
+   * Skip the error handler, because the caller mounts static or Vite
+   * middleware after the routes and must install it themselves afterwards.
+   * Only the two entry points need this; everything else gets it by default.
+   */
+  deferErrorHandler?: boolean;
+}
+
+export function createApp(options: CreateAppOptions = {}): Express {
   const app = express();
   const MemoryStore = createMemoryStore(session);
 
@@ -92,6 +101,15 @@ export function createApp(): Express {
   });
 
   registerRoutes(app);
+
+  // Installing this was the caller's job, and a caller who forgot got
+  // Express's default: a stack trace, absolute paths and library internals in
+  // an HTML body. It is now the default, and the two entry points that must
+  // mount static or Vite middleware first opt out and install it themselves.
+  if (!options.deferErrorHandler) {
+    app.use(errorHandler);
+  }
+
   return app;
 }
 

@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, RequestHandler, Response } from "express";
 import { z } from "zod";
 import { storage } from "./storage-unified";
 import { requireAuth, requireAdmin, asyncHandler, actor } from "./auth";
@@ -20,8 +20,32 @@ const createDocumentSchema = insertDocumentSchema.omit({ createdBy: true });
 
 const updateClientSchema = insertClientSchema.partial();
 const updateSiteSchema = insertSiteSchema.partial();
-const updateTestSchema = insertTestSchema.partial();
-const updateDocumentSchema = insertDocumentSchema.partial();
+// Derived from the create schemas, so attribution is excluded on update too.
+// It was stripped on create and left open on update, which meant any
+// authenticated user could rewrite "who ran this test" to anyone.
+const updateTestSchema = createTestSchema.partial();
+const updateDocumentSchema = createDocumentSchema.partial();
+
+/**
+ * Refuse a body that tries to set attribution, rather than quietly dropping it.
+ *
+ * Omitting the field from the schema keeps the forged value out of the record,
+ * but zod strips unknown keys silently, so the write answered 200 and the
+ * caller had every reason to believe "executed by" now said what they sent.
+ * In an audit product that is the difference between a rejected forgery and an
+ * apparently accepted one.
+ */
+const ATTRIBUTION_FIELDS = ["executedBy", "createdBy"] as const;
+
+function forgedAttribution(res: Response, body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const named = ATTRIBUTION_FIELDS.filter((field) => field in (body as Record<string, unknown>));
+  if (named.length === 0) return false;
+  res.status(400).json({
+    message: `${named.join(" and ")} is recorded from the signed-in session and cannot be supplied`,
+  });
+  return true;
+}
 const updateAIControlSettingSchema = insertAIControlSettingSchema.partial();
 const updateClassifierSchema = insertClassifierSchema.partial();
 
@@ -48,6 +72,110 @@ const loginSchema = z.object({
 // The renderer is same-origin now, so no cross-origin browser client is
 // expected. The set is kept empty rather than removed so that adding one
 // later is a one-line change rather than a rediscovery.
+/**
+ * Reject a child record whose parent does not exist.
+ *
+ * There are no foreign keys, and nothing validated these, so a test could be
+ * created against any client id at all. It also narrows the window in which a
+ * create racing a client deletion leaves an orphan behind.
+ */
+async function parentMissing(res: Response, clientId?: string | null, siteId?: string | null): Promise<boolean> {
+  if (clientId && !(await storage.getClient(clientId))) {
+    res.status(400).json({ message: "No such client" });
+    return true;
+  }
+  if (siteId && !(await storage.getSite(siteId))) {
+    res.status(400).json({ message: "No such site" });
+    return true;
+  }
+  return false;
+}
+
+
+/**
+ * Refuse mutations while the kill switch is on.
+ *
+ * The switch was persisted, shown in the UI, and enforced nowhere: with
+ * killSwitchEnabled true and systemStatus "shutdown", every write still
+ * succeeded. An emergency stop that stops nothing is worse than none, because
+ * someone will rely on it.
+ *
+ * The AI control route itself is exempt, or the switch could never be turned
+ * back off.
+ */
+const killSwitchExempt = new Set(["/api/ai-control", "/api/auth/login", "/api/auth/logout"]);
+
+export const enforceKillSwitch: RequestHandler = (req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    next();
+    return;
+  }
+  // Mounted under "/api", so req.path is relative to that mount: the AI
+  // control route arrives here as "/ai-control", not "/api/ai-control".
+  // Comparing the full path silently exempted nothing, which would have left
+  // no way to switch the kill switch back off.
+  const fullPath = `${req.baseUrl}${req.path}`.replace(/\/+$/, "") || req.path;
+  if (killSwitchExempt.has(fullPath)) {
+    next();
+    return;
+  }
+
+  storage
+    .getAIControlSettings()
+    .then((settings) => {
+      if (settings?.killSwitchEnabled) {
+        res.status(503).json({
+          message: "The AI kill switch is engaged. Writes are disabled.",
+          systemStatus: settings.systemStatus,
+        });
+        return;
+      }
+      next();
+    })
+    .catch(next);
+};
+
+/**
+ * Whether a request path is aimed at the API, whatever spelling it arrived in.
+ *
+ * Decodes once, collapses repeated slashes, and resolves dot segments, so
+ * "/./api/x", "/y/../api/x", "//api/x" and "/%61pi/x" all read as API paths.
+ */
+function looksLikeApiPath(rawPath: string): boolean {
+  let path = rawPath;
+  try {
+    path = decodeURIComponent(rawPath);
+  } catch {
+    // A malformed escape cannot be decoded; test what we were given.
+  }
+
+  const segments: string[] = [];
+  for (const segment of path.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+
+  return segments[0]?.toLowerCase() === "api";
+}
+
+/** Refuse a query parameter that was supplied more than once. */
+function badQueryParam(res: Response, value: unknown): boolean {
+  if (value !== undefined && typeof value !== "string") {
+    res.status(400).json({ message: "Query parameters must be supplied once" });
+    return true;
+  }
+  return false;
+}
+
+/** Whether a parsed update actually carries a change worth recording. */
+function hasChanges(data: object): boolean {
+  return Object.values(data).some((value) => value !== undefined);
+}
+
 const ALLOWED_ORIGINS = new Set<string>([]);
 
 /**
@@ -58,36 +186,64 @@ const ALLOWED_ORIGINS = new Set<string>([]);
  * username; a successful sign-in clears the counter.
  */
 const LOGIN_MAX_FAILURES = 10;
+// Higher than the per-username limit: several people can share one address.
+const LOGIN_MAX_FAILURES_PER_ADDRESS = 50;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const loginFailures = new Map<string, { count: number; first: number }>();
 
 function loginKey(req: Request, username: string): string {
-  return `${req.ip ?? "unknown"}|${username.toLowerCase()}`;
+  // Not lowercased. The account lookup is case sensitive, so folding here let
+  // an attacker who knew only the lowercase spelling of a username lock the
+  // real account out by failing ten times against a casing that does not exist.
+  return `${req.ip ?? "unknown"}|${username}`;
 }
 
-function loginBlocked(key: string, now: number): boolean {
+/** A second bucket, per address only, so a spray across usernames is bounded. */
+function addressKey(req: Request): string {
+  return `addr|${req.ip ?? "unknown"}`;
+}
+
+function loginBlocked(key: string, now: number, limit = LOGIN_MAX_FAILURES): boolean {
   const entry = loginFailures.get(key);
   if (!entry) return false;
   if (now - entry.first > LOGIN_WINDOW_MS) {
     loginFailures.delete(key);
     return false;
   }
-  return entry.count >= LOGIN_MAX_FAILURES;
+  return entry.count >= limit;
 }
 
+const LOGIN_MAP_LIMIT = 10_000;
+
 function recordLoginFailure(key: string, now: number): void {
+  // Bounding runs first. It used to sit after the early return below, which is
+  // the path a spray across many usernames always takes, so the one case the
+  // bound existed for could never reach it.
+  if (loginFailures.size >= LOGIN_MAP_LIMIT) {
+    pruneLoginFailures(now);
+  }
+
   const entry = loginFailures.get(key);
   if (!entry || now - entry.first > LOGIN_WINDOW_MS) {
     loginFailures.set(key, { count: 1, first: now });
     return;
   }
   entry.count += 1;
+}
 
-  // Bound the map so a spray across many usernames cannot grow it without end.
-  if (loginFailures.size > 10_000) {
-    Array.from(loginFailures.entries()).forEach(([k, v]) => {
-      if (now - v.first > LOGIN_WINDOW_MS) loginFailures.delete(k);
-    });
+function pruneLoginFailures(now: number): void {
+  const entries = Array.from(loginFailures.entries());
+  for (const [key, value] of entries) {
+    if (now - value.first > LOGIN_WINDOW_MS) loginFailures.delete(key);
+  }
+
+  // Still over the cap means nothing had expired, which is exactly what a fast
+  // spray looks like. Drop the oldest until it fits.
+  if (loginFailures.size >= LOGIN_MAP_LIMIT) {
+    Array.from(loginFailures.entries())
+      .sort((a, b) => a[1].first - b[1].first)
+      .slice(0, Math.ceil(LOGIN_MAP_LIMIT / 4))
+      .forEach(([key]) => loginFailures.delete(key));
   }
 }
 
@@ -150,7 +306,12 @@ export function registerRoutes(app: Express): void {
       }
       const now = Date.now();
       const key = loginKey(req, parsed.data.username);
-      if (loginBlocked(key, now)) {
+      const byAddress = addressKey(req);
+
+      // Per username and per address. Only the first existed, so a flood of
+      // distinct usernames from one address never engaged the throttle and
+      // each attempt still paid for a synchronous key derivation.
+      if (loginBlocked(key, now) || loginBlocked(byAddress, now, LOGIN_MAX_FAILURES_PER_ADDRESS)) {
         res.status(429).json({ message: "Too many failed sign-in attempts. Try again later." });
         return;
       }
@@ -158,11 +319,13 @@ export function registerRoutes(app: Express): void {
       const user = await storage.validateUser(parsed.data.username, parsed.data.password);
       if (!user || !user.isActive) {
         recordLoginFailure(key, now);
+        recordLoginFailure(byAddress, now);
         res.status(401).json({ message: "Invalid username or password" });
         return;
       }
 
       loginFailures.delete(key);
+      loginFailures.delete(byAddress);
       await regenerateSession(req);
       req.session.userId = user.id;
       req.session.username = user.username;
@@ -215,6 +378,9 @@ export function registerRoutes(app: Express): void {
   // Everything below requires a session.
   app.use("/api", requireAuth);
 
+  // ...and, for writes, that the kill switch is not engaged.
+  app.use("/api", enforceKillSwitch);
+
   // ==== CLIENTS ====
   app.get("/api/clients", asyncHandler(async (_req, res) => {
     res.json(await storage.getAllClients());
@@ -240,14 +406,29 @@ export function registerRoutes(app: Express): void {
     const data = updateClientSchema.parse(req.body);
     const client = await storage.updateClient(req.params.id, data);
     if (!client) return notFound(res, "Client");
-    await storage.createActivityLog({ action: "updated", entityType: "client", entityId: client.id, details: null, ...actor(req) });
+    if (hasChanges(data)) {
+      await storage.createActivityLog({ action: "updated", entityType: "client", entityId: client.id, details: null, ...actor(req) });
+    }
     res.json(client);
   }));
 
   app.delete("/api/clients/:id", asyncHandler(async (req, res) => {
+    // Deleting a client removes its tests, sites and documents. Those rows
+    // used to disappear with no audit trace at all, so the log recorded one
+    // deletion where ten had happened. Count them before they are gone.
+    const cascaded = {
+      tests: (await storage.getTestsByClient(req.params.id)).map((t) => t.id),
+      sites: (await storage.getSitesByClient(req.params.id)).map((s) => s.id),
+      documents: (await storage.getDocumentsByClient(req.params.id)).map((d) => d.id),
+    };
+
     const success = await storage.deleteClient(req.params.id);
     if (!success) return notFound(res, "Client");
-    await storage.createActivityLog({ action: "deleted", entityType: "client", entityId: req.params.id, details: null, ...actor(req) });
+
+    await storage.createActivityLog({
+      action: "deleted", entityType: "client", entityId: req.params.id,
+      details: { cascaded }, ...actor(req),
+    });
     res.json({ success: true });
   }));
 
@@ -259,6 +440,7 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/sites", asyncHandler(async (req, res) => {
     const data = insertSiteSchema.parse(req.body);
+    if (await parentMissing(res, (data as { clientId?: string }).clientId, (data as { siteId?: string | null }).siteId)) return;
     const site = await storage.createSite(data);
     await storage.createActivityLog({
       action: "created", entityType: "site", entityId: site.id,
@@ -271,7 +453,9 @@ export function registerRoutes(app: Express): void {
     const data = updateSiteSchema.parse(req.body);
     const site = await storage.updateSite(req.params.id, data);
     if (!site) return notFound(res, "Site");
-    await storage.createActivityLog({ action: "updated", entityType: "site", entityId: site.id, details: null, ...actor(req) });
+    if (hasChanges(data)) {
+      await storage.createActivityLog({ action: "updated", entityType: "site", entityId: site.id, details: null, ...actor(req) });
+    }
     res.json(site);
   }));
 
@@ -298,9 +482,13 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.post("/api/tests", asyncHandler(async (req, res) => {
-    const data = insertTestSchema.parse(req.body);
     // Attribution is evidence in an audit product, so it comes from the
-    // session. `data.executedBy ?? session` let the client win and forge it.
+    // session and is not part of the input schema at all. The spread below
+    // already overrode it, but a schema that still accepted the field is how
+    // the update path came to allow forging it.
+    if (forgedAttribution(res, req.body)) return;
+    const data = createTestSchema.parse(req.body);
+    if (await parentMissing(res, data.clientId, data.siteId)) return;
     const test = await storage.createTest({ ...data, executedBy: req.session.userId ?? null });
     await storage.createActivityLog({
       action: "created", entityType: "test", entityId: test.id,
@@ -310,10 +498,13 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.patch("/api/tests/:id", asyncHandler(async (req, res) => {
+    if (forgedAttribution(res, req.body)) return;
     const data = updateTestSchema.parse(req.body);
     const test = await storage.updateTest(req.params.id, data);
     if (!test) return notFound(res, "Test");
-    await storage.createActivityLog({ action: "updated", entityType: "test", entityId: test.id, details: null, ...actor(req) });
+    if (hasChanges(data)) {
+      await storage.createActivityLog({ action: "updated", entityType: "test", entityId: test.id, details: null, ...actor(req) });
+    }
     res.json(test);
   }));
 
@@ -331,7 +522,9 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.post("/api/documents", asyncHandler(async (req, res) => {
+    if (forgedAttribution(res, req.body)) return;
     const data = createDocumentSchema.parse(req.body);
+    if (await parentMissing(res, (data as { clientId?: string }).clientId, (data as { siteId?: string | null }).siteId)) return;
     const document = await storage.createDocument({ ...data, createdBy: req.session.userId ?? null });
     await storage.createActivityLog({
       action: "created", entityType: "document", entityId: document.id,
@@ -341,10 +534,13 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.patch("/api/documents/:id", asyncHandler(async (req, res) => {
+    if (forgedAttribution(res, req.body)) return;
     const data = updateDocumentSchema.parse(req.body);
     const document = await storage.updateDocument(req.params.id, data);
     if (!document) return notFound(res, "Document");
-    await storage.createActivityLog({ action: "updated", entityType: "document", entityId: document.id, details: null, ...actor(req) });
+    if (hasChanges(data)) {
+      await storage.createActivityLog({ action: "updated", entityType: "document", entityId: document.id, details: null, ...actor(req) });
+    }
     res.json(document);
   }));
 
@@ -359,6 +555,10 @@ export function registerRoutes(app: Express): void {
   // Admin-only: the log carries every user's id, IP address and sign-in
   // times, and the user administration it describes is itself admin-only.
   app.get("/api/logs", requireAdmin, asyncHandler(async (req, res) => {
+    // A repeated or array-valued parameter used to fail the string test and be
+    // dropped, so the filter silently disappeared and the endpoint returned
+    // everything rather than refusing.
+    if (badQueryParam(res, req.query.entityType) || badQueryParam(res, req.query.entityId)) return;
     const entityType = typeof req.query.entityType === "string" ? req.query.entityType : undefined;
     const entityId = typeof req.query.entityId === "string" ? req.query.entityId : undefined;
     if (entityType && entityId) {
@@ -506,7 +706,9 @@ export function registerRoutes(app: Express): void {
     const data = updateClassifierSchema.parse(req.body);
     const classifier = await storage.updateClassifier(req.params.id, data);
     if (!classifier) return notFound(res, "Classifier");
-    await storage.createActivityLog({ action: "updated", entityType: "classifier", entityId: classifier.id, details: null, ...actor(req) });
+    if (hasChanges(data)) {
+      await storage.createActivityLog({ action: "updated", entityType: "classifier", entityId: classifier.id, details: null, ...actor(req) });
+    }
     res.json(classifier);
   }));
 
@@ -518,9 +720,17 @@ export function registerRoutes(app: Express): void {
   }));
 
   // Unknown API paths must not fall through to the SPA catch-all. The literal
-  // "/api/*" pattern missed "//api/clients" and "/api%2fclients", which matched
-  // no handler and were answered with the SPA's HTML and a 200.
-  app.all(/^\/+api(\/|%2f|$)/i, (_req, res) => {
-    res.status(404).json({ message: "Not found" });
+  // "/api/*" pattern missed "//api/clients" and "/api%2fclients"; widening it
+  // by hand then still missed "/./api/clients", "/x/../api/clients" and
+  // percent-encoded letters such as "/%61pi/clients". Normalising the path and
+  // testing that covers the whole family rather than the spellings we thought
+  // of. None of these ever reached a handler, but answering an API caller with
+  // a page of HTML and a 200 is its own bug.
+  app.all("*", (req, res, next) => {
+    if (looksLikeApiPath(req.path)) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    next();
   });
 }

@@ -27,8 +27,12 @@ export interface VerifyResult {
   needsRehash: boolean;
 }
 
-export function verifyPassword(password: string, stored: string | null | undefined): VerifyResult {
-  if (!stored) return { ok: false, needsRehash: false };
+export function verifyPassword(password: string, stored: unknown): VerifyResult {
+  // A BLOB in this column comes back as a Buffer, and calling startsWith on it
+  // threw, so every sign-in for that account answered 500 and the account was
+  // unrecoverable through the app. The JSON columns were hardened against the
+  // same class of corruption; this one was not.
+  if (typeof stored !== "string" || !stored) return { ok: false, needsRehash: false };
 
   if (stored.startsWith("scrypt$")) {
     const parts = stored.split("$");

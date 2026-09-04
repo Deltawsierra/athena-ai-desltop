@@ -7,12 +7,11 @@ export async function makeApp(): Promise<Express> {
   process.env.SESSION_SECRET = "test-secret-that-is-at-least-32-characters";
   process.env.NODE_ENV = "test";
 
-  const { createApp, errorHandler } = await import("../server/app");
+  const { createApp } = await import("../server/app");
   const { initializeDefaultData } = await import("../server/init-data");
 
   const app = createApp();
   await initializeDefaultData();
-  app.use(errorHandler);
   return app;
 }
 

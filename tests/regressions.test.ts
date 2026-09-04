@@ -166,11 +166,21 @@ describe("authorization gaps", () => {
       .post("/api/clients")
       .send({ name: "Attribution", company: "A", email: "attribution@example.com" });
     expect(client.status).toBe(201);
-    const test = await user.post("/api/tests").send({
+    // Naming somebody else is refused outright. It used to be accepted and
+    // stripped, which kept the record honest but answered 201, so the caller
+    // had no way to tell a rejected forgery from an accepted one.
+    const forged = await user.post("/api/tests").send({
       clientId: client.body.id,
       testType: "scan",
       status: "pending",
       executedBy: "someone-else-entirely",
+    });
+    expect(forged.status).toBe(400);
+
+    const test = await user.post("/api/tests").send({
+      clientId: client.body.id,
+      testType: "scan",
+      status: "pending",
     });
 
     expect(test.status).toBe(201);

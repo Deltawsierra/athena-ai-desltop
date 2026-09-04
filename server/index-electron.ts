@@ -19,7 +19,7 @@ function serveStatic(app: express.Application): void {
 }
 
 (async () => {
-  const app = createApp();
+  const app = createApp({ deferErrorHandler: true });
   await initializeDefaultData();
 
   const server = createServer(app);

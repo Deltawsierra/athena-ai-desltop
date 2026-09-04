@@ -4,7 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { initializeDefaultData } from "./init-data";
 
 (async () => {
-  const app = createApp();
+  const app = createApp({ deferErrorHandler: true });
   await initializeDefaultData();
 
   const server = createServer(app);
