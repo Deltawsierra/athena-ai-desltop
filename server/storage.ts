@@ -1,4 +1,4 @@
-import { 
+import {
   type User, type InsertUser,
   type Client, type InsertClient,
   type Site, type InsertSite,
@@ -8,30 +8,43 @@ import {
   type AIHealthMetric, type InsertAIHealthMetric,
   type AIControlSetting, type InsertAIControlSetting,
   type AIChatMessage, type InsertAIChatMessage,
-  type Classifier, type InsertClassifier
+  type Classifier, type InsertClassifier,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { hashPassword, verifyPassword } from "./password";
 
+/**
+ * The single storage contract. Both the SQLite backend (production) and the
+ * in-memory backend (tests) implement exactly this interface, so routes never
+ * need to know which one is active.
+ */
 export interface IStorage {
+  // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
+  createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
+  /** Returns the user when the credentials match; re-hashes legacy passwords. */
+  validateUser(username: string, password: string): Promise<User | undefined>;
 
+  // Clients
   getClient(id: string): Promise<Client | undefined>;
   getAllClients(): Promise<Client[]>;
   createClient(client: InsertClient): Promise<Client>;
   updateClient(id: string, client: Partial<InsertClient>): Promise<Client | undefined>;
   deleteClient(id: string): Promise<boolean>;
 
+  // Sites
   getSite(id: string): Promise<Site | undefined>;
+  getAllSites(): Promise<Site[]>;
   getSitesByClient(clientId: string): Promise<Site[]>;
   createSite(site: InsertSite): Promise<Site>;
   updateSite(id: string, site: Partial<InsertSite>): Promise<Site | undefined>;
   deleteSite(id: string): Promise<boolean>;
 
+  // Tests
   getTest(id: string): Promise<Test | undefined>;
   getAllTests(): Promise<Test[]>;
   getTestsByClient(clientId: string): Promise<Test[]>;
@@ -40,28 +53,35 @@ export interface IStorage {
   updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined>;
   deleteTest(id: string): Promise<boolean>;
 
+  // Documents
   getDocument(id: string): Promise<Document | undefined>;
+  getAllDocuments(): Promise<Document[]>;
   getDocumentsByClient(clientId: string): Promise<Document[]>;
   createDocument(document: InsertDocument): Promise<Document>;
   updateDocument(id: string, document: Partial<InsertDocument>): Promise<Document | undefined>;
   deleteDocument(id: string): Promise<boolean>;
 
+  // Activity logs
   getAllActivityLogs(): Promise<ActivityLog[]>;
   getActivityLogsByEntity(entityType: string, entityId: string): Promise<ActivityLog[]>;
   createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
 
+  // AI health
   getLatestAIHealthMetric(): Promise<AIHealthMetric | undefined>;
   getAIHealthMetrics(limit: number): Promise<AIHealthMetric[]>;
   createAIHealthMetric(metric: InsertAIHealthMetric): Promise<AIHealthMetric>;
 
+  // AI control (single row)
   getAIControlSettings(): Promise<AIControlSetting | undefined>;
   updateAIControlSettings(settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting>;
-  
+
+  // Chat
   getAllChatMessages(): Promise<AIChatMessage[]>;
   getChatMessagesByUser(userId: string): Promise<AIChatMessage[]>;
   createChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage>;
   deleteChatMessage(id: string): Promise<boolean>;
 
+  // Classifiers
   getAllClassifiers(): Promise<Classifier[]>;
   getClassifier(id: string): Promise<Classifier | undefined>;
   createClassifier(classifier: InsertClassifier): Promise<Classifier>;
@@ -69,168 +89,135 @@ export interface IStorage {
   deleteClassifier(id: string): Promise<boolean>;
 }
 
+function defaultControlSettings(): AIControlSetting {
+  return {
+    id: randomUUID(),
+    systemStatus: "active",
+    killSwitchEnabled: false,
+    overrideMode: false,
+    activeSystems: [],
+    maxConcurrentTests: 5,
+    autoShutdownThreshold: 90,
+    lastModifiedBy: null,
+    lastModifiedAt: new Date(),
+  };
+}
+
+/** In-memory backend. Used by tests and by ATHENA_STORAGE=memory. */
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private clients: Map<string, Client>;
-  private sites: Map<string, Site>;
-  private tests: Map<string, Test>;
-  private documents: Map<string, Document>;
-  private activityLogs: Map<string, ActivityLog>;
-  private aiHealthMetrics: Map<string, AIHealthMetric>;
-  private aiControlSettings: AIControlSetting | undefined;
-  private chatMessages: Map<string, AIChatMessage>;
-  private classifiers: Map<string, Classifier>;
+  private users = new Map<string, User>();
+  private clients = new Map<string, Client>();
+  private sites = new Map<string, Site>();
+  private tests = new Map<string, Test>();
+  private documents = new Map<string, Document>();
+  private activityLogs = new Map<string, ActivityLog>();
+  private aiHealthMetrics = new Map<string, AIHealthMetric>();
+  private aiControlSettings: AIControlSetting | undefined = defaultControlSettings();
+  private chatMessages = new Map<string, AIChatMessage>();
+  private classifiers = new Map<string, Classifier>();
 
-  constructor() {
-    this.users = new Map();
-    this.clients = new Map();
-    this.sites = new Map();
-    this.tests = new Map();
-    this.documents = new Map();
-    this.activityLogs = new Map();
-    this.aiHealthMetrics = new Map();
-    this.chatMessages = new Map();
-    this.classifiers = new Map();
-    this.aiControlSettings = {
-      id: randomUUID(),
-      systemStatus: "active",
-      killSwitchEnabled: false,
-      overrideMode: false,
-      activeSystems: ["penetration-testing", "vulnerability-scanner", "threat-detection"],
-      maxConcurrentTests: 5,
-      autoShutdownThreshold: 90,
-      lastModifiedBy: null,
-      lastModifiedAt: new Date(),
-    };
+  // Users
+  async getUser(id: string) { return this.users.get(id); }
+  async getUserByUsername(username: string) {
+    return Array.from(this.users.values()).find((u) => u.username === username);
   }
-
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
+  async getAllUsers() { return Array.from(this.users.values()); }
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { 
-      role: "user",
+    const user: User = {
       email: null,
       isActive: true,
-      ...insertUser, 
-      id, 
-      createdAt: new Date() 
+      ...insertUser,
+      password: hashPassword(insertUser.password),
+      id: randomUUID(),
+      createdAt: new Date(),
     };
-    this.users.set(id, user);
+    this.users.set(user.id, user);
     return user;
   }
-
-  async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
-  }
-
-  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
+  async updateUser(id: string, updates: Partial<InsertUser>) {
     const user = this.users.get(id);
     if (!user) return undefined;
-    const updated = { ...user, ...updates };
+    const next = { ...updates };
+    if (next.password) next.password = hashPassword(next.password);
+    const updated: User = { ...user, ...next };
     this.users.set(id, updated);
     return updated;
   }
-
-  async deleteUser(id: string): Promise<boolean> {
-    return this.users.delete(id);
+  async deleteUser(id: string) { return this.users.delete(id); }
+  async validateUser(username: string, password: string) {
+    const user = await this.getUserByUsername(username);
+    if (!user) return undefined;
+    const result = verifyPassword(password, user.password);
+    if (!result.ok) return undefined;
+    if (result.needsRehash) {
+      user.password = hashPassword(password);
+      this.users.set(user.id, user);
+    }
+    return user;
   }
 
-  async getClient(id: string): Promise<Client | undefined> {
-    return this.clients.get(id);
-  }
-
-  async getAllClients(): Promise<Client[]> {
-    return Array.from(this.clients.values());
-  }
-
+  // Clients
+  async getClient(id: string) { return this.clients.get(id); }
+  async getAllClients() { return Array.from(this.clients.values()); }
   async createClient(insertClient: InsertClient): Promise<Client> {
-    const id = randomUUID();
-    const client: Client = { 
+    const client: Client = {
       status: "active",
       phone: null,
       notes: null,
-      ...insertClient, 
-      id, 
-      createdAt: new Date(), 
-      lastTestDate: null 
+      lastTestDate: null,
+      ...insertClient,
+      id: randomUUID(),
+      createdAt: new Date(),
     };
-    this.clients.set(id, client);
+    this.clients.set(client.id, client);
     return client;
   }
-
-  async updateClient(id: string, updates: Partial<InsertClient>): Promise<Client | undefined> {
+  async updateClient(id: string, updates: Partial<InsertClient>) {
     const client = this.clients.get(id);
     if (!client) return undefined;
-    const updated = { ...client, ...updates };
+    const updated: Client = { ...client, ...updates };
     this.clients.set(id, updated);
     return updated;
   }
+  async deleteClient(id: string) { return this.clients.delete(id); }
 
-  async deleteClient(id: string): Promise<boolean> {
-    return this.clients.delete(id);
+  // Sites
+  async getSite(id: string) { return this.sites.get(id); }
+  async getAllSites() { return Array.from(this.sites.values()); }
+  async getSitesByClient(clientId: string) {
+    return Array.from(this.sites.values()).filter((s) => s.clientId === clientId);
   }
-
-  async getSite(id: string): Promise<Site | undefined> {
-    return this.sites.get(id);
-  }
-
-  async getSitesByClient(clientId: string): Promise<Site[]> {
-    return Array.from(this.sites.values()).filter(site => site.clientId === clientId);
-  }
-
   async createSite(insertSite: InsertSite): Promise<Site> {
-    const id = randomUUID();
-    const site: Site = { 
+    const site: Site = {
       environment: "production",
       status: "active",
-      ...insertSite, 
-      id, 
-      createdAt: new Date() 
+      ...insertSite,
+      id: randomUUID(),
+      createdAt: new Date(),
     };
-    this.sites.set(id, site);
+    this.sites.set(site.id, site);
     return site;
   }
-
-  async updateSite(id: string, updates: Partial<InsertSite>): Promise<Site | undefined> {
+  async updateSite(id: string, updates: Partial<InsertSite>) {
     const site = this.sites.get(id);
     if (!site) return undefined;
-    const updated = { ...site, ...updates };
+    const updated: Site = { ...site, ...updates };
     this.sites.set(id, updated);
     return updated;
   }
+  async deleteSite(id: string) { return this.sites.delete(id); }
 
-  async deleteSite(id: string): Promise<boolean> {
-    return this.sites.delete(id);
+  // Tests
+  async getTest(id: string) { return this.tests.get(id); }
+  async getAllTests() { return Array.from(this.tests.values()); }
+  async getTestsByClient(clientId: string) {
+    return Array.from(this.tests.values()).filter((t) => t.clientId === clientId);
   }
-
-  async getTest(id: string): Promise<Test | undefined> {
-    return this.tests.get(id);
+  async getTestsBySite(siteId: string) {
+    return Array.from(this.tests.values()).filter((t) => t.siteId === siteId);
   }
-
-  async getAllTests(): Promise<Test[]> {
-    return Array.from(this.tests.values());
-  }
-
-  async getTestsByClient(clientId: string): Promise<Test[]> {
-    return Array.from(this.tests.values()).filter(test => test.clientId === clientId);
-  }
-
-  async getTestsBySite(siteId: string): Promise<Test[]> {
-    return Array.from(this.tests.values()).filter(test => test.siteId === siteId);
-  }
-
   async createTest(insertTest: InsertTest): Promise<Test> {
-    const id = randomUUID();
-    const test: Test = { 
+    const test: Test = {
       status: "pending",
       siteId: null,
       severity: null,
@@ -243,255 +230,152 @@ export class MemStorage implements IStorage {
       mediumCount: 0,
       lowCount: 0,
       executedBy: null,
-      ...insertTest, 
-      id, 
-      startedAt: new Date() 
+      ...insertTest,
+      id: randomUUID(),
+      startedAt: new Date(),
     };
-    this.tests.set(id, test);
+    this.tests.set(test.id, test);
     return test;
   }
-
-  async updateTest(id: string, updates: Partial<InsertTest>): Promise<Test | undefined> {
+  async updateTest(id: string, updates: Partial<InsertTest>) {
     const test = this.tests.get(id);
     if (!test) return undefined;
-    const updated = { ...test, ...updates };
+    const updated: Test = { ...test, ...updates };
     this.tests.set(id, updated);
     return updated;
   }
+  async deleteTest(id: string) { return this.tests.delete(id); }
 
-  async deleteTest(id: string): Promise<boolean> {
-    return this.tests.delete(id);
+  // Documents
+  async getDocument(id: string) { return this.documents.get(id); }
+  async getAllDocuments() { return Array.from(this.documents.values()); }
+  async getDocumentsByClient(clientId: string) {
+    return Array.from(this.documents.values()).filter((d) => d.clientId === clientId);
   }
-
-  async getDocument(id: string): Promise<Document | undefined> {
-    return this.documents.get(id);
-  }
-
-  async getDocumentsByClient(clientId: string): Promise<Document[]> {
-    return Array.from(this.documents.values()).filter(doc => doc.clientId === clientId);
-  }
-
   async createDocument(insertDocument: InsertDocument): Promise<Document> {
-    const id = randomUUID();
     const now = new Date();
-    const document: Document = { 
+    const document: Document = {
       description: null,
       fileUrl: null,
       createdBy: null,
-      ...insertDocument, 
-      id, 
-      createdAt: now, 
-      updatedAt: now 
+      ...insertDocument,
+      id: randomUUID(),
+      createdAt: now,
+      updatedAt: now,
     };
-    this.documents.set(id, document);
+    this.documents.set(document.id, document);
     return document;
   }
-
-  async updateDocument(id: string, updates: Partial<InsertDocument>): Promise<Document | undefined> {
+  async updateDocument(id: string, updates: Partial<InsertDocument>) {
     const document = this.documents.get(id);
     if (!document) return undefined;
-    const updated = { ...document, ...updates, updatedAt: new Date() };
+    const updated: Document = { ...document, ...updates, updatedAt: new Date() };
     this.documents.set(id, updated);
     return updated;
   }
+  async deleteDocument(id: string) { return this.documents.delete(id); }
 
-  async deleteDocument(id: string): Promise<boolean> {
-    return this.documents.delete(id);
-  }
-
-  async getAllActivityLogs(): Promise<ActivityLog[]> {
-    return Array.from(this.activityLogs.values()).sort((a, b) => 
-      b.timestamp.getTime() - a.timestamp.getTime()
+  // Activity logs
+  async getAllActivityLogs() {
+    return Array.from(this.activityLogs.values()).sort(
+      (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
     );
   }
-
-  async getActivityLogsByEntity(entityType: string, entityId: string): Promise<ActivityLog[]> {
-    return Array.from(this.activityLogs.values())
-      .filter(log => log.entityType === entityType && log.entityId === entityId)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  async getActivityLogsByEntity(entityType: string, entityId: string) {
+    return (await this.getAllActivityLogs()).filter(
+      (l) => l.entityType === entityType && l.entityId === entityId,
+    );
   }
-
   async createActivityLog(insertLog: InsertActivityLog): Promise<ActivityLog> {
-    const id = randomUUID();
-    const log: ActivityLog = { 
+    const log: ActivityLog = {
       entityId: null,
       userId: null,
       details: null,
       ipAddress: null,
-      ...insertLog, 
-      id, 
-      timestamp: new Date() 
+      ...insertLog,
+      id: randomUUID(),
+      timestamp: new Date(),
     };
-    this.activityLogs.set(id, log);
+    this.activityLogs.set(log.id, log);
     return log;
   }
 
-  async getLatestAIHealthMetric(): Promise<AIHealthMetric | undefined> {
-    const metrics = Array.from(this.aiHealthMetrics.values());
-    if (metrics.length === 0) return undefined;
-    return metrics.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+  // AI health
+  async getLatestAIHealthMetric() {
+    return (await this.getAIHealthMetrics(1))[0];
   }
-
-  async getAIHealthMetrics(limit: number): Promise<AIHealthMetric[]> {
+  async getAIHealthMetrics(limit: number) {
     return Array.from(this.aiHealthMetrics.values())
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, limit);
   }
-
   async createAIHealthMetric(insertMetric: InsertAIHealthMetric): Promise<AIHealthMetric> {
-    const id = randomUUID();
-    const metric: AIHealthMetric = { 
+    const metric: AIHealthMetric = {
       activeScans: 0,
       totalScansToday: 0,
       modelsLoaded: null,
       lastTrainingDate: null,
-      ...insertMetric, 
-      id, 
-      timestamp: new Date() 
+      ...insertMetric,
+      id: randomUUID(),
+      timestamp: new Date(),
     };
-    this.aiHealthMetrics.set(id, metric);
+    this.aiHealthMetrics.set(metric.id, metric);
     return metric;
   }
 
-  async getLatestAIHealthMetrics(): Promise<AIHealthMetric | undefined> {
-    return this.getLatestAIHealthMetric();
-  }
-
-  async getAllAIHealthMetrics(): Promise<AIHealthMetric[]> {
-    return Array.from(this.aiHealthMetrics.values())
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }
-
-  async getAIControlSettings(): Promise<AIControlSetting | undefined> {
+  // AI control
+  async getAIControlSettings() { return this.aiControlSettings; }
+  async updateAIControlSettings(updates: Partial<InsertAIControlSetting>) {
+    const base = this.aiControlSettings ?? defaultControlSettings();
+    this.aiControlSettings = { ...base, ...updates, lastModifiedAt: new Date() };
     return this.aiControlSettings;
   }
 
-  async updateAIControlSettings(updates: Partial<InsertAIControlSetting>): Promise<AIControlSetting> {
-    if (!this.aiControlSettings) {
-      this.aiControlSettings = {
-        id: randomUUID(),
-        systemStatus: "active",
-        killSwitchEnabled: false,
-        overrideMode: false,
-        activeSystems: [],
-        maxConcurrentTests: 5,
-        autoShutdownThreshold: 90,
-        lastModifiedBy: null,
-        lastModifiedAt: new Date(),
-      };
-    }
-    this.aiControlSettings = {
-      ...this.aiControlSettings,
-      ...updates,
-      lastModifiedAt: new Date(),
-    };
-    return this.aiControlSettings;
+  // Chat
+  async getAllChatMessages() {
+    return Array.from(this.chatMessages.values()).sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+    );
   }
-
-  async getAllChatMessages(): Promise<AIChatMessage[]> {
-    return Array.from(this.chatMessages.values())
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  async getChatMessagesByUser(userId: string) {
+    return (await this.getAllChatMessages()).filter((m) => m.userId === userId);
   }
-
-  async getChatMessagesByUser(userId: string): Promise<AIChatMessage[]> {
-    return Array.from(this.chatMessages.values())
-      .filter(msg => msg.userId === userId)
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-  }
-
   async createChatMessage(insertMessage: InsertAIChatMessage): Promise<AIChatMessage> {
-    const id = randomUUID();
     const message: AIChatMessage = {
       attachments: null,
       ...insertMessage,
-      id,
+      id: randomUUID(),
       timestamp: new Date(),
     };
-    this.chatMessages.set(id, message);
+    this.chatMessages.set(message.id, message);
     return message;
   }
+  async deleteChatMessage(id: string) { return this.chatMessages.delete(id); }
 
-  async deleteChatMessage(id: string): Promise<boolean> {
-    return this.chatMessages.delete(id);
-  }
-
-  async getAllClassifiers(): Promise<Classifier[]> {
-    return Array.from(this.classifiers.values());
-  }
-
-  async getClassifier(id: string): Promise<Classifier | undefined> {
-    return this.classifiers.get(id);
-  }
-
+  // Classifiers
+  async getAllClassifiers() { return Array.from(this.classifiers.values()); }
+  async getClassifier(id: string) { return this.classifiers.get(id); }
   async createClassifier(insertClassifier: InsertClassifier): Promise<Classifier> {
-    const id = randomUUID();
     const classifier: Classifier = {
       status: "active",
       trainingDataSize: 0,
       lastTrainedAt: null,
       description: null,
       ...insertClassifier,
-      id,
+      id: randomUUID(),
       createdAt: new Date(),
     };
-    this.classifiers.set(id, classifier);
+    this.classifiers.set(classifier.id, classifier);
     return classifier;
   }
-
-  async updateClassifier(id: string, updates: Partial<InsertClassifier>): Promise<Classifier | undefined> {
+  async updateClassifier(id: string, updates: Partial<InsertClassifier>) {
     const classifier = this.classifiers.get(id);
     if (!classifier) return undefined;
-    const updated = { ...classifier, ...updates };
+    const updated: Classifier = { ...classifier, ...updates };
     this.classifiers.set(id, updated);
     return updated;
   }
-
-  async deleteClassifier(id: string): Promise<boolean> {
-    return this.classifiers.delete(id);
-  }
-
-  // Additional methods for compatibility
-  async validateUser(username: string, password: string): Promise<User | undefined> {
-    const user = await this.getUserByUsername(username);
-    if (user && user.password === password) {
-      return user;
-    }
-    return undefined;
-  }
-
-  async getAllDocuments(): Promise<Document[]> {
-    return Array.from(this.documents.values());
-  }
-
-  async getAllScans(): Promise<any[]> {
-    // Mock implementation for scans
-    return [];
-  }
-
-  async createScan(scan: any): Promise<any> {
-    // Mock implementation for scans
-    return { id: randomUUID(), ...scan, startTime: new Date() };
-  }
-
-  async getAllCves(): Promise<any[]> {
-    // Mock implementation for CVEs
-    return [];
-  }
-
-  async createCve(cve: any): Promise<any> {
-    // Mock implementation for CVEs
-    return { id: randomUUID(), ...cve, createdAt: new Date() };
-  }
-
-  async getAuditLogs(): Promise<any[]> {
-    // Mock implementation for audit logs
-    return [];
-  }
-
-  async createAuditLog(log: any): Promise<any> {
-    // Mock implementation for audit logs
-    return { id: randomUUID(), ...log, timestamp: new Date() };
-  }
+  async deleteClassifier(id: string) { return this.classifiers.delete(id); }
 }
 
 export const storage = new MemStorage();

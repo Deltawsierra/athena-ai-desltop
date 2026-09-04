@@ -1,143 +1,212 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+/**
+ * Athena data model.
+ *
+ * The runtime database is SQLite (better-sqlite3), so the schema is declared with
+ * sqlite-core types. Booleans and timestamps are stored as INTEGER, JSON as TEXT.
+ * IDs are generated in the storage layer (crypto.randomUUID) rather than by the DB.
+ */
+
+const id = () => text("id").primaryKey();
+const timestamp = (name: string) => integer(name, { mode: "timestamp_ms" });
+const bool = (name: string) => integer(name, { mode: "boolean" });
+const json = <T>(name: string) => text(name, { mode: "json" }).$type<T>();
+
+export const USER_ROLES = ["admin", "user"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
+export const users = sqliteTable("users", {
+  id: id(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().default("user"),
   email: text("email"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  isActive: bool("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull(),
 });
 
-export const clients = pgTable("clients", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const clients = sqliteTable("clients", {
+  id: id(),
   name: text("name").notNull(),
   company: text("company").notNull(),
   email: text("email").notNull(),
   phone: text("phone"),
   status: text("status").notNull().default("active"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull(),
   lastTestDate: timestamp("last_test_date"),
   notes: text("notes"),
 });
 
-export const sites = pgTable("sites", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").notNull(),
+export const sites = sqliteTable("sites", {
+  id: id(),
+  clientId: text("client_id").notNull(),
   url: text("url").notNull(),
   name: text("name").notNull(),
   environment: text("environment").notNull().default("production"),
   status: text("status").notNull().default("active"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull(),
 });
 
-export const tests = pgTable("tests", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").notNull(),
-  siteId: varchar("site_id"),
+export const tests = sqliteTable("tests", {
+  id: id(),
+  clientId: text("client_id").notNull(),
+  siteId: text("site_id"),
   testType: text("test_type").notNull(),
   status: text("status").notNull().default("pending"),
   severity: text("severity"),
-  startedAt: timestamp("started_at").notNull().defaultNow(),
+  startedAt: timestamp("started_at").notNull(),
   completedAt: timestamp("completed_at"),
   summary: text("summary"),
-  findings: jsonb("findings"),
+  findings: json<unknown>("findings"),
   vulnerabilitiesFound: integer("vulnerabilities_found").notNull().default(0),
   criticalCount: integer("critical_count").notNull().default(0),
   highCount: integer("high_count").notNull().default(0),
   mediumCount: integer("medium_count").notNull().default(0),
   lowCount: integer("low_count").notNull().default(0),
-  executedBy: varchar("executed_by"),
+  executedBy: text("executed_by"),
 });
 
-export const documents = pgTable("documents", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").notNull(),
+export const documents = sqliteTable("documents", {
+  id: id(),
+  clientId: text("client_id").notNull(),
   title: text("title").notNull(),
   description: text("description"),
   documentType: text("document_type").notNull(),
   fileUrl: text("file_url"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+  createdBy: text("created_by"),
 });
 
-export const activityLogs = pgTable("activity_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const activityLogs = sqliteTable("activity_logs", {
+  id: id(),
   action: text("action").notNull(),
   entityType: text("entity_type").notNull(),
-  entityId: varchar("entity_id"),
-  userId: varchar("user_id"),
-  details: jsonb("details"),
+  entityId: text("entity_id"),
+  userId: text("user_id"),
+  details: json<unknown>("details"),
   ipAddress: text("ip_address"),
-  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  timestamp: timestamp("timestamp").notNull(),
 });
 
-export const aiHealthMetrics = pgTable("ai_health_metrics", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  timestamp: timestamp("timestamp").notNull().defaultNow(),
+export const aiHealthMetrics = sqliteTable("ai_health_metrics", {
+  id: id(),
+  timestamp: timestamp("timestamp").notNull(),
   cpuUsage: integer("cpu_usage").notNull(),
   memoryUsage: integer("memory_usage").notNull(),
   activeScans: integer("active_scans").notNull().default(0),
   totalScansToday: integer("total_scans_today").notNull().default(0),
   successRate: integer("success_rate").notNull(),
   averageResponseTime: integer("average_response_time").notNull(),
-  modelsLoaded: text("models_loaded").array(),
+  modelsLoaded: json<string[]>("models_loaded"),
   lastTrainingDate: timestamp("last_training_date"),
   detectionAccuracy: integer("detection_accuracy").notNull(),
   falsePositiveRate: integer("false_positive_rate").notNull(),
 });
 
-export const aiControlSettings = pgTable("ai_control_settings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const aiControlSettings = sqliteTable("ai_control_settings", {
+  id: id(),
   systemStatus: text("system_status").notNull().default("active"),
-  killSwitchEnabled: boolean("kill_switch_enabled").notNull().default(false),
-  overrideMode: boolean("override_mode").notNull().default(false),
-  activeSystems: text("active_systems").array(),
+  killSwitchEnabled: bool("kill_switch_enabled").notNull().default(false),
+  overrideMode: bool("override_mode").notNull().default(false),
+  activeSystems: json<string[]>("active_systems"),
   maxConcurrentTests: integer("max_concurrent_tests").notNull().default(5),
   autoShutdownThreshold: integer("auto_shutdown_threshold").notNull().default(90),
-  lastModifiedBy: varchar("last_modified_by"),
-  lastModifiedAt: timestamp("last_modified_at").notNull().defaultNow(),
+  lastModifiedBy: text("last_modified_by"),
+  lastModifiedAt: timestamp("last_modified_at").notNull(),
 });
 
-export const aiChatMessages = pgTable("ai_chat_messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+export const aiChatMessages = sqliteTable("ai_chat_messages", {
+  id: id(),
+  userId: text("user_id").notNull(),
   message: text("message").notNull(),
   sender: text("sender").notNull(),
-  attachments: jsonb("attachments"),
-  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  attachments: json<unknown>("attachments"),
+  timestamp: timestamp("timestamp").notNull(),
 });
 
-export const classifiers = pgTable("classifiers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const classifiers = sqliteTable("classifiers", {
+  id: id(),
   name: text("name").notNull(),
   type: text("type").notNull(),
   accuracy: integer("accuracy").notNull(),
   status: text("status").notNull().default("active"),
   trainingDataSize: integer("training_data_size").notNull().default(0),
   lastTrainedAt: timestamp("last_trained_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull(),
   description: text("description"),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
-export const insertClientSchema = createInsertSchema(clients).omit({ id: true, createdAt: true });
-export const insertSiteSchema = createInsertSchema(sites).omit({ id: true, createdAt: true });
-export const insertTestSchema = createInsertSchema(tests).omit({ id: true, startedAt: true });
-export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({ id: true, timestamp: true });
-export const insertAIHealthMetricSchema = createInsertSchema(aiHealthMetrics).omit({ id: true, timestamp: true });
-export const insertAIControlSettingSchema = createInsertSchema(aiControlSettings).omit({ id: true, lastModifiedAt: true });
-export const insertAIChatMessageSchema = createInsertSchema(aiChatMessages).omit({ id: true, timestamp: true });
-export const insertClassifierSchema = createInsertSchema(classifiers).omit({ id: true, createdAt: true });
+// ---------------------------------------------------------------------------
+// Insert schemas. Dates arrive over JSON as ISO strings, so date fields that a
+// client may set are coerced. Server-managed timestamps are omitted.
+// ---------------------------------------------------------------------------
+
+const optionalDate = z.coerce.date().nullable().optional();
+const optionalStringArray = z.array(z.string()).nullable().optional();
+const optionalJson = z.unknown().nullable().optional();
+
+export const insertUserSchema = createInsertSchema(users, {
+  username: z.string().min(1).max(64),
+  password: z.string().min(8).max(256),
+  role: z.enum(USER_ROLES).default("user"),
+  email: z.string().email().max(254).nullable().optional(),
+}).omit({ id: true, createdAt: true });
+
+export const insertClientSchema = createInsertSchema(clients, {
+  name: z.string().min(1).max(200),
+  company: z.string().min(1).max(200),
+  email: z.string().email().max(254),
+  lastTestDate: optionalDate,
+}).omit({ id: true, createdAt: true });
+
+export const insertSiteSchema = createInsertSchema(sites, {
+  url: z.string().min(1).max(2048),
+  name: z.string().min(1).max(200),
+}).omit({ id: true, createdAt: true });
+
+export const insertTestSchema = createInsertSchema(tests, {
+  testType: z.string().min(1).max(100),
+  completedAt: optionalDate,
+  findings: optionalJson,
+}).omit({ id: true, startedAt: true });
+
+export const insertDocumentSchema = createInsertSchema(documents, {
+  title: z.string().min(1).max(300),
+  documentType: z.string().min(1).max(100),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const insertActivityLogSchema = createInsertSchema(activityLogs, {
+  details: optionalJson,
+}).omit({ id: true, timestamp: true });
+
+export const insertAIHealthMetricSchema = createInsertSchema(aiHealthMetrics, {
+  modelsLoaded: optionalStringArray,
+  lastTrainingDate: optionalDate,
+}).omit({ id: true, timestamp: true });
+
+export const insertAIControlSettingSchema = createInsertSchema(aiControlSettings, {
+  activeSystems: optionalStringArray,
+}).omit({ id: true, lastModifiedAt: true });
+
+export const insertAIChatMessageSchema = createInsertSchema(aiChatMessages, {
+  message: z.string().min(1).max(20000),
+  sender: z.enum(["user", "ai", "system"]),
+  attachments: optionalJson,
+}).omit({ id: true, timestamp: true });
+
+export const insertClassifierSchema = createInsertSchema(classifiers, {
+  name: z.string().min(1).max(200),
+  type: z.string().min(1).max(100),
+  lastTrainedAt: optionalDate,
+}).omit({ id: true, createdAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type PublicUser = Omit<User, "password">;
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Client = typeof clients.$inferSelect;
 export type InsertSite = z.infer<typeof insertSiteSchema>;
