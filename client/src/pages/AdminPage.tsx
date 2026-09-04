@@ -36,7 +36,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { USER_ROLES } from "@shared/schema";
 import type { User, InsertUser } from "@shared/schema";
+
+/** Form values arrive as strings; keep only the roles the API accepts. */
+function toRole(value: FormDataEntryValue | null): (typeof USER_ROLES)[number] {
+  return value === "admin" ? "admin" : "user";
+}
 
 export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -94,7 +100,7 @@ export default function AdminPage() {
       username: formData.get("username") as string,
       password: formData.get("password") as string,
       email: formData.get("email") as string || null,
-      role: formData.get("role") as string,
+      role: toRole(formData.get("role")),
       isActive: true,
     };
     createMutation.mutate(data);

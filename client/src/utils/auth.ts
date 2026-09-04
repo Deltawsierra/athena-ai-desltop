@@ -1,105 +1,62 @@
-type TokenPair = { access: string; refresh?: string | null };
+import type { PublicUser } from "@shared/schema";
 
-const ACCESS_KEY = "access";
-const REFRESH_KEY = "refresh";
+/**
+ * Session-based authentication.
+ *
+ * The server owns the session and the browser holds an httpOnly cookie it
+ * cannot read, so there is no token in localStorage for a caller to forge.
+ * Every question about identity goes to the server.
+ */
 
-export function decodeJwtPayload(token?: string): any | null {
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
+const API_BASE = window.location.protocol === "app:" ? "http://localhost:5000" : "";
+
+function apiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${API_BASE}${path}`;
+}
+
+export interface AuthState {
+  authenticated: boolean;
+  user: PublicUser | null;
+}
+
+export async function checkAuth(): Promise<AuthState> {
   try {
-    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    while (payload.length % 4) payload += "=";
-    const json = atob(payload);
-    return JSON.parse(json);
+    const res = await fetch(apiUrl("/api/auth/check"), { credentials: "include" });
+    if (!res.ok) return { authenticated: false, user: null };
+    const data = (await res.json()) as { authenticated?: boolean; user?: PublicUser };
+    return { authenticated: Boolean(data.authenticated), user: data.user ?? null };
   } catch {
-    return null;
+    // Server unreachable is treated as signed out rather than a crash.
+    return { authenticated: false, user: null };
   }
 }
 
-export function nowSec(): number {
-  return Math.floor(Date.now() / 1000);
-}
-
-export function getTokenExpiry(token?: string): number | null {
-  const p = decodeJwtPayload(token);
-  if (!p) return null;
-  if (typeof p.exp === "number") return p.exp;
-  return null;
-}
-
-export function isTokenValid(token?: string): boolean {
-  if (!token) return false;
-  const exp = getTokenExpiry(token);
-  if (!exp) return true;
-  return exp > nowSec();
-}
-
-function pickStorage(remember = true): Storage {
-  return remember ? window.localStorage : window.sessionStorage;
-}
-
-export function setTokens(tokens: TokenPair, remember = true) {
-  const storage = pickStorage(remember);
-  if (tokens.access) storage.setItem(ACCESS_KEY, tokens.access);
-  if (tokens.refresh) storage.setItem(REFRESH_KEY, tokens.refresh);
-}
-
-export function setTokensPersistent(tokens: TokenPair) {
-  localStorage.setItem(ACCESS_KEY, tokens.access);
-  if (tokens.refresh) localStorage.setItem(REFRESH_KEY, tokens.refresh);
-}
-
-export function getAccess(): string | null {
-  return localStorage.getItem(ACCESS_KEY) ?? sessionStorage.getItem(ACCESS_KEY);
-}
-
-export function getRefresh(): string | null {
-  return localStorage.getItem(REFRESH_KEY) ?? sessionStorage.getItem(REFRESH_KEY);
-}
-
-export function clearTokens() {
-  try {
-    localStorage.removeItem(ACCESS_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-    sessionStorage.removeItem(ACCESS_KEY);
-    sessionStorage.removeItem(REFRESH_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-export async function refreshAccessIfNeeded(verbose = false): Promise<TokenPair> {
-  const refresh = getRefresh();
-  if (!refresh) throw new Error("No refresh token available");
-
-  // Handle Electron custom protocol - need absolute URL for API calls
-  const isElectronProduction = window.location.protocol === 'app:';
-  const apiUrl = isElectronProduction 
-    ? 'http://localhost:5000/api/token/refresh/' 
-    : '/api/token/refresh/';
-
-  const res = await fetch(apiUrl, {
+export async function login(username: string, password: string): Promise<PublicUser> {
+  const res = await fetch(apiUrl("/api/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh }),
+    credentials: "include",
+    body: JSON.stringify({ username, password }),
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const msg = body.detail || body.error || `Refresh failed (status ${res.status})`;
-    throw new Error(String(msg));
+    if (res.status === 401) throw new Error("Incorrect username or password.");
+    const body = await res.json().catch(() => null);
+    throw new Error(
+      body && typeof body.message === "string" ? body.message : "Sign in failed. Please try again.",
+    );
   }
 
-  const data = await res.json();
-  const access = data.access ?? data.token ?? null;
-  const newRefresh = data.refresh ?? null;
+  const data = (await res.json()) as { user: PublicUser };
+  return data.user;
+}
 
-  if (!access) throw new Error("Refresh endpoint did not return an access token");
+export async function logout(): Promise<void> {
+  // Clearing local state matters more than the network result, so failures here
+  // are deliberately ignored.
+  await fetch(apiUrl("/api/auth/logout"), { method: "POST", credentials: "include" }).catch(() => undefined);
+}
 
-  const remember = !!localStorage.getItem(REFRESH_KEY);
-  setTokens({ access, refresh: newRefresh ?? refresh }, remember);
-
-  if (verbose) console.debug("[auth] token refreshed");
-  return { access, refresh: newRefresh ?? refresh };
+export function isAdmin(user: PublicUser | null): boolean {
+  return user?.role === "admin";
 }

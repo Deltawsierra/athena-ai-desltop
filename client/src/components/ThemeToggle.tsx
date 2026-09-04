@@ -1,23 +1,16 @@
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { getStoredTheme, setTheme as applyTheme, type Theme } from "@/lib/theme";
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
-
-  useEffect(() => {
-    const stored = localStorage.getItem("theme") as "light" | "dark" | null;
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const initial = stored || (prefersDark ? "dark" : "light");
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
-  }, []);
+  // The theme itself is applied once at app start; this only reflects and flips it.
+  const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
 
   const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    document.documentElement.classList.toggle("dark", newTheme === "dark");
+    const next: Theme = theme === "light" ? "dark" : "light";
+    setThemeState(next);
+    applyTheme(next);
   };
 
   return (
@@ -27,7 +20,7 @@ export default function ThemeToggle() {
       onClick={toggleTheme}
       className="rounded-full"
       data-testid="button-theme-toggle"
-      aria-label="Toggle theme"
+      aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
     >
       {theme === "light" ? (
         <Moon className="h-[1.2rem] w-[1.2rem]" />

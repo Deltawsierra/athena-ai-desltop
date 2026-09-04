@@ -39,6 +39,24 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Test, Client, Site, InsertTest } from "@shared/schema";
 
+/**
+ * Radix Select forbids an empty string as an item value, so optional fields use
+ * the sentinel "none". Convert it back to null before sending to the API.
+ */
+function normalizeOptional(value: FormDataEntryValue | null): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text === "" || text === "none" ? null : text;
+}
+
+/** `findings` is free-form JSON; show the details field when there is one. */
+function renderFindings(findings: unknown): string {
+  if (findings && typeof findings === "object" && "details" in findings) {
+    const details = (findings as { details: unknown }).details;
+    if (typeof details === "string") return details;
+  }
+  return JSON.stringify(findings);
+}
+
 export default function Tests() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -103,10 +121,10 @@ export default function Tests() {
     const findingsText = formData.get("findings") as string || "";
     const data: InsertTest = {
       clientId: formData.get("clientId") as string,
-      siteId: formData.get("siteId") as string || null,
+      siteId: normalizeOptional(formData.get("siteId")),
       testType: formData.get("testType") as string,
       status: formData.get("status") as string,
-      severity: formData.get("severity") as string || null,
+      severity: normalizeOptional(formData.get("severity")),
       summary: formData.get("summary") as string || null,
       findings: findingsText ? { details: findingsText } : null,
       vulnerabilitiesFound: parseInt(formData.get("vulnerabilitiesFound") as string) || 0,
@@ -129,7 +147,7 @@ export default function Tests() {
       summary: formData.get("summary") as string || null,
       testType: formData.get("testType") as string,
       status: formData.get("status") as string,
-      severity: formData.get("severity") as string || null,
+      severity: normalizeOptional(formData.get("severity")),
       findings: findingsText ? { details: findingsText } : null,
       vulnerabilitiesFound: parseInt(formData.get("vulnerabilitiesFound") as string) || 0,
       criticalCount: parseInt(formData.get("criticalCount") as string) || 0,
@@ -260,7 +278,7 @@ export default function Tests() {
                           <SelectValue placeholder="Select site" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {sites.map((site) => (
                             <SelectItem key={site.id} value={site.id}>
                               {site.name}
@@ -310,7 +328,7 @@ export default function Tests() {
                         <SelectValue placeholder="Select severity" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         <SelectItem value="critical">Critical</SelectItem>
                         <SelectItem value="high">High</SelectItem>
                         <SelectItem value="medium">Medium</SelectItem>
@@ -603,16 +621,14 @@ export default function Tests() {
                           </div>
                         )}
 
-                        {test.findings && (
+                        {test.findings != null && (
                           <div className="border-t border-border pt-4">
                             <div className="flex items-center gap-2 mb-2">
                               <FileText className="w-4 h-4 text-muted-foreground" />
                               <span className="font-semibold">Findings</span>
                             </div>
                             <p className="text-sm text-muted-foreground" data-testid={`text-findings-${test.id}`}>
-                              {typeof test.findings === "object" && "details" in test.findings
-                                ? (test.findings as { details: string }).details
-                                : JSON.stringify(test.findings)}
+                              {renderFindings(test.findings)}
                             </p>
                           </div>
                         )}
@@ -667,12 +683,12 @@ export default function Tests() {
 
                 <div className="space-y-2">
                   <Label htmlFor="severity">Severity</Label>
-                  <Select name="severity" defaultValue={editingTest.severity || ""}>
+                  <Select name="severity" defaultValue={editingTest.severity ?? "none"}>
                     <SelectTrigger data-testid="select-edit-severity">
                       <SelectValue placeholder="Select severity" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       <SelectItem value="critical">Critical</SelectItem>
                       <SelectItem value="high">High</SelectItem>
                       <SelectItem value="medium">Medium</SelectItem>
@@ -697,11 +713,7 @@ export default function Tests() {
                     name="findings"
                     placeholder="Detailed findings..."
                     rows={4}
-                    defaultValue={
-                      editingTest.findings && typeof editingTest.findings === "object" && "details" in editingTest.findings
-                        ? (editingTest.findings as { details: string }).details || ""
-                        : ""
-                    }
+                    defaultValue={editingTest.findings != null ? renderFindings(editingTest.findings) : ""}
                     data-testid="input-edit-findings"
                   />
                 </div>

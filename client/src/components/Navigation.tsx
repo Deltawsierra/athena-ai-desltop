@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface NavigationProps {
-  onLogout?: () => void;
-  isAuthenticated?: boolean;
+  onLogout: () => void;
+  /** Admin-only menu entries are hidden for everyone else. */
+  isAdmin: boolean;
+  username: string;
 }
 
 const testsDropdownItems = [
@@ -33,7 +35,7 @@ const adminDropdownItems = [
   { path: "/deletion", label: "Deletion Management", icon: Trash2 },
 ];
 
-export default function Navigation({ onLogout, isAuthenticated = true }: NavigationProps) {
+export default function Navigation({ onLogout, isAdmin, username }: NavigationProps) {
   const [location] = useLocation();
 
   const isTestsMenuActive = testsDropdownItems.some(item => location === item.path);
@@ -143,7 +145,8 @@ export default function Navigation({ onLogout, isAuthenticated = true }: Navigat
                 </Button>
               </Link>
 
-              {/* Admin Dropdown */}
+              {/* Admin Dropdown (admins only) */}
+              {isAdmin && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -185,29 +188,25 @@ export default function Navigation({ onLogout, isAuthenticated = true }: Navigat
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
+              )}
             </nav>
           </div>
 
           <div className="flex items-center gap-3">
+            <span className="hidden sm:inline text-sm text-muted-foreground" data-testid="text-username">
+              {username}
+            </span>
             <ThemeToggle />
-            {isAuthenticated ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onLogout}
-                className="gap-2"
-                data-testid="button-logout"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </Button>
-            ) : (
-              <Link href="/login">
-                <Button variant="default" size="sm" data-testid="link-login">
-                  Sign In
-                </Button>
-              </Link>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onLogout}
+              className="gap-2"
+              data-testid="button-logout"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
           </div>
         </div>
       </div>
