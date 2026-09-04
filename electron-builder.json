@@ -9,13 +9,12 @@
     "dist/**/*",
     "electron-main.cjs",
     "electron-preload.cjs",
-    "!dist/server-dist",
     "!dist/**/*.map"
   ],
   "extraResources": [
     {
-      "from": "attached_assets",
-      "to": "attached_assets",
+      "from": "attached_assets/generated_images",
+      "to": "attached_assets/generated_images",
       "filter": ["**/*"]
     }
   ],
@@ -24,8 +23,6 @@
     "icon": "build/icon.icns",
     "hardenedRuntime": false,
     "gatekeeperAssess": false,
-    "entitlements": "build/entitlements.mac.plist",
-    "entitlementsInherit": "build/entitlements.mac.plist",
     "target": [
       {
         "target": "dmg",
@@ -51,8 +48,6 @@
       "width": 540,
       "height": 400
     },
-    "icon": "build/icon.icns",
-    "background": "build/background.tiff",
     "title": "Athena AI ${version}"
   },
   "win": {
@@ -64,7 +59,6 @@
     ],
     "icon": "build/icon.ico",
     "artifactName": "AthenaAI-Setup-${version}.${ext}",
-    "publisherName": "Athena AI Team",
     "verifyUpdateCodeSignature": false,
     "requestedExecutionLevel": "asInvoker"
   },
@@ -73,9 +67,6 @@
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
     "allowElevation": true,
-    "installerIcon": "build/icon.ico",
-    "uninstallerIcon": "build/icon.ico",
-    "installerHeaderIcon": "build/icon.ico",
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "deleteAppDataOnUninstall": false,
@@ -95,22 +86,19 @@
         "arch": ["x64"]
       }
     ],
-    "icon": "build/icons",
     "category": "Development",
+    "artifactName": "AthenaAI-${version}-${arch}.${ext}",
     "desktop": {
-      "Name": "Athena AI",
-      "Comment": "Cybersecurity Intelligence Platform",
-      "Categories": "Development;Security;",
-      "Keywords": "security;cybersecurity;pentest;cve;ai;"
-    },
-    "artifactName": "AthenaAI-${version}-${arch}.${ext}"
+      "entry": {
+        "Name": "Athena AI",
+        "Comment": "Cybersecurity Intelligence Platform",
+        "Categories": "Development;Security;",
+        "Keywords": "security;cybersecurity;pentest;cve;ai;"
+      }
+    }
   },
   "appImage": {
-    "artifactName": "AthenaAI-${version}.${ext}",
-    "desktop": {
-      "Name": "Athena AI",
-      "Comment": "Cybersecurity Intelligence Platform"
-    }
+    "artifactName": "AthenaAI-${version}.${ext}"
   },
   "publish": null
 }
