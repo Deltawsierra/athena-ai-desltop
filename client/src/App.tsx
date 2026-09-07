@@ -1,12 +1,11 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { queryClient, onUnauthorized } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import Navigation from "@/components/Navigation";
-import TokenRefresher from "@/components/TokenRefresher";
 import HolographicBackground from "@/components/HolographicBackground";
 import MagneticCursor from "@/components/MagneticCursor";
 import CursorGlow from "@/components/CursorGlow";
@@ -27,108 +26,118 @@ import AIChat from "@/pages/AIChat";
 import DeletionManagement from "@/pages/DeletionManagement";
 import Classifiers from "@/pages/Classifiers";
 import NotFound from "@/pages/not-found";
-import { getAccess, isTokenValid, clearTokens } from "@/utils/auth";
+import { checkAuth, logout as apiLogout, isAdmin } from "@/utils/auth";
+import { applyStoredTheme } from "@/lib/theme";
+import type { PublicUser } from "@shared/schema";
 
-function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
-  const [, setLocation] = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+type AuthStatus = "loading" | "authenticated" | "anonymous";
 
-  useEffect(() => {
-    const token = getAccess();
-    const valid = !!token && isTokenValid(token);
-    setIsAuthenticated(valid);
-    if (!valid) {
-      setLocation("/login");
-    }
-  }, [setLocation]);
-
-  if (isAuthenticated === null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-          <p className="mt-4 text-muted-foreground"> Authenticating...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return isAuthenticated ? <Component /> : null;
-}
-
-function Router({ isAuthenticated, onLogout }: { isAuthenticated: boolean; onLogout: () => void }) {
+/**
+ * Routes available once signed in. Admin-only screens are not registered at all
+ * for non-admins, so they fall through to NotFound rather than rendering a page
+ * whose API calls would 403.
+ */
+function AppRoutes({ admin }: { admin: boolean }) {
   return (
-    <>
-      {isAuthenticated && <Navigation onLogout={onLogout} isAuthenticated={isAuthenticated} />}
-      <Switch>
-        <Route path="/login" component={Login} />
-        <Route path="/dashboard">
-          <ProtectedRoute component={Dashboard} />
-        </Route>
-        <Route path="/clients">
-          <ProtectedRoute component={Clients} />
-        </Route>
-        <Route path="/tests">
-          <ProtectedRoute component={Tests} />
-        </Route>
-        <Route path="/documents">
-          <ProtectedRoute component={Documents} />
-        </Route>
-        <Route path="/pentest">
-          <ProtectedRoute component={PentestScan} />
-        </Route>
-        <Route path="/classify-cve">
-          <ProtectedRoute component={CVEClassifier} />
-        </Route>
-        <Route path="/ai-health">
-          <ProtectedRoute component={AIHealth} />
-        </Route>
-        <Route path="/admin">
-          <ProtectedRoute component={AdminPage} />
-        </Route>
-        <Route path="/audit-logs">
-          <ProtectedRoute component={AuditLogs} />
-        </Route>
-        <Route path="/ai-control">
-          <ProtectedRoute component={AIControlPanel} />
-        </Route>
-        <Route path="/ai-chat">
-          <ProtectedRoute component={AIChat} />
-        </Route>
-        <Route path="/deletion">
-          <ProtectedRoute component={DeletionManagement} />
-        </Route>
-        <Route path="/classifiers">
-          <ProtectedRoute component={Classifiers} />
-        </Route>
-        <Route path="/">
-          <Redirect to="/dashboard" />
-        </Route>
-        <Route component={NotFound} />
-      </Switch>
-    </>
+    <Switch>
+      <Route path="/login">
+        <Redirect to="/dashboard" />
+      </Route>
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/clients" component={Clients} />
+      <Route path="/tests" component={Tests} />
+      <Route path="/documents" component={Documents} />
+      <Route path="/pentest" component={PentestScan} />
+      <Route path="/classify-cve" component={CVEClassifier} />
+      <Route path="/ai-health" component={AIHealth} />
+      {admin && <Route path="/audit-logs" component={AuditLogs} />}
+      <Route path="/ai-chat" component={AIChat} />
+      <Route path="/classifiers" component={Classifiers} />
+      {admin && <Route path="/admin" component={AdminPage} />}
+      {admin && <Route path="/ai-control" component={AIControlPanel} />}
+      {admin && <Route path="/deletion" component={DeletionManagement} />}
+      <Route path="/">
+        <Redirect to="/dashboard" />
+      </Route>
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
 function App() {
   const [, setLocation] = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [status, setStatus] = useState<AuthStatus>("loading");
+  const [user, setUser] = useState<PublicUser | null>(null);
 
+  // Apply the theme before anything renders so the login screen is themed too.
   useEffect(() => {
-    const checkAuth = () => {
-      const token = getAccess();
-      setIsAuthenticated(!!token && isTokenValid(token));
-    };
-    checkAuth();
-    window.addEventListener("storage", checkAuth);
-    return () => window.removeEventListener("storage", checkAuth);
+    applyStoredTheme();
   }, []);
 
-  const handleLogout = () => {
-    clearTokens();
-    setIsAuthenticated(false);
+  useEffect(() => {
+    let cancelled = false;
+    void checkAuth().then((state) => {
+      if (cancelled) return;
+      setUser(state.user);
+      setStatus(state.authenticated && state.user ? "authenticated" : "anonymous");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // A session can expire, or the server restart, while the app is open. Without
+  // this the app stayed in its authenticated state and every screen showed an
+  // empty list, which reads as lost data rather than as a lost session.
+  useEffect(
+    () =>
+      onUnauthorized(() => {
+        queryClient.clear();
+        setUser(null);
+        setStatus("anonymous");
+        setLocation("/login");
+      }),
+    [setLocation],
+  );
+
+  const handleAuthenticated = useCallback(
+    (nextUser: PublicUser) => {
+      setUser(nextUser);
+      setStatus("authenticated");
+      setLocation("/dashboard");
+    },
+    [setLocation],
+  );
+
+  const handleLogout = useCallback(async () => {
+    await apiLogout();
+    queryClient.clear();
+    setUser(null);
+    setStatus("anonymous");
     setLocation("/login");
-  };
+  }, [setLocation]);
+
+  let content: JSX.Element;
+  if (status === "loading") {
+    content = (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div
+          className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"
+          role="status"
+          aria-label="Checking your session"
+        />
+      </div>
+    );
+  } else if (!user) {
+    content = <Login onAuthenticated={handleAuthenticated} />;
+  } else {
+    content = (
+      <>
+        <Navigation onLogout={handleLogout} isAdmin={isAdmin(user)} username={user.username} />
+        <AppRoutes admin={isAdmin(user)} />
+      </>
+    );
+  }
 
   return (
     <ErrorBoundary>
@@ -138,9 +147,8 @@ function App() {
             <HolographicBackground />
             <MagneticCursor />
             <CursorGlow />
-            <TokenRefresher />
             <Toaster />
-            <Router isAuthenticated={isAuthenticated} onLogout={handleLogout} />
+            {content}
           </SmoothScroll>
         </TooltipProvider>
       </QueryClientProvider>

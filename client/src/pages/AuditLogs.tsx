@@ -22,7 +22,7 @@ export default function AuditLogs() {
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>("all");
 
   const { data: logs = [], isLoading } = useQuery<ActivityLog[]>({
-    queryKey: ["/api/activity-logs"],
+    queryKey: ["/api/logs"],
   });
 
   const filteredLogs = logs.filter((log) => {

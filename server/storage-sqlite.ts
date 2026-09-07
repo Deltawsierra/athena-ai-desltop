@@ -1,9 +1,9 @@
-import { db, sqlite } from './db-sqlite';
-import * as schema from '@shared/schema';
-import { eq } from 'drizzle-orm';
-import crypto from 'crypto';
-
-// Types imported from schema
+import { db } from "./db-sqlite";
+import * as schema from "@shared/schema";
+import { and, desc, eq } from "drizzle-orm";
+import crypto from "crypto";
+import type { IStorage } from "./storage";
+import { hashPassword, verifyPassword, dummyVerify } from "./password";
 import type {
   User, InsertUser,
   Client, InsertClient,
@@ -14,404 +14,383 @@ import type {
   AIHealthMetric, InsertAIHealthMetric,
   AIControlSetting, InsertAIControlSetting,
   AIChatMessage, InsertAIChatMessage,
-  Classifier, InsertClassifier
-} from '@shared/schema';
+  Classifier, InsertClassifier,
+} from "@shared/schema";
 
-// Helper function to hash passwords
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password).digest('hex');
+/**
+ * SQLite backend. All methods are synchronous under the hood (better-sqlite3)
+ * but exposed as async to satisfy IStorage.
+ */
+/** The settings table holds one row, and this is its id. */
+const AI_CONTROL_ID = "singleton";
+
+/**
+ * The keys of an update that actually carry a value.
+ *
+ * Counting keys instead meant `{ phone: undefined }` looked like a change and
+ * reached drizzle's set() as an empty object, which throws "No values to set"
+ * and surfaced as a 500.
+ */
+function definedKeys(updates: object): string[] {
+  return Object.entries(updates)
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key);
 }
 
-function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash;
-}
-
-// Storage interface implementation using SQLite
-export interface IStorage {
-  // User operations
-  getUsers(): Promise<User[]>;
-  getUserById(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
-  deleteUser(id: string): Promise<boolean>;
-  validateUser(username: string, password: string): Promise<User | undefined>;
-
-  // Client operations
-  getClients(): Promise<Client[]>;
-  getClientById(id: string): Promise<Client | undefined>;
-  createClient(client: InsertClient): Promise<Client>;
-  updateClient(id: string, client: Partial<InsertClient>): Promise<Client | undefined>;
-  deleteClient(id: string): Promise<boolean>;
-
-  // Test operations
-  getTests(): Promise<Test[]>;
-  getTestById(id: string): Promise<Test | undefined>;
-  getTestsByClientId(clientId: string): Promise<Test[]>;
-  createTest(test: InsertTest): Promise<Test>;
-  updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined>;
-  deleteTest(id: string): Promise<boolean>;
-
-  // Document operations
-  getDocuments(): Promise<Document[]>;
-  getDocumentById(id: string): Promise<Document | undefined>;
-  getDocumentsByClientId(clientId: string): Promise<Document[]>;
-  createDocument(document: InsertDocument): Promise<Document>;
-  updateDocument(id: string, document: Partial<InsertDocument>): Promise<Document | undefined>;
-  deleteDocument(id: string): Promise<boolean>;
-
-  // AI Health operations
-  getLatestAIHealthMetrics(): Promise<AIHealthMetric | undefined>;
-  createAIHealthMetric(metric: InsertAIHealthMetric): Promise<AIHealthMetric>;
-
-  // AI Control operations
-  getAIControlSettings(): Promise<AIControlSetting | undefined>;
-  updateAIControlSettings(id: string, settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting | undefined>;
-
-  // AI Chat operations
-  getAIChatMessages(): Promise<AIChatMessage[]>;
-  createAIChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage>;
-
-  // Classifier operations
-  getClassifiers(): Promise<Classifier[]>;
-  getClassifierById(id: string): Promise<Classifier | undefined>;
-  createClassifier(classifier: InsertClassifier): Promise<Classifier>;
-  updateClassifier(id: string, classifier: Partial<InsertClassifier>): Promise<Classifier | undefined>;
-  deleteClassifier(id: string): Promise<boolean>;
-
-  // Scan operations
-  getScanResults(): Promise<ScanResult[]>;
-  getScanResultById(id: string): Promise<ScanResult | undefined>;
-  createScanResult(scan: InsertScanResult): Promise<ScanResult>;
-
-  // CVE operations
-  getCveResults(): Promise<CveResult[]>;
-  createCveResult(cve: InsertCveResult): Promise<CveResult>;
-
-  // Audit log operations
-  getAuditLogs(): Promise<AuditLog[]>;
-  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
-}
-
-class SqliteStorage implements IStorage {
-  // User operations
-  async getUsers(): Promise<User[]> {
+export class SqliteStorage implements IStorage {
+  // Users
+  async getUser(id: string): Promise<User | undefined> {
+    return db.select().from(schema.users).where(eq(schema.users.id, id)).get();
+  }
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return db.select().from(schema.users).where(eq(schema.users.username, username)).get();
+  }
+  async getAllUsers(): Promise<User[]> {
     return db.select().from(schema.users).all();
   }
-
-  async getUserById(id: string): Promise<User | undefined> {
-    const users = await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1);
-    return users[0];
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const users = await db.select().from(schema.users).where(eq(schema.users.username, username)).limit(1);
-    return users[0];
-  }
-
   async createUser(user: InsertUser): Promise<User> {
-    const hashedUser = { ...user, password: hashPassword(user.password) };
-    const id = crypto.randomUUID();
-    const createdAt = new Date();
-    const newUser = { id, ...hashedUser, createdAt };
-    
-    await db.insert(schema.users).values(newUser);
-    return newUser as User;
+    const row: User = {
+      email: null,
+      isActive: true,
+      ...user,
+      password: hashPassword(user.password),
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+    };
+    db.insert(schema.users).values(row).run();
+    return (await this.getUser(row.id))!;
   }
-
   async updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined> {
-    const updateData = { ...user };
-    if (updateData.password) {
-      updateData.password = hashPassword(updateData.password);
+    const updates = { ...user };
+    if (updates.password) updates.password = hashPassword(updates.password);
+    if (definedKeys(updates).length > 0) {
+      db.update(schema.users).set(updates).where(eq(schema.users.id, id)).run();
     }
-    
-    await db.update(schema.users).set(updateData).where(eq(schema.users.id, id));
-    return this.getUserById(id);
+    return this.getUser(id);
   }
-
   async deleteUser(id: string): Promise<boolean> {
-    const result = db.delete(schema.users).where(eq(schema.users.id, id)).run();
-    return result.changes > 0;
+    return db.delete(schema.users).where(eq(schema.users.id, id)).run().changes > 0;
   }
-
   async validateUser(username: string, password: string): Promise<User | undefined> {
     const user = await this.getUserByUsername(username);
-    if (user && verifyPassword(password, user.password)) {
-      return user;
+    if (!user) {
+      // Spend the same work as a real check. Returning immediately made login
+      // timing a username oracle: an unknown name answered in about a
+      // twentieth of the time a real one took.
+      dummyVerify(password);
+      return undefined;
     }
-    return undefined;
+    const result = verifyPassword(password, user.password);
+    if (!result.ok) return undefined;
+    if (result.needsRehash) {
+      const rehashed = hashPassword(password);
+      db.update(schema.users).set({ password: rehashed }).where(eq(schema.users.id, user.id)).run();
+      user.password = rehashed;
+    }
+    return user;
   }
 
-  // Client operations
-  async getClients(): Promise<Client[]> {
+  // Clients
+  async getClient(id: string): Promise<Client | undefined> {
+    return db.select().from(schema.clients).where(eq(schema.clients.id, id)).get();
+  }
+  async getAllClients(): Promise<Client[]> {
     return db.select().from(schema.clients).all();
   }
-
-  async getClientById(id: string): Promise<Client | undefined> {
-    const clients = await db.select().from(schema.clients).where(eq(schema.clients.id, id)).limit(1);
-    return clients[0];
-  }
-
   async createClient(client: InsertClient): Promise<Client> {
-    const id = crypto.randomUUID();
-    const createdAt = new Date();
-    const newClient = { id, ...client, createdAt };
-    
-    await db.insert(schema.clients).values(newClient);
-    return newClient as Client;
+    const row: Client = {
+      status: "active",
+      phone: null,
+      notes: null,
+      lastTestDate: null,
+      ...client,
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+    };
+    db.insert(schema.clients).values(row).run();
+    return (await this.getClient(row.id))!;
   }
-
   async updateClient(id: string, client: Partial<InsertClient>): Promise<Client | undefined> {
-    await db.update(schema.clients).set(client).where(eq(schema.clients.id, id));
-    return this.getClientById(id);
+    if (definedKeys(client).length > 0) {
+      db.update(schema.clients).set(client).where(eq(schema.clients.id, id)).run();
+    }
+    return this.getClient(id);
   }
-
   async deleteClient(id: string): Promise<boolean> {
-    const result = db.delete(schema.clients).where(eq(schema.clients.id, id)).run();
-    return result.changes > 0;
+    // There are no foreign keys, so the children are removed here. Without
+    // this, deleting a client orphaned its tests, sites and documents, which
+    // then referenced an id that no longer existed.
+    const removed = db.transaction(() => {
+      db.delete(schema.tests).where(eq(schema.tests.clientId, id)).run();
+      db.delete(schema.sites).where(eq(schema.sites.clientId, id)).run();
+      db.delete(schema.documents).where(eq(schema.documents.clientId, id)).run();
+      return db.delete(schema.clients).where(eq(schema.clients.id, id)).run().changes > 0;
+    });
+    return removed;
   }
 
-  // Test operations
-  async getTests(): Promise<Test[]> {
+  // Sites
+  async getSite(id: string): Promise<Site | undefined> {
+    return db.select().from(schema.sites).where(eq(schema.sites.id, id)).get();
+  }
+  async getAllSites(): Promise<Site[]> {
+    return db.select().from(schema.sites).all();
+  }
+  async getSitesByClient(clientId: string): Promise<Site[]> {
+    return db.select().from(schema.sites).where(eq(schema.sites.clientId, clientId)).all();
+  }
+  async createSite(site: InsertSite): Promise<Site> {
+    const row: Site = {
+      environment: "production",
+      status: "active",
+      ...site,
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+    };
+    db.insert(schema.sites).values(row).run();
+    return (await this.getSite(row.id))!;
+  }
+  async updateSite(id: string, site: Partial<InsertSite>): Promise<Site | undefined> {
+    if (definedKeys(site).length > 0) {
+      db.update(schema.sites).set(site).where(eq(schema.sites.id, id)).run();
+    }
+    return this.getSite(id);
+  }
+  async deleteSite(id: string): Promise<boolean> {
+    return db.delete(schema.sites).where(eq(schema.sites.id, id)).run().changes > 0;
+  }
+
+  // Tests
+  async getTest(id: string): Promise<Test | undefined> {
+    return db.select().from(schema.tests).where(eq(schema.tests.id, id)).get();
+  }
+  async getAllTests(): Promise<Test[]> {
     return db.select().from(schema.tests).all();
   }
-
-  async getTestById(id: string): Promise<Test | undefined> {
-    const tests = await db.select().from(schema.tests).where(eq(schema.tests.id, id)).limit(1);
-    return tests[0];
-  }
-
-  async getTestsByClientId(clientId: string): Promise<Test[]> {
+  async getTestsByClient(clientId: string): Promise<Test[]> {
     return db.select().from(schema.tests).where(eq(schema.tests.clientId, clientId)).all();
   }
-
+  async getTestsBySite(siteId: string): Promise<Test[]> {
+    return db.select().from(schema.tests).where(eq(schema.tests.siteId, siteId)).all();
+  }
   async createTest(test: InsertTest): Promise<Test> {
-    const id = crypto.randomUUID();
-    const startedAt = new Date();
-    const newTest = { id, ...test, startedAt };
-    
-    // Convert findings to JSON string if it's an object
-    if (newTest.findings && typeof newTest.findings === 'object') {
-      newTest.findings = JSON.stringify(newTest.findings);
-    }
-    
-    await db.insert(schema.tests).values(newTest);
-    return newTest as Test;
+    const row: Test = {
+      status: "pending",
+      siteId: null,
+      severity: null,
+      completedAt: null,
+      summary: null,
+      findings: null,
+      vulnerabilitiesFound: 0,
+      criticalCount: 0,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      executedBy: null,
+      ...test,
+      id: crypto.randomUUID(),
+      startedAt: new Date(),
+    };
+    db.insert(schema.tests).values(row).run();
+    return (await this.getTest(row.id))!;
   }
-
   async updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined> {
-    const updateData = { ...test };
-    if (updateData.findings && typeof updateData.findings === 'object') {
-      updateData.findings = JSON.stringify(updateData.findings);
+    if (definedKeys(test).length > 0) {
+      db.update(schema.tests).set(test).where(eq(schema.tests.id, id)).run();
     }
-    
-    await db.update(schema.tests).set(updateData).where(eq(schema.tests.id, id));
-    return this.getTestById(id);
+    return this.getTest(id);
   }
-
   async deleteTest(id: string): Promise<boolean> {
-    const result = db.delete(schema.tests).where(eq(schema.tests.id, id)).run();
-    return result.changes > 0;
+    return db.delete(schema.tests).where(eq(schema.tests.id, id)).run().changes > 0;
   }
 
-  // Document operations
-  async getDocuments(): Promise<Document[]> {
+  // Documents
+  async getDocument(id: string): Promise<Document | undefined> {
+    return db.select().from(schema.documents).where(eq(schema.documents.id, id)).get();
+  }
+  async getAllDocuments(): Promise<Document[]> {
     return db.select().from(schema.documents).all();
   }
-
-  async getDocumentById(id: string): Promise<Document | undefined> {
-    const documents = await db.select().from(schema.documents).where(eq(schema.documents.id, id)).limit(1);
-    return documents[0];
-  }
-
-  async getDocumentsByClientId(clientId: string): Promise<Document[]> {
+  async getDocumentsByClient(clientId: string): Promise<Document[]> {
     return db.select().from(schema.documents).where(eq(schema.documents.clientId, clientId)).all();
   }
-
   async createDocument(document: InsertDocument): Promise<Document> {
-    const id = crypto.randomUUID();
-    const createdAt = new Date();
-    const updatedAt = new Date();
-    const newDocument = { id, ...document, createdAt, updatedAt };
-    
-    await db.insert(schema.documents).values(newDocument);
-    return newDocument as Document;
+    const now = new Date();
+    const row: Document = {
+      description: null,
+      fileUrl: null,
+      createdBy: null,
+      ...document,
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.insert(schema.documents).values(row).run();
+    return (await this.getDocument(row.id))!;
   }
-
   async updateDocument(id: string, document: Partial<InsertDocument>): Promise<Document | undefined> {
-    const updatedAt = new Date();
-    await db.update(schema.documents).set({ ...document, updatedAt }).where(eq(schema.documents.id, id));
-    return this.getDocumentById(id);
+    db.update(schema.documents)
+      .set({ ...document, updatedAt: new Date() })
+      .where(eq(schema.documents.id, id))
+      .run();
+    return this.getDocument(id);
   }
-
   async deleteDocument(id: string): Promise<boolean> {
-    const result = db.delete(schema.documents).where(eq(schema.documents.id, id)).run();
-    return result.changes > 0;
+    return db.delete(schema.documents).where(eq(schema.documents.id, id)).run().changes > 0;
   }
 
-  // AI Health operations
-  async getLatestAIHealthMetrics(): Promise<AIHealthMetric | undefined> {
-    const metrics = await db.select().from(schema.aiHealthMetrics)
-      .orderBy(schema.aiHealthMetrics.timestamp)
-      .limit(1);
-    return metrics[0];
+  // Activity logs
+  async getAllActivityLogs(): Promise<ActivityLog[]> {
+    return db.select().from(schema.activityLogs).orderBy(desc(schema.activityLogs.timestamp)).all();
   }
-
-  async createAIHealthMetric(metric: InsertAIHealthMetric): Promise<AIHealthMetric> {
-    const id = crypto.randomUUID();
-    const timestamp = new Date();
-    const newMetric = { id, ...metric, timestamp };
-    
-    // Convert modelsLoaded to JSON string if it's an array
-    if (newMetric.modelsLoaded && Array.isArray(newMetric.modelsLoaded)) {
-      newMetric.modelsLoaded = JSON.stringify(newMetric.modelsLoaded);
-    }
-    
-    await db.insert(schema.aiHealthMetrics).values(newMetric);
-    return newMetric as AIHealthMetric;
-  }
-
-  // AI Control operations
-  async getAIControlSettings(): Promise<AIControlSetting | undefined> {
-    const settings = await db.select().from(schema.aiControlSettings).limit(1);
-    const setting = settings[0];
-    if (setting) {
-      // Parse JSON arrays
-      if (setting.activeSystems && typeof setting.activeSystems === 'string') {
-        try {
-          setting.activeSystems = JSON.parse(setting.activeSystems);
-        } catch {}
-      }
-    }
-    return setting;
-  }
-
-  async updateAIControlSettings(id: string, settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting | undefined> {
-    const updateData = { ...settings };
-    const lastModifiedAt = new Date();
-    
-    // Convert activeSystems to JSON string if it's an array
-    if (updateData.activeSystems && Array.isArray(updateData.activeSystems)) {
-      updateData.activeSystems = JSON.stringify(updateData.activeSystems);
-    }
-    
-    await db.update(schema.aiControlSettings)
-      .set({ ...updateData, lastModifiedAt })
-      .where(eq(schema.aiControlSettings.id, id));
-    
-    return this.getAIControlSettings();
-  }
-
-  // AI Chat operations
-  async getAIChatMessages(): Promise<AIChatMessage[]> {
-    const messages = await db.select().from(schema.aiChatMessages)
-      .orderBy(schema.aiChatMessages.timestamp)
+  async getActivityLogsByEntity(entityType: string, entityId: string): Promise<ActivityLog[]> {
+    return db
+      .select()
+      .from(schema.activityLogs)
+      .where(and(eq(schema.activityLogs.entityType, entityType), eq(schema.activityLogs.entityId, entityId)))
+      .orderBy(desc(schema.activityLogs.timestamp))
       .all();
-    
-    // Parse attachments JSON
-    return messages.map(msg => {
-      if (msg.attachments && typeof msg.attachments === 'string') {
-        try {
-          msg.attachments = JSON.parse(msg.attachments);
-        } catch {}
-      }
-      return msg;
-    });
+  }
+  async createActivityLog(log: InsertActivityLog): Promise<ActivityLog> {
+    const row: ActivityLog = {
+      entityId: null,
+      userId: null,
+      details: null,
+      ipAddress: null,
+      ...log,
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+    };
+    db.insert(schema.activityLogs).values(row).run();
+    return db.select().from(schema.activityLogs).where(eq(schema.activityLogs.id, row.id)).get()!;
   }
 
-  async createAIChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage> {
-    const id = crypto.randomUUID();
-    const timestamp = new Date();
-    const newMessage = { id, ...message, timestamp };
-    
-    // Convert attachments to JSON string if it's an object
-    if (newMessage.attachments && typeof newMessage.attachments === 'object') {
-      newMessage.attachments = JSON.stringify(newMessage.attachments);
+  // AI health
+  async getLatestAIHealthMetric(): Promise<AIHealthMetric | undefined> {
+    return db.select().from(schema.aiHealthMetrics).orderBy(desc(schema.aiHealthMetrics.timestamp)).limit(1).get();
+  }
+  async getAIHealthMetrics(limit: number): Promise<AIHealthMetric[]> {
+    return db
+      .select()
+      .from(schema.aiHealthMetrics)
+      .orderBy(desc(schema.aiHealthMetrics.timestamp))
+      .limit(Math.max(1, Math.min(limit, 1000)))
+      .all();
+  }
+  async createAIHealthMetric(metric: InsertAIHealthMetric): Promise<AIHealthMetric> {
+    const row: AIHealthMetric = {
+      activeScans: 0,
+      totalScansToday: 0,
+      modelsLoaded: null,
+      lastTrainingDate: null,
+      ...metric,
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+    };
+    db.insert(schema.aiHealthMetrics).values(row).run();
+    return db.select().from(schema.aiHealthMetrics).where(eq(schema.aiHealthMetrics.id, row.id)).get()!;
+  }
+
+  // AI control: exactly one row, under a fixed id.
+  //
+  // It used to be "the first row we find", created on first update with a
+  // random id and no constraint, so two concurrent updates each inserted a row
+  // and one of the two settings was silently lost. Later writes then updated
+  // only one of the duplicates.
+  async getAIControlSettings(): Promise<AIControlSetting | undefined> {
+    return db
+      .select()
+      .from(schema.aiControlSettings)
+      .where(eq(schema.aiControlSettings.id, AI_CONTROL_ID))
+      .get();
+  }
+  async updateAIControlSettings(settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting> {
+    const existing = await this.getAIControlSettings();
+    const now = new Date();
+    if (!existing) {
+      const row: AIControlSetting = {
+        systemStatus: "active",
+        killSwitchEnabled: false,
+        overrideMode: false,
+        activeSystems: [],
+        maxConcurrentTests: 5,
+        autoShutdownThreshold: 90,
+        lastModifiedBy: null,
+        ...settings,
+        id: AI_CONTROL_ID,
+        lastModifiedAt: now,
+      };
+      db.insert(schema.aiControlSettings).values(row).onConflictDoUpdate({
+        target: schema.aiControlSettings.id,
+        set: { ...settings, lastModifiedAt: now },
+      }).run();
+      return (await this.getAIControlSettings())!;
     }
-    
-    await db.insert(schema.aiChatMessages).values(newMessage);
-    return newMessage as AIChatMessage;
+    db.update(schema.aiControlSettings)
+      .set({ ...settings, lastModifiedAt: now })
+      .where(eq(schema.aiControlSettings.id, existing.id))
+      .run();
+    return (await this.getAIControlSettings())!;
   }
 
-  // Classifier operations
-  async getClassifiers(): Promise<Classifier[]> {
-    return db.select().from(schema.classifiers).all();
+  // Chat
+  async getChatMessage(id: string): Promise<AIChatMessage | undefined> {
+    return db.select().from(schema.aiChatMessages).where(eq(schema.aiChatMessages.id, id)).get();
   }
-
-  async getClassifierById(id: string): Promise<Classifier | undefined> {
-    const classifiers = await db.select().from(schema.classifiers).where(eq(schema.classifiers.id, id)).limit(1);
-    return classifiers[0];
-  }
-
-  async createClassifier(classifier: InsertClassifier): Promise<Classifier> {
-    const id = crypto.randomUUID();
-    const createdAt = new Date();
-    const newClassifier = { id, ...classifier, createdAt };
-    
-    await db.insert(schema.classifiers).values(newClassifier);
-    return newClassifier as Classifier;
-  }
-
-  async updateClassifier(id: string, classifier: Partial<InsertClassifier>): Promise<Classifier | undefined> {
-    await db.update(schema.classifiers).set(classifier).where(eq(schema.classifiers.id, id));
-    return this.getClassifierById(id);
-  }
-
-  async deleteClassifier(id: string): Promise<boolean> {
-    const result = db.delete(schema.classifiers).where(eq(schema.classifiers.id, id)).run();
-    return result.changes > 0;
-  }
-
-  // Additional methods for compatibility with routes
   async getAllChatMessages(): Promise<AIChatMessage[]> {
-    return this.getAIChatMessages();
+    return db.select().from(schema.aiChatMessages).orderBy(schema.aiChatMessages.timestamp).all();
   }
-  
-  async getAIChatMessagesByUser(userId: string): Promise<AIChatMessage[]> {
-    const messages = db
+  async getChatMessagesByUser(userId: string): Promise<AIChatMessage[]> {
+    return db
       .select()
       .from(schema.aiChatMessages)
       .where(eq(schema.aiChatMessages.userId, userId))
       .orderBy(schema.aiChatMessages.timestamp)
       .all();
-    return messages;
   }
-  
-  async deleteAIChatMessage(id: string): Promise<boolean> {
-    const result = db.delete(schema.aiChatMessages).where(eq(schema.aiChatMessages.id, id)).run();
-    return result.changes > 0;
+  async createChatMessage(message: InsertAIChatMessage): Promise<AIChatMessage> {
+    const row: AIChatMessage = {
+      attachments: null,
+      ...message,
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+    };
+    db.insert(schema.aiChatMessages).values(row).run();
+    return (await this.getChatMessage(row.id))!;
   }
-
-  async getScanResults(): Promise<any[]> {
-    // Mock implementation - these tables don't exist in current schema
-    return [];
-  }
-
-  async createScanResult(scan: any): Promise<any> {
-    // Mock implementation
-    return { id: crypto.randomUUID(), ...scan, startTime: new Date() };
+  async deleteChatMessage(id: string): Promise<boolean> {
+    return db.delete(schema.aiChatMessages).where(eq(schema.aiChatMessages.id, id)).run().changes > 0;
   }
 
-  async getCveResults(): Promise<any[]> {
-    // Mock implementation
-    return [];
+  // Classifiers
+  async getAllClassifiers(): Promise<Classifier[]> {
+    return db.select().from(schema.classifiers).all();
   }
-
-  async createCveResult(cve: any): Promise<any> {
-    // Mock implementation
-    return { id: crypto.randomUUID(), ...cve, createdAt: new Date() };
+  async getClassifier(id: string): Promise<Classifier | undefined> {
+    return db.select().from(schema.classifiers).where(eq(schema.classifiers.id, id)).get();
   }
-
-  async getAuditLogs(): Promise<any[]> {
-    // Mock implementation - using activity logs instead
-    return this.getActivityLogs();
+  async createClassifier(classifier: InsertClassifier): Promise<Classifier> {
+    const row: Classifier = {
+      status: "active",
+      trainingDataSize: 0,
+      lastTrainedAt: null,
+      description: null,
+      ...classifier,
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+    };
+    db.insert(schema.classifiers).values(row).run();
+    return (await this.getClassifier(row.id))!;
   }
-
-  async createAuditLog(log: any): Promise<any> {
-    // Mock implementation - using activity logs instead
-    return this.createActivityLog(log);
+  async updateClassifier(id: string, classifier: Partial<InsertClassifier>): Promise<Classifier | undefined> {
+    if (definedKeys(classifier).length > 0) {
+      db.update(schema.classifiers).set(classifier).where(eq(schema.classifiers.id, id)).run();
+    }
+    return this.getClassifier(id);
+  }
+  async deleteClassifier(id: string): Promise<boolean> {
+    return db.delete(schema.classifiers).where(eq(schema.classifiers.id, id)).run().changes > 0;
   }
 }
 
-// Export singleton instance
 export const storage = new SqliteStorage();

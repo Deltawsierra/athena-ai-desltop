@@ -65,3 +65,15 @@ docs/archive/
 
 # IDE junk
 .vs/
+
+# Local database (never commit real data)
+athena.db
+athena.db-shm
+athena.db-wal
+
+# Pasted terminal logs and scratch notes (images the app imports stay tracked)
+attached_assets/*.txt
+attached_assets/image_*.png
+
+# Session secret
+session-secret

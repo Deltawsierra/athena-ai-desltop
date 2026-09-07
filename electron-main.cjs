@@ -1,402 +1,278 @@
-const { app, BrowserWindow, Menu, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, Menu, shell, net, dialog } = require('electron');
 const path = require('path');
-// Simple check for development mode - electron-is-dev is ESM-only
-const isDev = process.env.NODE_ENV !== 'production';
 const fs = require('fs');
-const { pathToFileURL } = require('url');
 
-// Keep a global reference of the window object
+// `app.isPackaged` is the only reliable signal: an installed app never sets
+// NODE_ENV, so the old `NODE_ENV !== 'production'` check made every shipped
+// build run in development mode.
+const isDev = !app.isPackaged;
+
+const SERVER_PORT = process.env.PORT || '5000';
+const SERVER_ORIGIN = `http://127.0.0.1:${SERVER_PORT}`;
+// The renderer loads from the bundled server, so page and API share an
+// origin. Serving the page from a custom app:// scheme made every API call
+// cross-site: the session cookie could not travel, the Content-Security-Policy
+// had to name a second host, and the scheme needed its own file handler.
+const APP_ORIGIN = SERVER_ORIGIN;
+
 let mainWindow;
-let serverProcess;
+let devServerProcess;
 
-// Security warnings are no longer suppressed since we've fixed the issues
-// The app now uses strict CSP without 'unsafe-eval'
-
-// Register custom protocol scheme before app is ready
-protocol.registerSchemesAsPrivileged([
-  { 
-    scheme: 'app', 
-    privileges: { 
-      secure: true, 
-      standard: true, 
-      supportFetchAPI: true,
-      corsEnabled: true 
-    } 
-  }
-]);
-
-// Enable live reload for Electron in development
-if (isDev) {
+/**
+ * Report a fatal startup problem and exit.
+ *
+ * showErrorBox blocks until the user dismisses it, so calling app.quit() after
+ * it meant the quit never ran on an unattended machine: the process stayed
+ * resident with no window and no way to tell what had happened. app.exit ends
+ * it regardless.
+ */
+function fail(title, message) {
+  console.error(`[electron] ${title}: ${message}`);
   try {
-    require('electron-reload')(__dirname, {
-      electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
-      hardResetMethod: 'exit'
-    });
-  } catch (err) {
-    console.log('electron-reload not available in production');
+    dialog.showErrorBox(title, message);
+  } catch {
+    // No display, or too early for a dialog. The log line above still stands.
   }
+  app.exit(1);
 }
 
+/**
+ * Starts the API. In a packaged app the bundled CommonJS server is required
+ * in-process; in development we spawn `npm run dev` for hot reload.
+ */
 async function startExpressServer() {
-    // In production, the server is bundled with the app
-    // In development, we start the existing server
-    if (!isDev) {
-        try {
-            // Set environment for production server
-            process.env.NODE_ENV = 'production';
-            process.env.USE_SQLITE = 'true';
+  if (!isDev) {
+    // The database and the session secret live in the per-user data directory,
+    // not next to the executable (which is read-only on most installs).
+    const userData = app.getPath('userData');
+    fs.mkdirSync(userData, { recursive: true });
+    process.env.ATHENA_USER_DATA = userData;
+    process.env.NODE_ENV = 'production';
+    process.env.PORT = SERVER_PORT;
+    process.env.HOST = '127.0.0.1';
 
-            const fs = require('fs');
-
-            // Load the CommonJS Electron server bundle
-            const electronServerPath = path.join(__dirname, 'dist', 'server-electron.cjs'); // <-- now .cjs
-            const fallbackServerPath = path.join(__dirname, 'dist', 'index.js');
-
-            if (fs.existsSync(electronServerPath)) {
-                console.log('Loading Electron server from:', electronServerPath);
-
-                try {
-                    // CJS bundle: just require it; it starts the Express server as a side effect
-                    require(electronServerPath);
-                    console.log('✅ Electron server started successfully');
-                } catch (requireErr) {
-                    console.error('Failed to load server module:', requireErr);
-                    throw requireErr;
-                }
-            } else if (fs.existsSync(fallbackServerPath)) {
-                console.warn('⚠️ Electron server bundle not found, falling back to regular build');
-                console.warn('This may fail - run: node build-electron-server.cjs');
-
-                require(fallbackServerPath);
-                console.log('Fallback server started (may have issues)');
-            } else {
-                const errorMsg =
-                    `Production server not found!\n\n` +
-                    `Please build the Electron server:\n` +
-                    `1. Run: node build-electron-server.cjs\n` +
-                    `2. Then run: npx vite build\n\n` +
-                    `Looking for:\n- ${electronServerPath}`;
-
-                console.error(errorMsg);
-                const { dialog } = require('electron');
-                dialog.showErrorBox('Athena AI - Build Required', errorMsg);
-                app.quit();
-                throw new Error(errorMsg);
-            }
-        } catch (err) {
-            console.error('Failed to start production server:', err);
-            const { dialog } = require('electron');
-            dialog.showErrorBox('Athena AI - Startup Error', `Failed to start server:\n${err.message}`);
-            app.quit();
-            throw err;
-        }
-    } else {
-        // In development, we can use the existing npm run dev setup
-        const { spawn } = require('child_process');
-        serverProcess = spawn('npm', ['run', 'dev'], {
-            shell: true,
-            env: {
-                ...process.env,
-                ELECTRON_RUN_AS_NODE: '1',
-                USE_SQLITE: 'true',
-                NODE_ENV: 'development',
-            },
-            stdio: 'inherit',
-        });
+    const serverPath = path.join(__dirname, 'dist', 'server-electron.cjs');
+    if (!fs.existsSync(serverPath)) {
+      const message =
+        'The application server bundle is missing.\n\n' +
+        'Build it with:\n  npm run build\n\n' +
+        `Expected at:\n${serverPath}`;
+      fail('Athena AI cannot start', message);
+      throw new Error(message);
     }
 
-    // Wait a bit for the server to start
-    return new Promise((resolve) => setTimeout(resolve, 3000));
+    try {
+      require(serverPath);
+    } catch (err) {
+      fail('Athena AI cannot start', `The server failed to start:\n${err.message}`);
+      throw err;
+    }
+  } else {
+    const { spawn } = require('child_process');
+    devServerProcess = spawn('npm', ['run', 'dev'], {
+      shell: true,
+      env: { ...process.env, NODE_ENV: 'development' },
+      stdio: 'inherit',
+    });
+  }
+
+  await waitForServer();
 }
 
+/** Polls the health endpoint instead of guessing with a fixed delay. */
+async function waitForServer(timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await net.fetch(`${SERVER_ORIGIN}/health`);
+      if (res.ok) return;
+    } catch (err) {
+      // Not listening yet. Log the reason once so a poll that can never
+      // succeed is distinguishable from one that is merely early: a missing
+      // module here failed silently every time and looked like a dead server.
+      if (!waitForServer.reported) {
+        waitForServer.reported = true;
+        console.log(`[electron] waiting for the server: ${err.message}`);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`The application server did not respond at ${SERVER_ORIGIN} within ${timeoutMs}ms`);
+}
 
+function buildMenu() {
+  const fileSubmenu = [
+    { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => mainWindow && mainWindow.reload() },
+  ];
+  if (isDev) {
+    fileSubmenu.push({
+      label: 'Toggle Developer Tools',
+      accelerator: 'CmdOrCtrl+Shift+I',
+      click: () => mainWindow && mainWindow.webContents.toggleDevTools(),
+    });
+  }
+  fileSubmenu.push({ type: 'separator' }, { role: 'quit' });
 
-function createWindow() {
-  // Create the browser window
-  mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 768,
-    icon: path.join(__dirname, 'assets/icon.png'), // Add an icon later
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'electron-preload.cjs'),
-      // SECURITY: Always enable webSecurity in production
-      // In development, we keep it enabled for security testing
-      webSecurity: true,  // Critical: Must be true in production for security
-      sandbox: true,      // Enable sandboxing for additional security
-      allowRunningInsecureContent: false
-    },
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    backgroundColor: '#0a0a0a',
-    show: false // Don't show until ready
-  });
-
-  // Create app menu
   const template = [
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'Reload',
-          accelerator: 'CmdOrCtrl+R',
-          click: () => mainWindow.reload()
-        },
-        {
-          label: 'Toggle Developer Tools',
-          accelerator: isDev ? 'CmdOrCtrl+Shift+I' : '',
-          click: () => mainWindow.webContents.toggleDevTools()
-        },
-        { type: 'separator' },
-        {
-          label: 'Exit',
-          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
-          click: () => app.quit()
-        }
-      ]
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', selector: 'undo:' },
-        { label: 'Redo', accelerator: 'Shift+CmdOrCtrl+Z', selector: 'redo:' },
-        { type: 'separator' },
-        { label: 'Cut', accelerator: 'CmdOrCtrl+X', selector: 'cut:' },
-        { label: 'Copy', accelerator: 'CmdOrCtrl+C', selector: 'copy:' },
-        { label: 'Paste', accelerator: 'CmdOrCtrl+V', selector: 'paste:' },
-        { label: 'Select All', accelerator: 'CmdOrCtrl+A', selector: 'selectAll:' }
-      ]
-    },
+    { label: 'File', submenu: fileSubmenu },
+    { role: 'editMenu' },
     {
       label: 'View',
       submenu: [
-        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => mainWindow.webContents.setZoomLevel(0) },
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => {
-          const currentZoom = mainWindow.webContents.getZoomLevel();
-          mainWindow.webContents.setZoomLevel(currentZoom + 1);
-        }},
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => {
-          const currentZoom = mainWindow.webContents.getZoomLevel();
-          mainWindow.webContents.setZoomLevel(currentZoom - 1);
-        }},
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
         { type: 'separator' },
-        { label: 'Toggle Fullscreen', accelerator: 'F11', click: () => {
-          mainWindow.setFullScreen(!mainWindow.isFullScreen());
-        }}
-      ]
+        { role: 'togglefullscreen' },
+      ],
     },
     {
       label: 'Help',
       submenu: [
         {
           label: 'About Athena AI',
-          click: () => {
-            const { dialog } = require('electron');
+          click: () =>
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'About Athena AI',
               message: 'Athena AI - Cybersecurity Intelligence Platform',
-              detail: 'Version 1.0.0\n\nA JARVIS-inspired cybersecurity dashboard with advanced AI capabilities.',
-              buttons: ['OK']
-            });
-          }
-        }
-      ]
-    }
+              detail: `Version ${app.getVersion()}`,
+              buttons: ['OK'],
+            }),
+        },
+      ],
+    },
   ];
 
-  // macOS specific menu adjustments
   if (process.platform === 'darwin') {
-    template.unshift({
-      label: app.getName(),
-      submenu: [
-        { label: 'About ' + app.getName(), selector: 'orderFrontStandardAboutPanel:' },
-        { type: 'separator' },
-        { label: 'Services', submenu: [] },
-        { type: 'separator' },
-        { label: 'Hide ' + app.getName(), accelerator: 'Cmd+H', selector: 'hide:' },
-        { label: 'Hide Others', accelerator: 'Cmd+Shift+H', selector: 'hideOtherApplications:' },
-        { label: 'Show All', selector: 'unhideAllApplications:' },
-        { type: 'separator' },
-        { label: 'Quit', accelerator: 'Cmd+Q', click: () => app.quit() }
-      ]
-    });
+    template.unshift({ role: 'appMenu' });
   }
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 768,
+    icon: path.join(__dirname, 'build', 'icon.ico'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'electron-preload.cjs'),
+      webSecurity: true,
+      sandbox: true,
+      allowRunningInsecureContent: false,
+    },
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    backgroundColor: '#0a0a0a',
+    show: false,
+  });
 
-  // Load the app - use custom protocol in production
-  const startUrl = isDev 
-    ? 'http://localhost:5000'  // Development: use Vite dev server for HMR
-    : 'app://athena/index.html';  // Production: use custom protocol
-  
-  mainWindow.loadURL(startUrl);
+  buildMenu();
 
-  // Open DevTools in development
+  // Content Security Policy. `file:` is deliberately absent: everything the
+  // renderer needs is served over app:// or from the local API.
+  const pageOrigin = `'self' ${SERVER_ORIGIN}`;
+  const cspPolicy = [
+    `default-src ${pageOrigin}`,
+    `script-src ${pageOrigin}`,
+    `style-src ${pageOrigin} 'unsafe-inline'`,
+    `font-src ${pageOrigin} data:`,
+    `img-src ${pageOrigin} data: blob:`,
+    // Host-source matching is textual, so this has to name exactly what the
+    // client fetches. It listed only 127.0.0.1 while the client called
+    // localhost, which would have blocked every API call in the packaged app.
+    `connect-src 'self' ${SERVER_ORIGIN} http://localhost:${SERVER_PORT} ws://127.0.0.1:${SERVER_PORT} ws://localhost:${SERVER_PORT}`,
+    `object-src 'none'`,
+    `base-uri 'none'`,
+    `frame-ancestors 'none'`,
+  ].join('; ');
+
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [cspPolicy] },
+    });
+  });
+
+  // Open external links in the real browser, never in an app window.
+  // (`new-window` was removed in Electron 22; this is its replacement.)
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  // Block in-page navigation away from the app's own origins.
+  // Block in-page navigation away from the app's own origins. Comparing string
+  // prefixes let "http://127.0.0.1:5000@evil.com/" through, because the part
+  // that looks like the allowed origin is userinfo, not the host.
+  const allowedOrigins = [SERVER_ORIGIN, `http://localhost:${SERVER_PORT}`];
+
+  const blockForeignNavigation = (event, url) => {
+    let origin;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      event.preventDefault();
+      return;
+    }
+    if (!allowedOrigins.includes(origin)) {
+      event.preventDefault();
+    }
+  };
+
+  mainWindow.webContents.on('will-navigate', blockForeignNavigation);
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    blockForeignNavigation(event, event.url);
+  });
+  mainWindow.webContents.on('will-redirect', blockForeignNavigation);
+
+  // Load the root, not /index.html: the client router matches on the pathname,
+  // and "/index.html" matched no route, which is why the packaged app opened
+  // on the 404 screen.
+  mainWindow.loadURL(`${SERVER_ORIGIN}/`);
+
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }
 
-  // Show window when ready
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
-
-  // Handle window closed
+  mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-
-  // Handle external links
-  mainWindow.webContents.on('new-window', (event, url) => {
-    event.preventDefault();
-    shell.openExternal(url);
-  });
-  
-  // Configure Content Security Policy for ALL modes to prevent security warnings
-  // Build CSP based on whether we're in dev or prod
-  const cspSources = isDev 
-    ? "'self' http://localhost:5000"  // Dev: localhost sources
-    : "'self' app://athena file:";    // Prod: app protocol and file sources
-  
-  const cspPolicy = 
-    `default-src ${cspSources}; ` +
-    `script-src ${cspSources}; ` +  // No 'unsafe-eval' to prevent warnings
-    `style-src ${cspSources} 'unsafe-inline'; ` +  // Removed external fonts
-    `font-src ${cspSources} data:; ` +              // Only local fonts
-    `img-src ${cspSources} data: blob:; ` +
-    `connect-src 'self' http://localhost:5000 ws://localhost:5000`;
-  
-  // Apply CSP to all responses regardless of dev/prod mode
-  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [cspPolicy]
-      }
-    });
-  });
-  
-  // Configure CORS headers for API requests
-  if (!isDev) {
-    // Allow API requests from app:// to http://localhost:5000
-    mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
-      { urls: ['http://localhost:5000/*'] },
-      (details, callback) => {
-        // Ensure the Origin header is set properly for CORS
-        details.requestHeaders['Origin'] = 'app://athena';
-        callback({ requestHeaders: details.requestHeaders });
-      }
-    );
-  }
 }
 
-// Register the custom protocol handler
-function registerCustomProtocol() {
-  protocol.registerFileProtocol('app', (request, callback) => {
-    try {
-      // Parse the URL properly
-      const parsedUrl = new URL(request.url);
-      
-      // Get the pathname and decode it (handles %20 etc)
-      let pathname = decodeURIComponent(parsedUrl.pathname);
-      
-      // Remove leading slash if present
-      if (pathname.startsWith('/')) {
-        pathname = pathname.slice(1);
-      }
-      
-      // Default to index.html if no path specified
-      if (pathname === '' || pathname === 'athena' || pathname === 'athena/') {
-        pathname = 'index.html';
-      }
-      
-      // Define the allowed public directory with normalized separator
-      const publicDir = path.resolve(__dirname, 'dist', 'public');
-      
-      // Construct and normalize the full file path
-      const requestedPath = path.resolve(publicDir, pathname);
-      
-      // SECURITY: Ensure the resolved path is within the public directory
-      // Use path.relative to check if path escapes the public directory
-      const relativePath = path.relative(publicDir, requestedPath);
-      
-      // If relative path starts with .. or is absolute, it's trying to escape
-      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-        console.error(`[Security] Path traversal attempt blocked: ${request.url} -> ${relativePath}`);
-        callback({ error: -6 }); // FILE_NOT_FOUND
-        return;
-      }
-      
-      // Additional check: ensure the normalized path is actually inside publicDir
-      const normalizedPublic = path.normalize(publicDir + path.sep);
-      const normalizedRequest = path.normalize(requestedPath + path.sep);
-      if (!normalizedRequest.startsWith(normalizedPublic)) {
-        console.error(`[Security] Path escape attempt blocked: ${request.url}`);
-        callback({ error: -6 }); // FILE_NOT_FOUND  
-        return;
-      }
-      
-      // Check if the file exists and is a file (not directory)
-      if (fs.existsSync(requestedPath) && fs.statSync(requestedPath).isFile()) {
-        callback({ path: requestedPath });
-      } else {
-        // For client-side routing, serve index.html for non-existent paths
-        const indexPath = path.join(publicDir, 'index.html');
-        if (fs.existsSync(indexPath)) {
-          callback({ path: indexPath });
-        } else {
-          console.error(`[Protocol] File not found: ${requestedPath}`);
-          callback({ error: -6 }); // FILE_NOT_FOUND
-        }
-      }
-    } catch (err) {
-      console.error('[Protocol] Error handling request:', err);
-      callback({ error: -6 }); // FILE_NOT_FOUND
-    }
-  });
-}
-
-// This method will be called when Electron has finished initialization
+/**
+ * Serves the built client over app://, confined to dist/public, with an
+ * index.html fallback so client-side routes resolve.
+ */
 app.whenReady().then(async () => {
-  // Register the custom protocol for production
-  if (!isDev) {
-    registerCustomProtocol();
+  try {
+    await startExpressServer();
+  } catch (err) {
+    fail('Athena AI cannot start', `The application server did not come up:\n${err.message}`);
+    return;
   }
-  
-  // Start Express server first
-  console.log('Starting Express server...');
-  await startExpressServer();
-  
-  // Then create the window
-  console.log('Creating Electron window...');
   createWindow();
 });
 
-// Quit when all windows are closed
 app.on('window-all-closed', () => {
-  // On macOS, keep app running even when all windows are closed
   if (process.platform !== 'darwin') {
-    if (serverProcess) {
-      serverProcess.kill();
-    }
     app.quit();
   }
 });
 
 app.on('activate', () => {
-  // On macOS, re-create window when dock icon is clicked
   if (mainWindow === null) {
     createWindow();
   }
 });
 
-// Handle app termination
 app.on('before-quit', () => {
-  if (serverProcess) {
-    serverProcess.kill();
+  if (devServerProcess) {
+    devServerProcess.kill();
   }
 });

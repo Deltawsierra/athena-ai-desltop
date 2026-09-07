@@ -1,124 +1,38 @@
-import express, { type Request, Response, NextFunction } from "express";
-import session from "express-session";
-import { registerRoutes } from "./routes";
+import { createServer } from "http";
+import { createApp, errorHandler } from "./app";
 import { setupVite, serveStatic, log } from "./vite";
 import { initializeDefaultData } from "./init-data";
 
-const app = express();
-
-declare module 'http' {
-  interface IncomingMessage {
-    rawBody: unknown
-  }
-}
-
-// Configure session for desktop app authentication
-const isDesktop = process.env.ELECTRON_RUN_AS_NODE === '1' || process.env.USE_SQLITE === 'true';
-
-if (isDesktop) {
-  // For desktop app, use memory-based sessions (since it's single-user)
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'athena-ai-desktop-secret-key-2024',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: false, // Desktop app doesn't use HTTPS
-      httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    }
-  }));
-}
-
-app.use(express.json({
-  verify: (req, _res, buf) => {
-    req.rawBody = buf;
-  }
-}));
-app.use(express.urlencoded({ extended: false }));
-
-// Configure CORS for Electron custom protocol
-app.use((req, res, next) => {
-  // Allow requests from Electron app using custom protocol
-  const origin = req.headers.origin;
-  if (origin === 'app://athena' || origin === 'http://localhost:5000') {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-    return;
-  }
-  
-  next();
-});
-
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
-
 (async () => {
-  // Initialize default data for first-time setup (both desktop and web)
+  const app = createApp({ deferErrorHandler: true });
   await initializeDefaultData();
-  
-  const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+  const server = createServer(app);
 
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Vite (dev) or static (prod) is registered after the API so its catch-all
+  // never shadows /api routes. The error handler goes last.
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
+  app.use(errorHandler);
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
+  // Bind to loopback by default. Set HOST=0.0.0.0 deliberately to expose the
+  // server on the network; there is no reason to do so for a desktop install.
+  const port = parseInt(process.env.PORT || "5000", 10);
+  const host = process.env.HOST || "127.0.0.1";
+
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      log(`port ${port} is already in use`);
+    } else {
+      log(`server error: ${err.message}`);
+    }
+    process.exit(1);
+  });
+
+  server.listen({ port, host }, () => {
+    log(`serving on http://${host}:${port}`);
   });
 })();

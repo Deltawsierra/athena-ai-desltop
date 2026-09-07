@@ -31,7 +31,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   handleReset = () => {
     this.setState({ hasError: false, error: undefined, errorInfo: undefined });
     // Use Electron reload if available, otherwise use window reload
-    if (window.location.protocol === 'file:') {
+    if (true) {
       window.location.reload();
     } else {
       window.location.href = '/';

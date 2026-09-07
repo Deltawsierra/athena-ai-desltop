@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface NavigationProps {
-  onLogout?: () => void;
-  isAuthenticated?: boolean;
+  onLogout: () => void;
+  /** Admin-only menu entries are hidden for everyone else. */
+  isAdmin: boolean;
+  username: string;
 }
 
 const testsDropdownItems = [
@@ -22,18 +24,20 @@ const testsDropdownItems = [
   { path: "/documents", label: "Documents", icon: FolderOpen },
   { path: "/clients", label: "Clients", icon: Users },
   { path: "/classifiers", label: "Classifiers", icon: Brain },
-  { path: "/audit-logs", label: "Audit Logs", icon: FileText },
+  // AI Health and AI Chat are open to any signed-in user, and used to be linked
+  // only from the admin menu: two working screens with no way to reach them.
+  { path: "/ai-health", label: "AI Health", icon: Activity },
+  { path: "/ai-chat", label: "AI Chat", icon: MessageSquare },
 ];
 
 const adminDropdownItems = [
   { path: "/admin", label: "User Management", icon: Users },
-  { path: "/ai-health", label: "AI Health", icon: Activity },
   { path: "/ai-control", label: "AI Control Panel", icon: Settings },
-  { path: "/ai-chat", label: "AI Chat", icon: MessageSquare },
+  { path: "/audit-logs", label: "Audit Logs", icon: FileText },
   { path: "/deletion", label: "Deletion Management", icon: Trash2 },
 ];
 
-export default function Navigation({ onLogout, isAuthenticated = true }: NavigationProps) {
+export default function Navigation({ onLogout, isAdmin, username }: NavigationProps) {
   const [location] = useLocation();
 
   const isTestsMenuActive = testsDropdownItems.some(item => location === item.path);
@@ -143,7 +147,8 @@ export default function Navigation({ onLogout, isAuthenticated = true }: Navigat
                 </Button>
               </Link>
 
-              {/* Admin Dropdown */}
+              {/* Admin Dropdown (admins only) */}
+              {isAdmin && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -185,29 +190,25 @@ export default function Navigation({ onLogout, isAuthenticated = true }: Navigat
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
+              )}
             </nav>
           </div>
 
           <div className="flex items-center gap-3">
+            <span className="hidden sm:inline text-sm text-muted-foreground" data-testid="text-username">
+              {username}
+            </span>
             <ThemeToggle />
-            {isAuthenticated ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onLogout}
-                className="gap-2"
-                data-testid="button-logout"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </Button>
-            ) : (
-              <Link href="/login">
-                <Button variant="default" size="sm" data-testid="link-login">
-                  Sign In
-                </Button>
-              </Link>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onLogout}
+              className="gap-2"
+              data-testid="button-logout"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
           </div>
         </div>
       </div>
