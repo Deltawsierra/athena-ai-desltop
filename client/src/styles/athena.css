@@ -1,0 +1,184 @@
+/*
+ * Athena's visual system.
+ *
+ * The palette is built around one idea: this is an instrument, not a game.
+ * Deep near-black grounds so the data is the brightest thing on screen, a
+ * single cyan primary that means "the system is speaking", and severity
+ * colours that are only ever used for severity -- never for decoration, so
+ * that a red pixel always means something.
+ *
+ * Everything is defined on top of the existing shadcn token names, so the
+ * components already built keep working while looking entirely different.
+ */
+
+.dark {
+  /* Ground. Not pure black: a slight blue cast reads as depth on an OLED
+     panel and stops large fills looking like a dead pixel field. */
+  --background: 224 47% 4%;
+  --surface-0: 225 40% 6%;
+  --surface-1: 224 36% 9%;
+  --surface-2: 223 32% 13%;
+
+  --card: 224 36% 8%;
+  --card-border: 200 60% 20%;
+  --border: 220 25% 16%;
+
+  --foreground: 190 30% 96%;
+  --muted-foreground: 210 16% 62%;
+
+  /* The one accent that means "live". Used for the active state, the focus
+     ring, and the leading edge of anything animating. */
+  --primary: 184 92% 52%;
+  --primary-foreground: 224 47% 6%;
+
+  --accent-violet: 268 88% 68%;
+  --accent-amber: 38 96% 60%;
+
+  /* Severity. These five are reserved. A component that needs a colour and
+     is not expressing severity takes a surface or the primary. */
+  --sev-critical: 348 90% 60%;
+  --sev-high: 14 92% 58%;
+  --sev-medium: 38 96% 60%;
+  --sev-low: 190 85% 55%;
+  --sev-info: 215 20% 55%;
+
+  --chart-1: 184 92% 52%;
+  --chart-2: 268 88% 68%;
+  --chart-3: 38 96% 60%;
+  --chart-4: 348 90% 60%;
+  --chart-5: 158 78% 48%;
+
+  --ring: 184 92% 52%;
+
+  /* Depth is carried by light, not by borders. */
+  --glow-primary: 0 0 24px hsl(184 92% 52% / 0.35);
+  --glow-critical: 0 0 24px hsl(348 90% 60% / 0.4);
+  --edge: inset 0 1px 0 hsl(0 0% 100% / 0.06);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Surfaces                                                                */
+/* ---------------------------------------------------------------------- */
+
+.athena-panel {
+  position: relative;
+  background: linear-gradient(
+    hsl(var(--surface-1) / 0.72),
+    hsl(var(--surface-0) / 0.86)
+  );
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  box-shadow: var(--edge), 0 18px 40px -24px hsl(224 60% 2% / 0.9);
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+
+/* One hairline of primary along the top edge. It is the cheapest way to make
+   a rectangle look engineered rather than drawn, and it costs no layout. */
+.athena-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--primary) / 0.55) 22%,
+    hsl(var(--primary) / 0.55) 78%,
+    transparent
+  );
+  border-radius: 14px 14px 0 0;
+  pointer-events: none;
+}
+
+.athena-panel--critical {
+  border-color: hsl(var(--sev-critical) / 0.42);
+  box-shadow: var(--edge), 0 0 32px -12px hsl(var(--sev-critical) / 0.5);
+}
+
+.athena-panel--critical::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--sev-critical) / 0.75) 20%,
+    hsl(var(--sev-critical) / 0.75) 80%,
+    transparent
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Type                                                                    */
+/* ---------------------------------------------------------------------- */
+
+.athena-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Numbers that update in place must not reflow the layout under them. */
+.athena-figure {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.athena-mono {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Motion                                                                  */
+/* ---------------------------------------------------------------------- */
+
+@keyframes athena-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.athena-scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.athena-scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--primary) / 0.1),
+    transparent
+  );
+  animation: athena-sweep 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes athena-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.athena-live {
+  animation: athena-pulse 2s ease-in-out infinite;
+}
+
+/* Every animation here is decorative. Somebody who has asked their operating
+   system to stop moving things has asked this too. */
+@media (prefers-reduced-motion: reduce) {
+  .athena-scanline::after,
+  .athena-live {
+    animation: none;
+  }
+}

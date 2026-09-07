@@ -3,10 +3,10 @@ import { queryClient, onUnauthorized } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 
 import Navigation from "@/components/Navigation";
-import HolographicBackground from "@/components/HolographicBackground";
+import WebGLBoundary from "@/components/three/WebGLBoundary";
 import MagneticCursor from "@/components/MagneticCursor";
 import CursorGlow from "@/components/CursorGlow";
 import SmoothScroll from "@/components/SmoothScroll";
@@ -29,6 +29,8 @@ import NotFound from "@/pages/not-found";
 import { checkAuth, logout as apiLogout, isAdmin } from "@/utils/auth";
 import { applyStoredTheme } from "@/lib/theme";
 import type { PublicUser } from "@shared/schema";
+
+const AmbientField = lazy(() => import("@/components/three/AmbientField"));
 
 type AuthStatus = "loading" | "authenticated" | "anonymous";
 
@@ -144,7 +146,13 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <SmoothScroll>
-            <HolographicBackground />
+            {/* The ambient layer is decorative, so a machine that cannot give
+                it a WebGL context loses the gradient and keeps the app. */}
+            <WebGLBoundary label="ambient field" fallback={null}>
+              <Suspense fallback={null}>
+                <AmbientField />
+              </Suspense>
+            </WebGLBoundary>
             <MagneticCursor />
             <CursorGlow />
             <Toaster />
