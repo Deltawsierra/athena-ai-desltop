@@ -173,6 +173,37 @@ function createSchema(handle: DatabaseType): void {
       ON findings(client_id, fingerprint);
     CREATE INDEX IF NOT EXISTS idx_findings_client_id ON findings(client_id);
     CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
+
+    -- What each run observed, kept for ever. A seen value of 0 means the run
+    -- went to the target and did not report the finding, which is not the same
+    -- as fixed and closes nothing.
+    CREATE TABLE IF NOT EXISTS finding_sightings (
+      id TEXT PRIMARY KEY,
+      finding_id TEXT NOT NULL,
+      run_id TEXT,
+      test_id TEXT,
+      seen INTEGER NOT NULL,
+      observed_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sightings_finding ON finding_sightings(finding_id);
+    -- One observation per finding per run, so a poll that fires twice on the
+    -- same run does not write the same fact again.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_sightings_finding_run
+      ON finding_sightings(finding_id, run_id);
+
+    -- Every retest as its own record. The answer given in March is not
+    -- replaced by the answer given in June.
+    CREATE TABLE IF NOT EXISTS finding_checks (
+      id TEXT PRIMARY KEY,
+      finding_id TEXT NOT NULL,
+      verdict TEXT NOT NULL,
+      detail TEXT,
+      run_id TEXT,
+      inventory_digest TEXT,
+      checked_by TEXT,
+      checked_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_checks_finding ON finding_checks(finding_id);
     CREATE INDEX IF NOT EXISTS idx_tests_site_id ON tests(site_id);
 
     CREATE TABLE IF NOT EXISTS documents (

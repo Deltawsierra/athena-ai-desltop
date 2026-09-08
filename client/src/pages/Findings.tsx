@@ -16,7 +16,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CircleCheck, CircleDot, Eye, ShieldQuestion, UserRound } from "lucide-react";
+import { CircleCheck, CircleDot, Eye, History, ShieldQuestion, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,8 @@ interface FindingRow {
   fixedByRunId: string | null;
   fixedVerdict: string | null;
   reopenedAt: string | null;
+  sightings: Array<{ id: string; runId: string | null; seen: boolean; observedAt: string }>;
+  checks: Array<{ id: string; verdict: string; detail: string | null; runId: string | null; checkedAt: string }>;
 }
 
 interface FindingsView {
@@ -236,6 +238,61 @@ export default function Findings() {
                         <p className="mt-3 border-t border-border/60 pt-3 text-sm text-muted-foreground">
                           {finding.statusNote}
                         </p>
+                      )}
+
+                      {/* Every run that looked, and every retest, in order.
+                          This is what a client asking "is what you found last
+                          time gone?" is actually owed: the observations, not a
+                          status field whose history was overwritten. A run
+                          that did not report something is shown as exactly
+                          that -- never as a fix, because a scanner switched
+                          off produces the same silence. */}
+                      {(finding.sightings.length > 0 || finding.checks.length > 0) && (
+                        <div
+                          className="mt-3 border-t border-border/60 pt-3"
+                          data-testid={`history-${finding.id}`}
+                        >
+                          <div className="athena-label mb-2 flex items-center gap-1">
+                            <History className="h-3 w-3" /> Run by run
+                          </div>
+                          <ul className="space-y-1">
+                            {finding.sightings.map((one) => (
+                              <li key={one.id} className="athena-mono text-xs">
+                                <span style={{ color: one.seen ? "hsl(var(--sev-critical))" : "hsl(var(--gold))" }}>
+                                  {one.seen ? "reported" : "not reported"}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {" "}· scan {(one.runId ?? "unknown").slice(0, 8)} ·{" "}
+                                  {new Date(one.observedAt).toLocaleDateString()}
+                                </span>
+                                {!one.seen && (
+                                  <span className="text-muted-foreground">
+                                    {" "}— the scan did not report it. That is not proof it is gone.
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                            {finding.checks.map((one) => (
+                              <li key={one.id} className="athena-mono text-xs">
+                                <span
+                                  style={{
+                                    color: one.verdict === "closed"
+                                      ? "hsl(var(--primary))"
+                                      : one.verdict === "still_open"
+                                        ? "hsl(var(--sev-critical))"
+                                        : "hsl(var(--gold))",
+                                  }}
+                                >
+                                  retest {one.verdict}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {" "}· run {(one.runId ?? "unknown").slice(0, 8)} ·{" "}
+                                  {new Date(one.checkedAt).toLocaleDateString()}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
 
                       <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-border/60 pt-4">

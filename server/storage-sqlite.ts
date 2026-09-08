@@ -1,6 +1,6 @@
 import { db } from "./db-sqlite";
 import * as schema from "@shared/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import crypto from "crypto";
 import { randomUUID } from "crypto";
 import type { IStorage } from "./storage";
@@ -11,6 +11,7 @@ import type {
   Site, InsertSite,
   Test, InsertTest,
   Finding, InsertFinding,
+  FindingSighting, FindingCheck,
   Document, InsertDocument,
   ActivityLog, InsertActivityLog,
   AIHealthMetric, InsertAIHealthMetric,
@@ -223,6 +224,41 @@ export class SqliteStorage implements IStorage {
     db.insert(schema.findings).values(row).run();
     return row;
   }
+  async recordSighting(
+    findingId: string, runId: string | null, testId: string | null, seen: boolean,
+  ): Promise<void> {
+    // Idempotent per (finding, run): the status route can poll the same run
+    // more than once and must not write the same observation again.
+    const already = db.select().from(schema.findingSightings)
+      .where(and(
+        eq(schema.findingSightings.findingId, findingId),
+        runId === null
+          ? isNull(schema.findingSightings.runId)
+          : eq(schema.findingSightings.runId, runId),
+      )).get();
+    if (already) {
+      db.update(schema.findingSightings).set({ seen })
+        .where(eq(schema.findingSightings.id, already.id)).run();
+      return;
+    }
+    db.insert(schema.findingSightings).values({
+      id: randomUUID(), findingId, runId, testId, seen, observedAt: new Date(),
+    }).run();
+  }
+  async getSightings(findingId: string): Promise<FindingSighting[]> {
+    return db.select().from(schema.findingSightings)
+      .where(eq(schema.findingSightings.findingId, findingId)).all();
+  }
+  async recordCheck(check: Omit<FindingCheck, "id" | "checkedAt">): Promise<FindingCheck> {
+    const row: FindingCheck = { ...check, id: randomUUID(), checkedAt: new Date() };
+    db.insert(schema.findingChecks).values(row).run();
+    return row;
+  }
+  async getChecks(findingId: string): Promise<FindingCheck[]> {
+    return db.select().from(schema.findingChecks)
+      .where(eq(schema.findingChecks.findingId, findingId)).all();
+  }
+
   async updateFinding(id: string, patch: Partial<Finding>): Promise<Finding | undefined> {
     const { id: _ignored, ...fields } = patch;
     if (Object.keys(fields).length > 0) {

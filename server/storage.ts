@@ -4,6 +4,7 @@ import {
   type Site, type InsertSite,
   type Test, type InsertTest,
   type Finding, type InsertFinding,
+  type FindingSighting, type FindingCheck,
   type Document, type InsertDocument,
   type ActivityLog, type InsertActivityLog,
   type AIHealthMetric, type InsertAIHealthMetric,
@@ -63,6 +64,12 @@ export interface IStorage {
   findFindingByFingerprint(clientId: string, fingerprint: string): Promise<Finding | undefined>;
   createFinding(finding: InsertFinding): Promise<Finding>;
   updateFinding(id: string, finding: Partial<Finding>): Promise<Finding | undefined>;
+  /** What a run observed. Idempotent per (finding, run). */
+  recordSighting(findingId: string, runId: string | null, testId: string | null, seen: boolean): Promise<void>;
+  getSightings(findingId: string): Promise<FindingSighting[]>;
+  /** A retest, appended. Never replaces an earlier one. */
+  recordCheck(check: Omit<FindingCheck, "id" | "checkedAt">): Promise<FindingCheck>;
+  getChecks(findingId: string): Promise<FindingCheck[]>;
 
   // Documents
   getDocument(id: string): Promise<Document | undefined>;
@@ -336,6 +343,32 @@ export class MemStorage implements IStorage {
     const updated = { ...existing, ...patch, id: existing.id };
     this.findings.set(id, updated);
     return updated;
+  }
+
+  private sightings: FindingSighting[] = [];
+  private checks: FindingCheck[] = [];
+
+  async recordSighting(findingId: string, runId: string | null, testId: string | null, seen: boolean) {
+    // One observation per finding per run: a status poll that fires twice on
+    // the same run must not write the same fact twice.
+    const already = this.sightings.find(
+      (one) => one.findingId === findingId && one.runId === runId,
+    );
+    if (already) { already.seen = seen; return; }
+    this.sightings.push({
+      id: randomUUID(), findingId, runId, testId, seen, observedAt: new Date(),
+    });
+  }
+  async getSightings(findingId: string) {
+    return this.sightings.filter((one) => one.findingId === findingId);
+  }
+  async recordCheck(check: Omit<FindingCheck, "id" | "checkedAt">) {
+    const row: FindingCheck = { ...check, id: randomUUID(), checkedAt: new Date() };
+    this.checks.push(row);
+    return row;
+  }
+  async getChecks(findingId: string) {
+    return this.checks.filter((one) => one.findingId === findingId);
   }
 
   async createTest(insertTest: InsertTest): Promise<Test> {

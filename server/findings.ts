@@ -171,6 +171,17 @@ export interface IngestResult {
   /** Distinct issues in this scan. Lower than the raw result count by design. */
   distinct: number;
   raw: number;
+  /**
+   * Findings already on record at this target that this run did NOT report.
+   *
+   * Recorded, and deliberately not acted on. A run that does not report
+   * something is not a run that proved it gone: a scanner switched off, or a
+   * scan that stopped early, produces exactly the same silence. It is shown as
+   * its own thing so a client asking "is what you found in March gone?" gets
+   * the observations rather than an inference, and only a retest verdict of
+   * `closed` ever closes anything.
+   */
+  notSeen: number;
 }
 
 export interface IngestContext {
@@ -188,6 +199,10 @@ interface FindingStore {
   ): Promise<Finding | undefined>;
   createFinding(finding: Record<string, unknown>): Promise<Finding>;
   updateFinding(id: string, patch: Partial<Finding>): Promise<Finding | undefined>;
+  getFindingsByClient(clientId: string): Promise<Finding[]>;
+  recordSighting(
+    findingId: string, runId: string | null, testId: string | null, seen: boolean,
+  ): Promise<void>;
 }
 
 export async function ingest(
@@ -195,7 +210,9 @@ export async function ingest(
   results: unknown[],
   context: IngestContext,
 ): Promise<IngestResult> {
-  const result: IngestResult = { created: 0, updated: 0, reopened: 0, distinct: 0, raw: 0 };
+  const result: IngestResult = {
+    created: 0, updated: 0, reopened: 0, distinct: 0, raw: 0, notSeen: 0,
+  };
 
   // Fold within the scan first. One scan reports the same endpoint several
   // times when several payloads land, and writing each one would defeat the
@@ -214,11 +231,13 @@ export async function ingest(
   result.distinct = bySignature.size;
 
   const now = new Date();
+  const seenIds = new Set<string>();
+
   for (const [key, sighting] of Array.from(bySignature.entries())) {
     const existing = await store.findFindingByFingerprint(context.clientId, key);
 
     if (!existing) {
-      await store.createFinding({
+      const made = await store.createFinding({
         fingerprint: key,
         clientId: context.clientId,
         siteId: context.siteId,
@@ -233,6 +252,8 @@ export async function ingest(
         lastTestId: context.testId,
         lastRunId: context.runId,
       });
+      await store.recordSighting(made.id, context.runId, context.testId, true);
+      seenIds.add(made.id);
       result.created += 1;
       continue;
     }
@@ -261,8 +282,25 @@ export async function ingest(
           }
         : {}),
     });
+    await store.recordSighting(existing.id, context.runId, context.testId, true);
+    seenIds.add(existing.id);
     if (outcome === "reopened") result.reopened += 1;
     else result.updated += 1;
+  }
+
+  // And what this run did not report.
+  //
+  // Only findings at the target this run actually went to: a client with three
+  // sites, scanned on one of them, has learned nothing about the other two,
+  // and recording "not seen" against those would be a claim the run cannot
+  // support. Same reasoning as the compliance map's `not_run`.
+  if (context.target) {
+    for (const other of await store.getFindingsByClient(context.clientId)) {
+      if (seenIds.has(other.id)) continue;
+      if (other.target !== context.target) continue;
+      await store.recordSighting(other.id, context.runId, context.testId, false);
+      result.notSeen += 1;
+    }
   }
 
   return result;

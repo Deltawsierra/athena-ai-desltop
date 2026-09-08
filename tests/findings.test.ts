@@ -27,9 +27,19 @@ const place = (over: Partial<Sighting> = {}): Sighting => ({
 /** A store that behaves like the real one, in memory. */
 function store() {
   const rows = new Map<string, Finding>();
+  const sightings: Array<{ findingId: string; runId: string | null; seen: boolean }> = [];
   let next = 0;
   return {
     rows,
+    sightings,
+    async getFindingsByClient(clientId: string) {
+      return Array.from(rows.values()).filter((one) => one.clientId === clientId);
+    },
+    async recordSighting(findingId: string, runId: string | null, _testId: string | null, seen: boolean) {
+      const already = sightings.find((one) => one.findingId === findingId && one.runId === runId);
+      if (already) { already.seen = seen; return; }
+      sightings.push({ findingId, runId, seen });
+    },
     async findFindingByFingerprint(clientId: string, fp: string) {
       // Keyed on the customer, as the real store is.
       return Array.from(rows.values()).find(
@@ -157,6 +167,47 @@ describe("filing a scan's results", () => {
     // it beside an open finding would suggest the fix still holds.
     expect(row.fixedByRunId).toBeNull();
     expect(row.fixedVerdict).toBeNull();
+  });
+
+  it("records what a run did not report, without treating it as a fix", async () => {
+    // The case a client asks about: scanned in March, scanned again in June,
+    // and one of March's findings did not come back. That is an observation,
+    // not a verdict -- a scanner switched off produces the same silence -- so
+    // it is recorded and the finding stays exactly as it was.
+    const db = store();
+    const march = [
+      { type: "json_injection", severity: "low", evidence: { endpoint: "https://app.example/api" } },
+      { type: "open_redirect", severity: "medium", evidence: { endpoint: "https://app.example/go" } },
+    ];
+    await ingest(db, march, context);
+    expect(db.rows.size).toBe(2);
+
+    // June: only one of them comes back.
+    const june = await ingest(db, [march[0]], { ...context, testId: "t9", runId: "run-9" });
+    expect(june.updated).toBe(1);
+    expect(june.notSeen).toBe(1);
+
+    const missing = Array.from(db.rows.values()).find((one) => one.type === "open_redirect") as Finding;
+    // Recorded as not seen in that run...
+    expect(db.sightings.filter((one) => one.runId === "run-9" && !one.seen))
+      .toHaveLength(1);
+    // ...and still open, because nothing proved it gone.
+    expect(missing.status).toBe("open");
+    expect(missing.fixedAt).toBeNull();
+  });
+
+  it("does not claim a run saw anything about a target it never went to", async () => {
+    // A client with two sites, scanned on one. The other site's findings were
+    // not observed at all, and saying "not seen" about them would be a claim
+    // the run cannot support.
+    const db = store();
+    await ingest(db, [{ type: "ssrf", severity: "high", evidence: { endpoint: "https://one.example/x" } }],
+      { ...context, target: "https://one.example" });
+    const filed = await ingest(db, [{ type: "ssrf", severity: "high", evidence: { endpoint: "https://two.example/x" } }],
+      { ...context, target: "https://two.example", testId: "t8", runId: "run-8" });
+
+    expect(filed.created).toBe(1);
+    expect(filed.notSeen).toBe(0);
   });
 
   it("leaves an accepted risk accepted when it is seen again", async () => {

@@ -173,6 +173,57 @@ export const findings = sqliteTable("findings", {
   isSample: sample(),
 });
 
+/**
+ * Every time a run looked at a finding, and what it saw.
+ *
+ * One row per finding per run, kept for ever and never overwritten. This is
+ * what makes a second engagement a week later mean something: the client asks
+ * whether the things found in March are gone, and the answer is a record of
+ * what each run since then actually observed, rather than a status field whose
+ * history was thrown away every time it changed.
+ *
+ * `seen` has three readings and only three. True means the run reported this
+ * finding. False means the run went to this target and did not report it --
+ * which is NOT the same as fixed, and is deliberately not allowed to close
+ * anything: a scanner that was switched off, or a run that stopped early, also
+ * produces a finding nobody saw. Absence is evidence of absence only when
+ * something looked, and a scan cannot tell you it looked properly. Only a
+ * retest verdict of `closed` closes a finding.
+ */
+export const findingSightings = sqliteTable("finding_sightings", {
+  id: id(),
+  findingId: text("finding_id").notNull(),
+  /** The engine run. Null for a check that had none. */
+  runId: text("run_id"),
+  testId: text("test_id"),
+  /** Whether this run reported the finding. */
+  seen: bool("seen").notNull(),
+  observedAt: timestamp("observed_at").notNull(),
+});
+
+/**
+ * Every retest, kept as its own record.
+ *
+ * A retest is an independent question asked on a particular day, and the
+ * answer to the one asked in March is not replaced by the answer to the one
+ * asked in June. Each is stored with its own run and its own verdict so a
+ * client can be shown the sequence -- still_open, still_open, closed -- rather
+ * than only the last word.
+ */
+export const findingChecks = sqliteTable("finding_checks", {
+  id: id(),
+  findingId: text("finding_id").notNull(),
+  /** The engine's own word: closed | still_open | inconclusive. */
+  verdict: text("verdict").notNull(),
+  detail: text("detail"),
+  /** The run the retest performed, which is what makes the verdict checkable. */
+  runId: text("run_id"),
+  /** The detector set it ran with, so two verdicts can be compared fairly. */
+  inventoryDigest: text("inventory_digest"),
+  checkedBy: text("checked_by"),
+  checkedAt: timestamp("checked_at").notNull(),
+});
+
 export const documents = sqliteTable("documents", {
   id: id(),
   clientId: text("client_id").notNull(),
@@ -409,6 +460,8 @@ export type Site = typeof sites.$inferSelect;
 export type InsertTest = z.infer<typeof insertTestSchema>;
 export type Test = typeof tests.$inferSelect;
 export type InsertFinding = z.infer<typeof insertFindingSchema>;
+export type FindingSighting = typeof findingSightings.$inferSelect;
+export type FindingCheck = typeof findingChecks.$inferSelect;
 export type Finding = typeof findings.$inferSelect;
 
 /**

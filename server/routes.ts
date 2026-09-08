@@ -992,6 +992,17 @@ export function registerRoutes(app: Express): void {
                 ? { fixedAt: new Date(), fixedByRunId: result.runId, fixedVerdict: result.verdict }
                 : { fixedAt: null, fixedByRunId: null, fixedVerdict: null }),
             });
+            // Appended, never replaced. The answer given today does not erase
+            // the answer given last month: a client asking whether March's
+            // findings are gone is owed the sequence, not the last word.
+            await storage.recordCheck({
+              findingId: finding.id,
+              verdict: result.verdict,
+              detail: result.detail || decided.detail,
+              runId: result.runId,
+              inventoryDigest: result.inventoryDigest,
+              checkedBy: req.session.userId ?? null,
+            });
             applied = { findingId: finding.id, status: decided.status, detail: decided.detail };
           }
         }
@@ -1363,11 +1374,22 @@ export function registerRoutes(app: Express): void {
     const users = await storage.getAllUsers();
     const nameOf = new Map(users.map((one) => [one.id, one.username]));
 
+    // Each finding's own history: what every run observed, and every retest
+    // that has ever been run against it. This is what makes a second
+    // engagement weeks later answer "is what you found last time gone?" --
+    // from a record of observations rather than a status field whose past was
+    // overwritten each time it changed.
+    const withHistory = await Promise.all(rows.map(async (one) => ({
+      ...one,
+      ownerName: one.ownerId ? nameOf.get(one.ownerId) ?? null : null,
+      sightings: (await storage.getSightings(one.id))
+        .sort((a, b) => Number(a.observedAt) - Number(b.observedAt)),
+      checks: (await storage.getChecks(one.id))
+        .sort((a, b) => Number(a.checkedAt) - Number(b.checkedAt)),
+    })));
+
     res.json({
-      findings: rows.map((one) => ({
-        ...one,
-        ownerName: one.ownerId ? nameOf.get(one.ownerId) ?? null : null,
-      })),
+      findings: withHistory,
       counts: {
         open: rows.filter((one) => one.status === "open").length,
         acknowledged: rows.filter((one) => one.status === "acknowledged").length,
