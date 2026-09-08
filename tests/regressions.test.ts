@@ -147,14 +147,17 @@ describe("authorization gaps", () => {
     const owner = await plainUser();
     const other = await plainUser();
 
-    const created = await owner.post("/api/chat").send({ message: "mine", sender: "user" });
+    // POST answers { message, reply } now: the assistant's turn is produced
+    // server-side, so the caller needs both back.
+    const created = await owner.post("/api/chat").send({ message: "mine" });
     expect(created.status).toBe(201);
+    const id = created.body.message.id;
 
     // GET was scoped to the session; DELETE took any id at all.
-    expect((await other.delete(`/api/chat/${created.body.id}`)).status).toBe(404);
+    expect((await other.delete(`/api/chat/${id}`)).status).toBe(404);
     expect((await owner.get("/api/chat")).body).toHaveLength(1);
 
-    expect((await owner.delete(`/api/chat/${created.body.id}`)).status).toBe(200);
+    expect((await owner.delete(`/api/chat/${id}`)).status).toBe(200);
   });
 
   it("attributes a record to the session, not to whoever the client names", async () => {
