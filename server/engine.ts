@@ -29,6 +29,19 @@ const MAX_ERROR_BODY = 500;
 export interface EngineStatus {
   configured: boolean;
   reachable: boolean;
+  /**
+   * Whether the engine accepted the operator key.
+   *
+   * Separate from `reachable`, because the engine's /health takes no
+   * credential at all: it answers "ok" to anybody who can open a socket to
+   * it. Reporting that as connected meant an address with a wrong key, or no
+   * key, showed a green light and lit the Start button, and the operator
+   * found out at dispatch when the scan came back 401.
+   *
+   * `null` means nobody could tell -- the engine is too old to have the route
+   * this asks on. Not knowing is a third state and it is not "yes".
+   */
+  authorized: boolean | null;
   url: string | null;
   detail: string;
   /** What the engine says about itself, when it answered. */
@@ -103,12 +116,78 @@ async function body(response: Response): Promise<string> {
   }
 }
 
+/**
+ * The cheapest thing on the engine that requires an operator key.
+ *
+ * It has to cost the engine nothing, because this runs on a poll: /health
+ * /guards re-runs the whole boot canary and verify walks the record chain,
+ * so neither belongs on a timer. This one reaps stale rows and lists what is
+ * running, which the engine does anyway.
+ */
+const CREDENTIAL_PROBE = "/api/scans/active";
+
+/**
+ * Does the engine accept our key?
+ *
+ * Returns what is true, including "could not tell". A 404 here means the
+ * engine predates this route, not that the key is bad, and answering "bad
+ * key" to that would send an operator to re-issue a credential that was
+ * fine.
+ */
+async function credentialCheck(): Promise<{ authorized: boolean | null; detail: string }> {
+  if (!settings.get("engineKey")) {
+    return {
+      authorized: false,
+      detail:
+        `the engine answered, but no operator key is set, so it will refuse ` +
+        `to scan. Issue one on the engine (tools/start_engine.py prints one) ` +
+        `and set it on the Settings screen, or as ${ENGINE_KEY}.`,
+    };
+  }
+  let response: Response;
+  try {
+    response = await call(CREDENTIAL_PROBE);
+  } catch (cause) {
+    // Reached /health a moment ago and cannot reach this: report the fact,
+    // do not convert it into a verdict about the key.
+    return {
+      authorized: null,
+      detail: `the engine answered, but the key could not be checked: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+    };
+  }
+  if (response.status === 401 || response.status === 403) {
+    return {
+      authorized: false,
+      detail: `the engine rejected the operator key (${response.status}): ${await body(response)}`,
+    };
+  }
+  if (response.status === 404) {
+    return {
+      authorized: null,
+      detail:
+        `the engine answered, but it has no ${CREDENTIAL_PROBE} route, so the ` +
+        `operator key could not be checked from here. A scan will be the ` +
+        `first thing to find out whether it works.`,
+    };
+  }
+  if (!response.ok) {
+    return {
+      authorized: null,
+      detail: `the engine answered ${response.status} when the key was checked: ${await body(response)}`,
+    };
+  }
+  return { authorized: true, detail: "the engine answered and accepted the operator key" };
+}
+
 export async function status(): Promise<EngineStatus> {
   const url = baseUrl();
   if (!url) {
     return {
       configured: false,
       reachable: false,
+      authorized: false,
       url: null,
       detail:
         `no engine is configured, so nothing on this screen can scan anything. ` +
@@ -122,21 +201,26 @@ export async function status(): Promise<EngineStatus> {
       return {
         configured: true,
         reachable: false,
+        authorized: false,
         url,
         detail: `the engine answered ${response.status}: ${await body(response)}`,
       };
     }
+    const health = await response.json().catch(() => null);
+    const credential = await credentialCheck();
     return {
       configured: true,
       reachable: true,
+      authorized: credential.authorized,
       url,
-      detail: "the engine answered",
-      health: await response.json().catch(() => null),
+      detail: credential.detail,
+      health,
     };
   } catch (cause) {
     return {
       configured: true,
       reachable: false,
+      authorized: false,
       url,
       detail: cause instanceof Error ? cause.message : String(cause),
     };

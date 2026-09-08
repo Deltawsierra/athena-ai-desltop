@@ -8,6 +8,13 @@
  * product to connect them. Two screens said "not connected" and were right,
  * and there was nothing anybody could do about it from inside the app.
  *
+ * Saving also answers. Until now this screen said "Saved. The new settings
+ * are in force now." and stopped -- true, and not the thing anybody wants to
+ * know. A typo in the port, an engine that is not running, a key that was
+ * revoked: all of them saved cleanly and were discovered two screens later,
+ * or at the first scan. Each connection now states what it is doing, checked
+ * against the thing itself, and rechecks the moment a field is saved.
+ *
  * A key is never shown. The screen is told whether one is set, and typing a
  * new one replaces it -- there is no state in which this page can display a
  * credential, because there is no state in which it has one. Leaving a key
@@ -18,7 +25,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { KeyRound, Link2, ShieldAlert, Trash2 } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleHelp, KeyRound, Link2, ShieldAlert, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +69,60 @@ const LABELS: Record<string, { label: string; hint: string }> = {
   },
 };
 
+interface EngineStatus {
+  configured: boolean;
+  reachable: boolean;
+  authorized: boolean | null;
+  url: string | null;
+  detail: string;
+}
+
+interface AssistantStatus {
+  configured: boolean;
+  reachable: boolean;
+  model: string | null;
+  detail: string;
+}
+
+type Verdict = "good" | "bad" | "unknown";
+
+const VERDICT_STYLE: Record<Verdict, { icon: typeof CircleCheck; colour: string }> = {
+  good: { icon: CircleCheck, colour: "hsl(var(--primary))" },
+  bad: { icon: CircleAlert, colour: "hsl(var(--sev-high))" },
+  unknown: { icon: CircleHelp, colour: "hsl(var(--gold))" },
+};
+
+/**
+ * What this connection is actually doing, in one line.
+ *
+ * `unknown` is a real answer and gets its own colour. Rounding "could not
+ * tell" up to a green tick is how a screen ends up reassuring somebody about
+ * something it never checked.
+ */
+function Connection({
+  verdict, summary, detail, testId,
+}: {
+  verdict: Verdict;
+  summary: string;
+  detail: string;
+  testId: string;
+}) {
+  const { icon: Icon, colour } = VERDICT_STYLE[verdict];
+  return (
+    <div
+      className="flex items-start gap-3 rounded-lg border p-3"
+      style={{ borderColor: `color-mix(in srgb, ${colour} 30%, transparent)` }}
+      data-testid={testId}
+    >
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: colour }} />
+      <div className="min-w-0 space-y-1">
+        <div className="athena-label" style={{ color: colour }}>{summary}</div>
+        <p className="text-xs text-muted-foreground">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
 function sourceNote(field: Field): string | null {
   if (field.source === "environment") {
     return `In force from ${field.env} in the environment. Saving here overrides it.`;
@@ -76,6 +137,16 @@ export default function Settings() {
   const { data, isLoading } = useQuery<{ fields: Field[] }>({
     queryKey: ["/api/settings/connections"],
   });
+
+  // The engine is asked, not described: /health for liveness and an
+  // operator-only route for the key. Polled, because an engine comes and goes
+  // independently of this app and a status that was true when the page loaded
+  // is not a status.
+  const engine = useQuery<EngineStatus>({
+    queryKey: ["/api/engine/status"],
+    refetchInterval: 30_000,
+  });
+  const assistant = useQuery<AssistantStatus>({ queryKey: ["/api/assistant/status"] });
 
   // Non-secret values are shown as they are; secrets start empty, because the
   // server never sends one and there is nothing to prefill.
@@ -194,6 +265,32 @@ export default function Settings() {
               ) : (
                 group(["engineUrl", "engineKey"]).map(renderField)
               )}
+              {engine.data && (
+                <Connection
+                  testId="status-engine"
+                  verdict={
+                    !engine.data.reachable
+                      ? "bad"
+                      : engine.data.authorized === true
+                        ? "good"
+                        : engine.data.authorized === false
+                          ? "bad"
+                          : "unknown"
+                  }
+                  summary={
+                    !engine.data.configured
+                      ? "Not configured"
+                      : !engine.data.reachable
+                        ? "Not reachable"
+                        : engine.data.authorized === true
+                          ? "Connected"
+                          : engine.data.authorized === false
+                            ? "Reachable, key refused"
+                            : "Reachable, key not checked"
+                  }
+                  detail={engine.data.detail}
+                />
+              )}
             </div>
           </GlassCard>
 
@@ -204,6 +301,24 @@ export default function Settings() {
                 <p className="text-sm text-muted-foreground">Reading…</p>
               ) : (
                 group(["assistantUrl", "assistantKey", "assistantModel"]).map(renderField)
+              )}
+              {assistant.data && (
+                <Connection
+                  testId="status-assistant"
+                  // Never "good": a completions endpoint has no free health
+                  // check, so this says what is configured and does not
+                  // pretend to have asked it anything. Never "bad" either --
+                  // an assistant is optional, and painting its absence red
+                  // says something is broken when nothing is. The engine is
+                  // the one whose absence stops work.
+                  verdict="unknown"
+                  summary={
+                    assistant.data.configured
+                      ? `Configured as ${assistant.data.model}`
+                      : "Not configured"
+                  }
+                  detail={assistant.data.detail}
+                />
               )}
             </div>
           </GlassCard>
