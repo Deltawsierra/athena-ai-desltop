@@ -35,6 +35,7 @@ import {
 import GlassCard from "@/components/GlassCard";
 import PageHeader from "@/components/PageHeader";
 import type { Client, Site } from "@shared/schema";
+import { asvsChapterUrl } from "@shared/asvs";
 
 type ControlState = "failing" | "tested" | "not_run" | "not_covered";
 
@@ -105,13 +106,6 @@ const STATES: Record<ControlState, { label: string; colour: string; meaning: str
 
 const ORDER: ControlState[] = ["failing", "not_run", "tested", "not_covered"];
 
-/** The published requirement, which is where the wording lives. */
-function asvsLink(id: string): string {
-  const chapter = id.split(".")[0].replace("V", "");
-  return `https://github.com/OWASP/ASVS/blob/v4.0.3/4.0/en/0x${
-    (10 + Number(chapter)).toString(16)
-  }-V${chapter}-.md`;
-}
 
 export default function Compliance() {
   const [clientId, setClientId] = useState("");
@@ -289,16 +283,30 @@ export default function Compliance() {
                     data-testid={`control-${row.requirement.id}`}
                   >
                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <a
-                        className="athena-mono text-sm hover:underline"
-                        style={{ color: STATES[row.state].colour }}
-                        href={asvsLink(row.requirement.id)}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        {row.requirement.id}
-                        <ExternalLink className="ml-1 inline h-3 w-3" />
-                      </a>
+                      {/* Linked only when the standard has a file for this
+                          chapter. An earlier version computed the filename
+                          arithmetically and every link 404'd, which is worse
+                          than no link: it looks like a citation. */}
+                      {asvsChapterUrl(row.requirement.chapter) ? (
+                        <a
+                          className="athena-mono text-sm hover:underline"
+                          style={{ color: STATES[row.state].colour }}
+                          href={asvsChapterUrl(row.requirement.chapter) as string}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          data-testid={`link-${row.requirement.id}`}
+                        >
+                          {row.requirement.id}
+                          <ExternalLink className="ml-1 inline h-3 w-3" />
+                        </a>
+                      ) : (
+                        <span
+                          className="athena-mono text-sm"
+                          style={{ color: STATES[row.state].colour }}
+                        >
+                          {row.requirement.id}
+                        </span>
+                      )}
                       {row.requirement.cwe !== null && (
                         <a
                           className="athena-mono text-xs text-muted-foreground hover:underline"

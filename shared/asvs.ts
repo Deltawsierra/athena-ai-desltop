@@ -19,6 +19,37 @@
 export const ASVS_VERSION = "4.0.3";
 export const ASVS_LICENCE = "CC BY-SA 4.0";
 export const ASVS_HOME = "https://owasp.org/www-project-application-security-verification-standard/";
+export const ASVS_TAG = "v4.0.3_release";
+
+/**
+ * Chapter id to its file in the published standard, read from the release
+ * checkout. Computing this instead produced links that all 404'd: the
+ * prefixes are not arithmetic, V3 and V4 share one, and each has a suffix.
+ */
+export const ASVS_CHAPTER_FILES: Record<string, string> = {
+  "V1": "0x10-V1-Architecture.md",
+  "V2": "0x11-V2-Authentication.md",
+  "V3": "0x12-V3-Session-management.md",
+  "V4": "0x12-V4-Access-Control.md",
+  "V5": "0x13-V5-Validation-Sanitization-Encoding.md",
+  "V6": "0x14-V6-Cryptography.md",
+  "V7": "0x15-V7-Error-Logging.md",
+  "V8": "0x16-V8-Data-Protection.md",
+  "V9": "0x17-V9-Communications.md",
+  "V10": "0x18-V10-Malicious.md",
+  "V11": "0x19-V11-BusLogic.md",
+  "V12": "0x20-V12-Files-Resources.md",
+  "V13": "0x21-V13-API.md",
+  "V14": "0x22-V14-Config.md"
+};
+
+/** The published text for a requirement's chapter. */
+export function asvsChapterUrl(chapter: string): string | null {
+  const file = ASVS_CHAPTER_FILES[chapter];
+  return file
+    ? `https://github.com/OWASP/ASVS/blob/${ASVS_TAG}/4.0/en/${file}`
+    : null;
+}
 
 export interface AsvsRequirement {
   id: string;
