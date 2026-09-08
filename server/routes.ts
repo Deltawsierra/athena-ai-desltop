@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin, asyncHandler, actor } from "./auth";
 import * as assistant from "./assistant";
 import * as settings from "./settings";
 import * as engine from "./engine";
+import { controlMap, type ScanFinding } from "./compliance";
 import {
   insertClientSchema, insertSiteSchema, insertTestSchema,
   insertDocumentSchema, insertAIHealthMetricSchema,
@@ -1065,6 +1066,80 @@ export function registerRoutes(app: Express): void {
     }
 
     res.json(result);
+  }));
+
+  // ==== COMPLIANCE ====
+  //
+  // "Compliance mapping" is the third of the six advertised deliverables, and
+  // the one with the most room to mislead. The engine's scanners bear on 21 of
+  // ASVS 4.0.3's 286 requirements. A screen that rendered 286 rows and left
+  // 265 of them looking satisfied would tell a customer something false about
+  // the great majority of the standard -- and convincingly, because the 21 are
+  // real. So the four states are kept apart all the way to the page, and the
+  // untested ones are counted out loud.
+
+  app.get("/api/compliance/:clientId", asyncHandler(async (req, res) => {
+    const client = await storage.getClient(req.params.clientId);
+    if (!client) return notFound(res, "Client");
+
+    const siteId = typeof req.query.siteId === "string" ? req.query.siteId : null;
+    if (siteId) {
+      const site = await storage.getSite(siteId);
+      if (!site) return notFound(res, "Site");
+      if (site.clientId !== client.id) {
+        return void res.status(400).json({ error: "that site belongs to a different client" });
+      }
+    }
+
+    const tests = (await storage.getTestsByClient(client.id))
+      .filter((test) => (siteId ? test.siteId === siteId : true))
+      // A row the installer wrote is not evidence about a customer's systems.
+      // Counting sample findings towards a compliance verdict would be the
+      // seeded-dashboard failure again, in the one place it matters most.
+      .filter((test) => test.isSample !== true);
+
+    const findings: ScanFinding[] = [];
+    for (const test of tests) {
+      const recorded = (test.findings ?? {}) as Record<string, unknown>;
+      const results = Array.isArray(recorded.results) ? recorded.results : [];
+      for (const one of results) {
+        const finding = one as Record<string, unknown>;
+        // Measured against a live engine: the scanner emits `header` at the
+        // top level, and the pipeline moves a scanner's own fields into
+        // `evidence` before the finding is returned. Reading only the top
+        // level found nothing, so every missing-header finding was reported
+        // as one the standard does not cover -- a wrong answer that looked
+        // like a considered one. Both places are read; evidence wins.
+        const evidence = (finding.evidence ?? {}) as Record<string, unknown>;
+        const header = typeof evidence.header === "string"
+          ? evidence.header
+          : typeof finding.header === "string" ? finding.header : undefined;
+        findings.push({
+          testId: test.id,
+          type: typeof finding.type === "string" ? finding.type : undefined,
+          header,
+          severity: typeof finding.severity === "string" ? finding.severity : undefined,
+          message: typeof finding.message === "string" ? finding.message : undefined,
+          internal: finding.internal === true,
+        });
+      }
+    }
+
+    // Null when the engine could not be asked, and null is not an empty list:
+    // an engine that did not answer has not told us anything ran, so every
+    // requirement a scanner could reach is reported as not run rather than
+    // tested. Reading silence as a pass is the failure this screen is about.
+    const scanners = await engine.loadedScanners();
+
+    const { rows, summary } = controlMap(findings, scanners);
+    res.json({
+      client: { id: client.id, name: client.name },
+      siteId,
+      testsConsidered: tests.length,
+      scannersLoaded: scanners,
+      rows,
+      summary,
+    });
   }));
 
   app.get("/api/assistant/status", asyncHandler(async (_req, res) => {
