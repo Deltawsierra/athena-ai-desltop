@@ -15,8 +15,10 @@
  * there is a fact about the deployment, not an excuse for fiction.
  */
 
-const ENGINE_URL = "ATHENA_ENGINE_URL";
-const ENGINE_KEY = "ATHENA_ENGINE_KEY";
+import * as settings from "./settings";
+
+const ENGINE_URL = settings.FIELDS.engineUrl.env;
+const ENGINE_KEY = settings.FIELDS.engineKey.env;
 
 /** How long any single call to the engine may take. */
 const TIMEOUT_MS = 20_000;
@@ -45,7 +47,12 @@ export interface EngineScan {
 export class EngineUnavailable extends Error {}
 
 function baseUrl(): string | null {
-  const raw = (process.env[ENGINE_URL] ?? "").trim();
+  // From the settings row if an operator saved one, else from the
+  // environment. Read through settings rather than process.env so a change
+  // made in the app takes effect without a restart -- a desktop build has no
+  // shell to set a variable in, and a settings screen whose changes need one
+  // is a settings screen that does not work.
+  const raw = settings.get("engineUrl");
   return raw ? raw.replace(/\/+$/, "") : null;
 }
 
@@ -54,7 +61,7 @@ export function isConfigured(): boolean {
 }
 
 function headers(): Record<string, string> {
-  const key = (process.env[ENGINE_KEY] ?? "").trim();
+  const key = settings.get("engineKey");
   const out: Record<string, string> = { "Content-Type": "application/json" };
   // The engine's operator routes want this; the scan route wants it too. An
   // unset key is not an error here -- the engine will say so itself, and its
@@ -105,8 +112,8 @@ export async function status(): Promise<EngineStatus> {
       url: null,
       detail:
         `no engine is configured, so nothing on this screen can scan anything. ` +
-        `Set ${ENGINE_URL} to the engine's address, and ${ENGINE_KEY} to an ` +
-        `operator key.`,
+        `Set its address and an operator key on the Settings screen, or ` +
+        `${ENGINE_URL} and ${ENGINE_KEY} in the environment.`,
     };
   }
   try {

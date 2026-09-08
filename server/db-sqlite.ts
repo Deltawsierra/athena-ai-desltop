@@ -188,6 +188,23 @@ function createSchema(handle: DatabaseType): void {
       last_modified_at INTEGER NOT NULL
     );
 
+    -- Where this deployment talks to, and with what. One row.
+    --
+    -- The keys are stored as written: encrypting them with something else on
+    -- the same disk would be theatre, since anything the app can decrypt
+    -- unattended so can anyone holding the file. The file's own permissions
+    -- are what protect them, and the API never sends one back.
+    CREATE TABLE IF NOT EXISTS connection_settings (
+      id TEXT PRIMARY KEY,
+      engine_url TEXT,
+      engine_key TEXT,
+      assistant_url TEXT,
+      assistant_key TEXT,
+      assistant_model TEXT,
+      updated_at INTEGER NOT NULL,
+      updated_by TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS ai_chat_messages (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

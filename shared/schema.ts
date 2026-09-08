@@ -141,6 +141,33 @@ export const aiControlSettings = sqliteTable("ai_control_settings", {
   lastModifiedAt: timestamp("last_modified_at").notNull(),
 });
 
+/**
+ * Where this deployment talks to, and with what.
+ *
+ * A singleton, like the AI control row above it. Before this the addresses
+ * and keys were environment variables only, which is fine for a server and
+ * useless for a desktop application: a packaged Electron build has no shell
+ * to set them in, so both the engine and the assistant shipped permanently
+ * disconnected with no way to connect them.
+ *
+ * The keys are stored as written. Encrypting them with something else on the
+ * same disk would be theatre -- anything the app can decrypt unattended, so
+ * can anyone holding the file -- so the honest arrangement is to say where
+ * they live, keep them off the wire, and let the operating system's own file
+ * permissions do the work they are for. They are never returned by the API:
+ * the settings screen is told whether a key is set, never what it is.
+ */
+export const connectionSettings = sqliteTable("connection_settings", {
+  id: id(),
+  engineUrl: text("engine_url"),
+  engineKey: text("engine_key"),
+  assistantUrl: text("assistant_url"),
+  assistantKey: text("assistant_key"),
+  assistantModel: text("assistant_model"),
+  updatedAt: timestamp("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+});
+
 export const aiChatMessages = sqliteTable("ai_chat_messages", {
   id: id(),
   userId: text("user_id").notNull(),
@@ -214,6 +241,40 @@ export const insertAIControlSettingSchema = createInsertSchema(aiControlSettings
   activeSystems: optionalStringArray,
 }).omit({ id: true, lastModifiedAt: true });
 
+/**
+ * An address this deployment will actually try to fetch.
+ *
+ * `z.string().url()` is not enough on its own: it is `new URL()` underneath,
+ * and `new URL("engine.internal:8099")` parses -- `engine.internal:` is read
+ * as a scheme. So a host and port with the scheme left off is accepted, and
+ * the confusing failure arrives much later, out of fetch, in front of
+ * somebody who has already closed the settings screen.
+ */
+const httpUrl = z
+  .string()
+  .max(2000)
+  .refine(
+    (value) => {
+      try {
+        return ["http:", "https:"].includes(new URL(value).protocol);
+      } catch {
+        return false;
+      }
+    },
+    { message: "must be an http:// or https:// address" },
+  );
+
+// Every field optional and nullable: a settings form saves what it was given
+// and leaves the rest alone. Checked here rather than at the point of use, so
+// a typo is refused while somebody is still looking at the field.
+export const updateConnectionSettingsSchema = z.object({
+  engineUrl: httpUrl.or(z.literal("")).nullish(),
+  engineKey: z.string().max(500).or(z.literal("")).nullish(),
+  assistantUrl: httpUrl.or(z.literal("")).nullish(),
+  assistantKey: z.string().max(500).or(z.literal("")).nullish(),
+  assistantModel: z.string().max(200).or(z.literal("")).nullish(),
+});
+
 export const insertAIChatMessageSchema = createInsertSchema(aiChatMessages, {
   message: z.string().min(1).max(20000),
   sender: z.enum(["user", "ai", "system"]),
@@ -245,5 +306,7 @@ export type InsertAIControlSetting = z.infer<typeof insertAIControlSettingSchema
 export type AIControlSetting = typeof aiControlSettings.$inferSelect;
 export type InsertAIChatMessage = z.infer<typeof insertAIChatMessageSchema>;
 export type AIChatMessage = typeof aiChatMessages.$inferSelect;
+export type ConnectionSetting = typeof connectionSettings.$inferSelect;
+export type UpdateConnectionSettings = z.infer<typeof updateConnectionSettingsSchema>;
 export type InsertClassifier = z.infer<typeof insertClassifierSchema>;
 export type Classifier = typeof classifiers.$inferSelect;

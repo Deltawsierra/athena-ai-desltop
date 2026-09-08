@@ -6,6 +6,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { registerRoutes } from "./routes";
+import * as settings from "./settings";
 
 const SESSION_COOKIE = "athena.sid";
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -99,6 +100,12 @@ export function createApp(options: CreateAppOptions = {}): Express {
     });
     next();
   });
+
+  // The stored connection settings, read once so both outward-facing clients
+  // can answer synchronously. Not awaited: a database that is not ready yet
+  // must not hold up the server, and until it answers the environment applies
+  // -- which is what a fresh install has anyway.
+  void settings.load();
 
   registerRoutes(app);
 

@@ -15,6 +15,7 @@ import type {
   AIControlSetting, InsertAIControlSetting,
   AIChatMessage, InsertAIChatMessage,
   Classifier, InsertClassifier,
+  ConnectionSetting, UpdateConnectionSettings,
 } from "@shared/schema";
 
 /**
@@ -23,6 +24,7 @@ import type {
  */
 /** The settings table holds one row, and this is its id. */
 const AI_CONTROL_ID = "singleton";
+const CONNECTION_ID = "singleton";
 
 /**
  * The keys of an update that actually carry a value.
@@ -297,6 +299,38 @@ export class SqliteStorage implements IStorage {
   // random id and no constraint, so two concurrent updates each inserted a row
   // and one of the two settings was silently lost. Later writes then updated
   // only one of the duplicates.
+  // Where this deployment talks to. One row, like the AI control settings
+  // below, and written whole rather than merged column by column so a form
+  // that clears a field actually clears it.
+  async getConnectionSettings(): Promise<ConnectionSetting | undefined> {
+    return db
+      .select()
+      .from(schema.connectionSettings)
+      .where(eq(schema.connectionSettings.id, CONNECTION_ID))
+      .get();
+  }
+
+  async updateConnectionSettings(
+    settings: UpdateConnectionSettings, updatedBy: string | null,
+  ): Promise<ConnectionSetting> {
+    const existing = await this.getConnectionSettings();
+    const now = new Date();
+    if (!existing) {
+      db.insert(schema.connectionSettings).values({
+        engineUrl: null, engineKey: null,
+        assistantUrl: null, assistantKey: null, assistantModel: null,
+        ...settings,
+        id: CONNECTION_ID, updatedAt: now, updatedBy,
+      } as any).run();
+      return (await this.getConnectionSettings())!;
+    }
+    db.update(schema.connectionSettings)
+      .set({ ...settings, updatedAt: now, updatedBy } as any)
+      .where(eq(schema.connectionSettings.id, existing.id))
+      .run();
+    return (await this.getConnectionSettings())!;
+  }
+
   async getAIControlSettings(): Promise<AIControlSetting | undefined> {
     return db
       .select()

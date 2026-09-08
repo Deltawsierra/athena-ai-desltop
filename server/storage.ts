@@ -9,6 +9,7 @@ import {
   type AIControlSetting, type InsertAIControlSetting,
   type AIChatMessage, type InsertAIChatMessage,
   type Classifier, type InsertClassifier,
+  type ConnectionSetting, type UpdateConnectionSettings,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { hashPassword, verifyPassword, dummyVerify } from "./password";
@@ -72,6 +73,10 @@ export interface IStorage {
   createAIHealthMetric(metric: InsertAIHealthMetric): Promise<AIHealthMetric>;
 
   // AI control (single row)
+  getConnectionSettings(): Promise<ConnectionSetting | undefined>;
+  updateConnectionSettings(
+    settings: UpdateConnectionSettings, updatedBy: string | null,
+  ): Promise<ConnectionSetting>;
   getAIControlSettings(): Promise<AIControlSetting | undefined>;
   updateAIControlSettings(settings: Partial<InsertAIControlSetting>): Promise<AIControlSetting>;
 
@@ -126,6 +131,7 @@ export class MemStorage implements IStorage {
   private activityLogs = new Map<string, ActivityLog>();
   private aiHealthMetrics = new Map<string, AIHealthMetric>();
   private aiControlSettings: AIControlSetting | undefined = defaultControlSettings();
+  private connectionSettings: ConnectionSetting | undefined;
   private chatMessages = new Map<string, AIChatMessage>();
   private classifiers = new Map<string, Classifier>();
 
@@ -373,6 +379,23 @@ export class MemStorage implements IStorage {
     };
     this.aiHealthMetrics.set(metric.id, metric);
     return metric;
+  }
+
+  // Where this deployment talks to
+  async getConnectionSettings() { return this.connectionSettings; }
+  async updateConnectionSettings(
+    settings: UpdateConnectionSettings, updatedBy: string | null,
+  ) {
+    const base = this.connectionSettings ?? {
+      id: "connection-settings",
+      engineUrl: null, engineKey: null,
+      assistantUrl: null, assistantKey: null, assistantModel: null,
+      updatedAt: new Date(), updatedBy: null,
+    };
+    this.connectionSettings = {
+      ...base, ...settings, updatedAt: new Date(), updatedBy,
+    } as ConnectionSetting;
+    return this.connectionSettings;
   }
 
   // AI control

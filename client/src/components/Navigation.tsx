@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Shield, Activity, Bug, Settings, LogOut, Users, Brain, FileText, ListChecks, FolderOpen, MessageSquare, Trash2, ChevronDown, LayoutDashboard } from "lucide-react";
+import { Shield, Activity, Bug, Settings, LogOut, Users, Brain, FileText, ListChecks, FolderOpen, MessageSquare, Trash2, ChevronDown, LayoutDashboard, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import athenaLogo from "@assets/generated_images/athena-mark.png";
 import ThemeToggle from "./ThemeToggle";
@@ -31,6 +31,7 @@ const testsDropdownItems = [
 ];
 
 const adminDropdownItems = [
+  { path: "/settings", label: "Connections", icon: Link2 },
   { path: "/admin", label: "User Management", icon: Users },
   { path: "/ai-control", label: "AI Control Panel", icon: Settings },
   { path: "/audit-logs", label: "Audit Logs", icon: FileText },

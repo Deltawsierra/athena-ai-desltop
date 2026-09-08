@@ -20,9 +20,10 @@
  * itself, and one way it behaves when that thing is absent.
  */
 
-const ASSISTANT_URL = "ATHENA_ASSISTANT_URL";
-const ASSISTANT_KEY = "ATHENA_ASSISTANT_KEY";
-const ASSISTANT_MODEL = "ATHENA_ASSISTANT_MODEL";
+import * as settings from "./settings";
+
+const ASSISTANT_URL = settings.FIELDS.assistantUrl.env;
+const ASSISTANT_KEY = settings.FIELDS.assistantKey.env;
 
 /** How long one completion may take before the operator gets an answer. */
 const TIMEOUT_MS = 45_000;
@@ -57,12 +58,14 @@ export interface Turn {
 }
 
 function baseUrl(): string | null {
-  const raw = (process.env[ASSISTANT_URL] ?? "").trim();
+  // Through settings, for the same reason engine.ts is: a packaged build has
+  // no shell, so the settings screen has to be able to reach this.
+  const raw = settings.get("assistantUrl");
   return raw ? raw.replace(/\/+$/, "") : null;
 }
 
 function model(): string {
-  return (process.env[ASSISTANT_MODEL] ?? "").trim() || "gpt-4o-mini";
+  return settings.get("assistantModel") || "gpt-4o-mini";
 }
 
 export function isConfigured(): boolean {
@@ -112,11 +115,12 @@ async function call(path: string, init?: RequestInit): Promise<Response> {
   const base = baseUrl();
   if (!base) {
     throw new AssistantUnavailable(
-      `no assistant is configured; set ${ASSISTANT_URL} to an ` +
-        `OpenAI-compatible endpoint and ${ASSISTANT_KEY} to its key`,
+      `no assistant is configured; set an OpenAI-compatible endpoint on the ` +
+        `Settings screen, or ${ASSISTANT_URL} and ${ASSISTANT_KEY} in the ` +
+        `environment`,
     );
   }
-  const key = (process.env[ASSISTANT_KEY] ?? "").trim();
+  const key = settings.get("assistantKey");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -145,8 +149,9 @@ export async function status(): Promise<AssistantStatus> {
       model: null,
       detail:
         `no assistant is configured, so this screen keeps a record of what you ` +
-        `type and answers nothing. Set ${ASSISTANT_URL} to an OpenAI-compatible ` +
-        `endpoint and ${ASSISTANT_KEY} to its key.`,
+        `type and answers nothing. Set an OpenAI-compatible endpoint on the ` +
+        `Settings screen, or ${ASSISTANT_URL} and ${ASSISTANT_KEY} in the ` +
+        `environment.`,
     };
   }
   // Deliberately not a live probe. A completions endpoint has no free health

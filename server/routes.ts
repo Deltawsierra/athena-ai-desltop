@@ -3,11 +3,13 @@ import { z } from "zod";
 import { storage } from "./storage-unified";
 import { requireAuth, requireAdmin, asyncHandler, actor } from "./auth";
 import * as assistant from "./assistant";
+import * as settings from "./settings";
 import * as engine from "./engine";
 import {
   insertClientSchema, insertSiteSchema, insertTestSchema,
   insertDocumentSchema, insertAIHealthMetricSchema,
   insertUserSchema, insertAIControlSettingSchema, insertAIChatMessageSchema,
+  updateConnectionSettingsSchema,
   insertClassifierSchema, USER_ROLES,
   type User, type PublicUser,
 } from "@shared/schema";
@@ -875,6 +877,36 @@ export function registerRoutes(app: Express): void {
   // ==== AI CHAT ====
   app.get("/api/chat", asyncHandler(async (req, res) => {
     res.json(await storage.getChatMessagesByUser(req.session.userId!));
+  }));
+
+  // ==== SETTINGS: where this deployment talks to ====
+  //
+  // Admin only, both ways. These fields decide where a customer's data goes
+  // -- which engine is asked to scan them, and which third party sees a
+  // summary of what was found -- so they are not an ordinary user's to read
+  // or to change.
+
+  app.get("/api/settings/connections", requireAdmin, asyncHandler(async (_req, res) => {
+    // Secrets come back as `set: true` and `value: null`. There is no benign
+    // version of an API key on the wire: it reaches a browser, a devtools
+    // network tab and whatever is between, and the only thing the screen
+    // needs is whether somebody has to type one.
+    res.json({ fields: settings.readable() });
+  }));
+
+  app.patch("/api/settings/connections", requireAdmin, asyncHandler(async (req, res) => {
+    const data = updateConnectionSettingsSchema.parse(req.body);
+    await settings.save(data, req.session.userId ?? null);
+
+    // Which fields moved, never what they moved to. An audit log that records
+    // a credential is a second place the credential lives.
+    await storage.createActivityLog({
+      action: "updated", entityType: "connection_settings", entityId: "singleton",
+      details: { fields: Object.keys(data).sort() },
+      ...actor(req),
+    });
+
+    res.json({ fields: settings.readable() });
   }));
 
   app.get("/api/assistant/status", asyncHandler(async (_req, res) => {
