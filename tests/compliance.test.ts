@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 
 import { controlMap, type ScanFinding } from "../server/compliance";
-import { ASVS_CATALOGUE, FINDING_MAPPING, HEADER_MAPPING, SCANNER_FINDINGS } from "@shared/asvs";
+import {
+  ASVS_CATALOGUE, ASVS_CHAPTER_FILES, ASVS_TAG, asvsChapterUrl,
+  FINDING_MAPPING, HEADER_MAPPING, SCANNER_FINDINGS,
+} from "@shared/asvs";
 
 /**
  * The compliance map, whose entire risk is making an untested control look
@@ -21,6 +24,30 @@ const finding = (over: Partial<ScanFinding> = {}): ScanFinding => ({
 });
 
 describe("mapping findings to ASVS requirements", () => {
+  it("cites every chapter with a file that exists in the published standard", () => {
+    // The first version of this link computed the filename arithmetically --
+    // 0x10 for V1, so 0x + (10 + n) in hex -- and produced 0xf-V5-.md for a
+    // chapter whose real file is 0x13-V5-Validation-Sanitization-Encoding.md.
+    // Every citation on the page 404'd, on a tag that also did not exist
+    // (the repository tags releases v4.0.3_release, not v4.0.3). A broken
+    // citation is worse than none: it looks like a source.
+    expect(ASVS_TAG).toBe("v4.0.3_release");
+
+    const chapters = new Set(ASVS_CATALOGUE.map((one) => one.chapter));
+    for (const chapter of chapters) {
+      const file = ASVS_CHAPTER_FILES[chapter];
+      expect(file, `no file recorded for ${chapter}`).toBeDefined();
+      // Read from the release checkout, never computed: the prefixes are not
+      // arithmetic (0x10..0x19 then 0x20), V3 and V4 share 0x12, and each
+      // name carries a descriptive suffix.
+      expect(file).toMatch(new RegExp(`^0x[0-9a-f]+-${chapter}-.+\\.md$`));
+      expect(asvsChapterUrl(chapter)).toBe(
+        `https://github.com/OWASP/ASVS/blob/${ASVS_TAG}/4.0/en/${file}`,
+      );
+    }
+    expect(asvsChapterUrl("V999")).toBeNull();
+  });
+
   it("marks a requirement failing when a finding maps to it", () => {
     const { rows } = controlMap([finding()], ALL_SCANNERS);
     const row = rows.find((one) => one.requirement.id === "V5.3.8");

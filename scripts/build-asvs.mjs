@@ -28,7 +28,7 @@
  * UNMAPPED_FINDINGS with the reason. "Not mapped" is a first-class answer.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ASVS_ROOT = process.argv[2];
@@ -43,6 +43,10 @@ const FLAT = join(
 );
 
 const VERSION = "4.0.3";
+// The git tag the chapter files are read from. Not "v4.0.3": the repository
+// tags releases as v<version>_release, and a link built on the wrong tag 404s
+// exactly as convincingly as one built on the right one.
+const TAG = "v4.0.3_release";
 const LICENCE = "CC BY-SA 4.0";
 const HOME = "https://owasp.org/www-project-application-security-verification-standard/";
 
@@ -191,6 +195,27 @@ const UNMAPPED_FINDINGS = {
   timeout: "the engine reporting its own trouble, not a finding about the target",
 };
 
+/**
+ * Chapter id to the file that holds its requirements, read from the checkout
+ * rather than computed.
+ *
+ * The first version of this derived the filename arithmetically -- 0x10 for
+ * V1, so 0x + (10 + n) in hex -- and every link it produced was a 404. The
+ * real prefixes are not hex arithmetic (they run 0x10..0x19 then jump to
+ * 0x20), V3 and V4 share 0x12, and each name carries a descriptive suffix.
+ * There was no formula to get right. So the names are read from disk and the
+ * build fails if a chapter has no file.
+ */
+function chapterFiles() {
+  const dir = join(ASVS_ROOT, "4.0/en");
+  const found = {};
+  for (const name of readdirSync(dir)) {
+    const match = /^0x[0-9a-f]+-(V\d+)-.+\.md$/.exec(name);
+    if (match) found[match[1]] = name;
+  }
+  return found;
+}
+
 const raw = JSON.parse(readFileSync(FLAT, "utf8")).requirements;
 
 const catalogue = raw.map((r) => ({
@@ -238,6 +263,16 @@ if (phantom.length) {
   process.exit(1);
 }
 
+// Every chapter the catalogue names must have a file behind it, or its
+// requirements link nowhere.
+const CHAPTER_FILES = chapterFiles();
+const chapterless = Array.from(new Set(catalogue.map((r) => r.chapter)))
+  .filter((chapter) => !CHAPTER_FILES[chapter]);
+if (chapterless.length) {
+  console.error("no chapter file found for: " + chapterless.join(", "));
+  process.exit(1);
+}
+
 const mapped = new Set([
   ...Object.values(MAPPING).flatMap((entry) => entry.requirements),
   ...Object.values(HEADER_MAPPING).flatMap((entry) => entry.requirements),
@@ -266,6 +301,22 @@ const out = `${banner}
 export const ASVS_VERSION = ${JSON.stringify(VERSION)};
 export const ASVS_LICENCE = ${JSON.stringify(LICENCE)};
 export const ASVS_HOME = ${JSON.stringify(HOME)};
+export const ASVS_TAG = ${JSON.stringify(TAG)};
+
+/**
+ * Chapter id to its file in the published standard, read from the release
+ * checkout. Computing this instead produced links that all 404'd: the
+ * prefixes are not arithmetic, V3 and V4 share one, and each has a suffix.
+ */
+export const ASVS_CHAPTER_FILES: Record<string, string> = ${JSON.stringify(CHAPTER_FILES, null, 2)};
+
+/** The published text for a requirement's chapter. */
+export function asvsChapterUrl(chapter: string): string | null {
+  const file = ASVS_CHAPTER_FILES[chapter];
+  return file
+    ? \`https://github.com/OWASP/ASVS/blob/\${ASVS_TAG}/4.0/en/\${file}\`
+    : null;
+}
 
 export interface AsvsRequirement {
   id: string;
