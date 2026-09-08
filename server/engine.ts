@@ -354,6 +354,192 @@ export async function classifyCve(text: string): Promise<CveClassification> {
   };
 }
 
+/**
+ * One source inside an evidence pack, and whether it is actually in there.
+ *
+ * `status` is the field that decides whether the pack means anything. A source
+ * can be `excluded` -- the scan record has no tenant column, so an unscoped
+ * pack leaves scans out entirely -- or `truncated`. A pack that showed only
+ * its record counts would read as complete while missing the thing somebody
+ * asked for.
+ */
+export interface EvidenceSource {
+  source: string;
+  status: string;
+  reason: string | null;
+  records: number;
+  chainOk: boolean;
+  chainDetail: string;
+  chainPartial: boolean;
+  chainAnchored: boolean;
+  chainHeadRecorded: boolean;
+  chainHeadAuthentic: boolean;
+}
+
+/**
+ * A signed, verifiable record of what this deployment did.
+ *
+ * `signed` is not decoration. The engine signs with Ed25519 over a manifest
+ * committing to a Merkle root, and when no key is configured it returns the
+ * pack anyway with `signed: false` and a reason -- deliberately, so that an
+ * unsigned pack says so rather than looking like a signed one nobody checked.
+ * Anything rendering this has to preserve that distinction: an unsigned pack
+ * is a record, not proof.
+ */
+/**
+ * The engine's signature block. Not a bare string: it names the algorithm and
+ * the key that signed, because a signature is only checkable against a key the
+ * verifier already holds.
+ *
+ * `publicKey` is carried for convenience and MUST NOT be trusted from here.
+ * Anyone who re-signs a doctored pack with their own key also replaces this
+ * copy, so verifying against it establishes only that the file is internally
+ * consistent. `keyId` is the useful field: it says which published key to ask
+ * for. Anything rendering this has to say so.
+ */
+export interface EvidenceSignature {
+  algorithm: string;
+  keyId: string | null;
+  publicKey: string | null;
+  signature: string;
+}
+
+export interface EvidencePack {
+  format: string;
+  generatedAt: string | null;
+  tenant: string | null;
+  reason: string | null;
+  merkleRoot: string | null;
+  leafCount: number;
+  signed: boolean;
+  signature: EvidenceSignature | null;
+  unsignedReason: string | null;
+  sources: EvidenceSource[];
+  /** The whole document, as the engine produced it, for saving to disk. */
+  document: unknown;
+}
+
+/**
+ * Read the engine's signature block.
+ *
+ * Measured against a running engine with ENGINE_EVIDENCE_KEY set: the field is
+ * an object -- {algorithm, public_key, key_id, signature} -- not a string. An
+ * earlier version of this function tested `typeof payload.signature ===
+ * "string"` and so returned null for every pack the engine actually signed,
+ * which rendered as "Signed" with nothing to check.
+ */
+function evidenceSignature(raw: unknown): EvidenceSignature | null {
+  if (!raw || typeof raw !== "object") return null;
+  const block = raw as Record<string, unknown>;
+  // No signature string is no signature. The other fields are identification.
+  if (typeof block.signature !== "string" || block.signature.length === 0) return null;
+  return {
+    algorithm: typeof block.algorithm === "string" ? block.algorithm : "unknown",
+    keyId: typeof block.key_id === "string" ? block.key_id : null,
+    publicKey: typeof block.public_key === "string" ? block.public_key : null,
+    signature: block.signature,
+  };
+}
+
+function evidenceSource(raw: Record<string, unknown>): EvidenceSource {
+  return {
+    source: String(raw.source ?? "unknown"),
+    status: String(raw.status ?? "unknown"),
+    reason: typeof raw.reason === "string" ? raw.reason : null,
+    records: typeof raw.records === "number" ? raw.records : 0,
+    chainOk: raw.chain_ok === true,
+    chainDetail: typeof raw.chain_detail === "string" ? raw.chain_detail : "",
+    chainPartial: raw.chain_partial === true,
+    chainAnchored: raw.chain_anchored === true,
+    chainHeadRecorded: raw.chain_head_recorded === true,
+    chainHeadAuthentic: raw.chain_head_authentic === true,
+  };
+}
+
+/**
+ * Why a pack is not signed, in words a reader can act on.
+ *
+ * The engine sends `unsigned_reason` when it knows it could not sign. The
+ * other case -- `signed: true` with a signature block this cannot read -- has
+ * no reason from the engine, so one is written here rather than leaving the
+ * page to say "the engine did not sign this pack", which would be false.
+ */
+function unsignedReason(
+  payload: Record<string, unknown>,
+  signature: EvidenceSignature | null,
+): string | null {
+  if (signature !== null) return null;
+  if (typeof payload.unsigned_reason === "string") return payload.unsigned_reason;
+  if (payload.signed === true) {
+    return "the engine reported this pack as signed but sent no signature that could be read";
+  }
+  return null;
+}
+
+export interface EvidenceRequest {
+  /** Required. Without it the engine excludes the scan record entirely. */
+  engagementRef: string;
+  reason: string;
+  runId?: string;
+  target?: string;
+  since?: string;
+  until?: string;
+}
+
+/**
+ * Ask the engine for an evidence pack.
+ *
+ * `engagement_ref` is always sent. Measured against a running engine: an
+ * unscoped pack reports `scans: excluded` with the reason "the scan record has
+ * no tenant column, so it cannot be scoped to one customer; name a run,
+ * engagement or target to include it". A pack built for a customer that
+ * silently contains none of their scans is worse than no pack.
+ */
+export async function buildEvidencePack(request: EvidenceRequest): Promise<EvidencePack> {
+  const response = await call("/api/evidence/pack", {
+    method: "POST",
+    body: JSON.stringify({
+      engagement_ref: request.engagementRef,
+      reason: request.reason,
+      ...(request.runId ? { run_id: request.runId } : {}),
+      ...(request.target ? { target: request.target } : {}),
+      ...(request.since ? { since: request.since } : {}),
+      ...(request.until ? { until: request.until } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new EngineUnavailable(
+      `the engine answered ${response.status}: ${await body(response)}`,
+    );
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+  const manifest = (payload.manifest ?? {}) as Record<string, unknown>;
+  const rawSources = Array.isArray(manifest.sources) ? manifest.sources : [];
+  const signature = evidenceSignature(payload.signature);
+
+  return {
+    format: typeof manifest.format === "string" ? manifest.format : "unknown",
+    generatedAt: typeof manifest.generated_at === "string" ? manifest.generated_at : null,
+    tenant: typeof manifest.tenant === "string" ? manifest.tenant : null,
+    reason: typeof manifest.reason === "string" ? manifest.reason : null,
+    merkleRoot: typeof manifest.merkle_root === "string" ? manifest.merkle_root : null,
+    leafCount: typeof manifest.leaf_count === "number" ? manifest.leaf_count : 0,
+    // Absent means unsigned. An engine that does not say it signed the pack
+    // has not signed it, and defaulting the other way is how an unsigned pack
+    // gets handed to a customer as proof.
+    // Both halves must hold. `signed: true` with no readable signature block
+    // is an engine claiming a signature it did not send, and rendering that as
+    // proof is the failure this whole page exists to prevent.
+    signed: payload.signed === true && signature !== null,
+    signature,
+    unsignedReason: unsignedReason(payload, signature),
+    sources: rawSources.map((one) => evidenceSource(one as Record<string, unknown>)),
+    document: payload,
+  };
+}
+
 /** Where a run has got to. */
 export async function runState(runId: string): Promise<EngineScan> {
   const response = await call(`/api/scans/${encodeURIComponent(runId)}`);
@@ -378,6 +564,154 @@ export async function abort(runId: string): Promise<boolean> {
     method: "POST",
   });
   return response.ok;
+}
+
+// ==== RETEST ====
+//
+// "Did the fix work?" is a different question from "is this still a finding?",
+// and the engine keeps them apart. `/api/decisions/{id}/replay` re-runs today's
+// detectors over the recorded input -- a question about the engine, touching
+// nobody's system. `/api/remediation/retest` goes back to the customer's target
+// and looks again. Only the second one can answer whether something was fixed,
+// and only the second one needs an authority to run, which is why the engine
+// requires `engagement_ref` on it and Athena composes that here rather than
+// letting the engine derive a scope from the twin the caller picked.
+
+/**
+ * A decision the engine kept so it could be made again.
+ *
+ * Captured per real finding at the time of the scan, with the inputs that
+ * produced it and the verdict it produced, so a retest compares like with
+ * like instead of comparing today's scan to a remembered summary.
+ */
+export interface DecisionTwin {
+  id: number;
+  runId: string | null;
+  target: string;
+  findingType: string;
+  severity: string | null;
+  tier: string | null;
+  confidence: number | null;
+  /** Where the finding was, when the twin recorded one. */
+  endpoint: string | null;
+  detail: string | null;
+  capturedAt: string | null;
+}
+
+function decisionTwin(raw: Record<string, unknown>): DecisionTwin {
+  const decision = (raw.decision ?? {}) as Record<string, unknown>;
+  const inputs = (raw.inputs ?? {}) as Record<string, unknown>;
+  return {
+    id: Number(raw.id),
+    runId: typeof raw.run_id === "string" ? raw.run_id : null,
+    target: String(raw.target ?? ""),
+    findingType: String(raw.finding_type ?? "unknown"),
+    severity: typeof decision.severity === "string" ? decision.severity : null,
+    tier: typeof decision.tier === "string" ? decision.tier : null,
+    confidence: typeof decision.confidence === "number" ? decision.confidence : null,
+    endpoint: typeof inputs.endpoint === "string" ? inputs.endpoint : null,
+    detail: typeof inputs.details === "string" ? inputs.details : null,
+    capturedAt: typeof raw.captured_at === "string" ? raw.captured_at : null,
+  };
+}
+
+/**
+ * The twins captured during one run, newest first.
+ *
+ * `truncated` is not decoration either. Measured: a single scan of one small
+ * host captured 81 twins, so a run that fills the limit is an ordinary run,
+ * not a pathological one. A list that silently stops at the limit looks
+ * exactly like a complete one, and the operator concludes there is nothing
+ * else to retest. One more than the limit is asked for so the difference can
+ * be told.
+ */
+export interface DecisionList {
+  decisions: DecisionTwin[];
+  truncated: boolean;
+}
+
+export async function listDecisions(runId: string, limit = 100): Promise<DecisionList> {
+  const response = await call(
+    `/api/decisions?run_id=${encodeURIComponent(runId)}&limit=${limit + 1}`,
+  );
+  if (!response.ok) {
+    throw new EngineUnavailable(
+      `the engine answered ${response.status}: ${await body(response)}`,
+    );
+  }
+  const payload = (await response.json()) as Record<string, unknown>;
+  const raw = Array.isArray(payload.decisions) ? payload.decisions : [];
+  return {
+    decisions: raw.slice(0, limit).map((one) => decisionTwin(one as Record<string, unknown>)),
+    truncated: raw.length > limit,
+  };
+}
+
+/**
+ * What a retest concluded.
+ *
+ * `verdict` is passed through as the engine's own string. There are three of
+ * them and they are not two: `closed`, `still_open`, and `inconclusive`. The
+ * engine says `inconclusive` rather than `closed` whenever the absence of the
+ * finding is explainable by something other than the finding being gone -- a
+ * scan that did not complete, or a detector set that is no longer the approved
+ * one. Measured: with the target simply switched off, the verdict is
+ * `inconclusive` with the connection error as its detail, not `closed`. A UI
+ * that collapses this to fixed/not-fixed reports a host that went down as a
+ * vulnerability remediated, which is the worst thing this feature could say.
+ */
+export interface RetestResult {
+  twinId: number | null;
+  verdict: string;
+  detail: string;
+  target: string | null;
+  findingType: string | null;
+  /** The detector set the retest ran with, for comparing against the twin's. */
+  inventoryDigest: string | null;
+  runId: string | null;
+  checkedAt: string | null;
+}
+
+export interface RetestRequest {
+  twinId: number;
+  /** Required by the engine. Composed from the engagement, never from the twin. */
+  engagementRef: string;
+  scope: string[];
+}
+
+export async function retest(request: RetestRequest): Promise<RetestResult> {
+  const response = await call("/api/remediation/retest", {
+    method: "POST",
+    body: JSON.stringify({
+      twin_id: request.twinId,
+      engagement_ref: request.engagementRef,
+      scope: request.scope,
+    }),
+  });
+  if (!response.ok) {
+    throw new EngineUnavailable(
+      `the engine answered ${response.status}: ${await body(response)}`,
+    );
+  }
+  const payload = (await response.json()) as Record<string, unknown>;
+  const check = (payload.check ?? {}) as Record<string, unknown>;
+  return {
+    twinId: typeof payload.twin_id === "number" ? payload.twin_id : null,
+    // No verdict is not a pass. An engine that answered without one has not
+    // said the finding is gone.
+    verdict: typeof payload.verdict === "string" ? payload.verdict : "inconclusive",
+    detail: typeof payload.detail === "string" ? payload.detail : "",
+    target: typeof payload.target === "string" ? payload.target : null,
+    findingType: typeof payload.finding_type === "string" ? payload.finding_type : null,
+    inventoryDigest:
+      typeof payload.inventory_digest === "string" ? payload.inventory_digest : null,
+    // Measured: the engine sends this as a number at the top level and as a
+    // string inside `check`. Both are the same run.
+    runId: payload.run_id === null || payload.run_id === undefined
+      ? null
+      : String(payload.run_id),
+    checkedAt: typeof check.checked_at === "string" ? check.checked_at : null,
+  };
 }
 
 /**

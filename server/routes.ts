@@ -839,6 +839,108 @@ export function registerRoutes(app: Express): void {
     res.json({ test: updated ?? test, state: current.state, engine: current });
   }));
 
+  // ==== RETEST ====
+  //
+  // "Prove it was fixed" is the second of the six deliverables this product
+  // advertises that the engine has always been able to answer and this app
+  // never asked. The engine captures a decision twin per real finding during a
+  // scan, and /api/remediation/retest goes back to the target and looks again.
+  //
+  // The verdict is the engine's own word and is passed through unchanged.
+  // There are three, and they are not two: closed, still_open, inconclusive.
+  // Measured against a live engine with the target simply switched off, the
+  // answer is `inconclusive` with the connection error as its detail -- not
+  // `closed`. A screen that renders this as fixed/not-fixed would report a
+  // host that went down as a vulnerability remediated.
+
+  /** The decisions the engine kept during this test's run. */
+  app.get("/api/tests/:testId/decisions", asyncHandler(async (req, res) => {
+    const test = await storage.getTest(req.params.testId);
+    if (!test) return notFound(res, "Test");
+
+    const recorded = (test.findings ?? {}) as Record<string, unknown>;
+    const runId = typeof recorded.runId === "string" ? recorded.runId : null;
+    if (!runId) {
+      // A test with no engine run behind it -- a sample row, or one recorded
+      // before the engine was wired up -- has nothing to retest. Said plainly
+      // rather than returning an empty list, which reads as "the scan found
+      // nothing worth keeping".
+      return void res.json({
+        decisions: [],
+        truncated: false,
+        detail: "this test has no engine run behind it, so there is nothing to retest",
+      });
+    }
+
+    try {
+      const listed = await engine.listDecisions(runId);
+      res.json({ ...listed, detail: "" });
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+  }));
+
+  const retestSchema = z.object({ twinId: z.number().int().nonnegative() });
+
+  app.post("/api/tests/:testId/retest", asyncHandler(async (req, res) => {
+    const data = retestSchema.parse(req.body);
+
+    const test = await storage.getTest(req.params.testId);
+    if (!test) return notFound(res, "Test");
+
+    const client = await storage.getClient(test.clientId);
+    if (!client) return notFound(res, "Client");
+    const site = test.siteId ? await storage.getSite(test.siteId) : null;
+
+    // Composed here, from the engagement this test was filed under -- not
+    // taken from the twin. A retest touches the customer's system, and the
+    // engine used to derive its scope from the twin's own recorded target,
+    // which is a check whose only possible answer is yes. The side holding
+    // the site list is the side that has to send it.
+    const engagementRef = site ? `${client.id}:${site.id}` : client.id;
+    const engagementSites = site ? [site] : await storage.getSitesByClient(client.id);
+    const scope = engagementSites
+      .map((one) => hostOf(one.url))
+      .filter((host): host is string => host !== null);
+
+    if (scope.length === 0) {
+      return void res.status(400).json({
+        error:
+          `no site is recorded for ${client.name}, so nothing on record ` +
+          `authorises going back to that target. Add the site to the client first.`,
+      });
+    }
+
+    let result;
+    try {
+      result = await engine.retest({ twinId: data.twinId, engagementRef, scope });
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+
+    // A retest sends real requests to somebody's system, so it is an act and
+    // belongs in the record with the authority it ran under.
+    await storage.createActivityLog({
+      action: "retested", entityType: "test", entityId: test.id,
+      details: {
+        twinId: data.twinId,
+        engagementRef,
+        verdict: result.verdict,
+        findingType: result.findingType,
+        target: result.target,
+      },
+      ...actor(req),
+    });
+
+    res.json(result);
+  }));
+
   // ==== DOCUMENTS ====
   app.get("/api/documents", asyncHandler(async (req, res) => {
     const clientId = typeof req.query.clientId === "string" ? req.query.clientId : undefined;
@@ -1066,6 +1168,77 @@ export function registerRoutes(app: Express): void {
     }
 
     res.json(result);
+  }));
+
+  // ==== EVIDENCE ====
+  // "Evidence Pack" is one of the six things this product says it produces.
+  // The engine has built them all along -- signed, Merkle-committed, with a
+  // per-source status -- and nothing in this app ever asked for one.
+
+  const evidenceRequestSchema = z.object({
+    clientId: z.string().min(1),
+    siteId: z.string().optional(),
+    testId: z.string().optional(),
+    reason: z.string().trim().min(1, "say what this pack is for").max(1000),
+  });
+
+  app.post("/api/evidence-pack", requireAdmin, asyncHandler(async (req, res) => {
+    // Admin only. A pack is a cross-source record of what this deployment did
+    // to somebody's systems, assembled for handing to a third party.
+    const data = evidenceRequestSchema.parse(req.body);
+
+    const client = await storage.getClient(data.clientId);
+    if (!client) return notFound(res, "Client");
+    const site = data.siteId ? await storage.getSite(data.siteId) : null;
+    if (data.siteId && !site) return notFound(res, "Site");
+    if (site && site.clientId !== data.clientId) {
+      return void res.status(400).json({ error: "that site belongs to a different client" });
+    }
+
+    // The same engagement string the scan was filed under, composed the same
+    // way. A pack scoped to a different spelling of the engagement is a pack
+    // about nothing.
+    const engagementRef = site ? `${client.id}:${site.id}` : client.id;
+
+    // The engine's run id, when this pack is about one test. Recorded in the
+    // test's findings by the scan route.
+    let runId: string | undefined;
+    if (data.testId) {
+      const test = await storage.getTest(data.testId);
+      if (!test) return notFound(res, "Test");
+      if (test.clientId !== data.clientId) {
+        return void res.status(400).json({ error: "that test belongs to a different client" });
+      }
+      const recorded = (test.findings ?? {}) as Record<string, unknown>;
+      if (typeof recorded.runId === "string") runId = recorded.runId;
+    }
+
+    let pack;
+    try {
+      pack = await engine.buildEvidencePack({ engagementRef, reason: data.reason, runId });
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+
+    // Recorded because issuing one is an act: it assembles a customer's
+    // records into a document that leaves this machine. What it was for is
+    // part of that, which is why `reason` is required.
+    await storage.createActivityLog({
+      action: "issued", entityType: "evidence_pack", entityId: engagementRef,
+      details: {
+        reason: data.reason,
+        signed: pack.signed,
+        leafCount: pack.leafCount,
+        merkleRoot: pack.merkleRoot,
+        runId: runId ?? null,
+      },
+      ...actor(req),
+    });
+
+    res.json(pack);
   }));
 
   // ==== COMPLIANCE ====
