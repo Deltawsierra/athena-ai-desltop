@@ -108,6 +108,122 @@ export const tests = sqliteTable("tests", {
   isSample: sample(),
 });
 
+/**
+ * A finding, as a thing with a life rather than an entry in a scan's blob.
+ *
+ * Until now a finding existed only inside `tests.findings`, so rescanning the
+ * same host produced a second copy of the same issue with no relation to the
+ * first, nobody owned anything, and there was nowhere to record that a problem
+ * had been looked at. Three scans of one host meant three sets of unrelated
+ * rows and no way to ask "what is still open".
+ *
+ * `fingerprint` is what makes two sightings the same finding. Derived from the
+ * engagement, the finding type, and the place it was found -- the endpoint, or
+ * for a missing header the header's name -- and deliberately NOT from the
+ * payload: the scanners try several payloads against one endpoint and a
+ * fingerprint that included them would treat one issue as many, which is the
+ * duplication this table exists to end.
+ *
+ * `status` carries the rule this whole product is built on. `fixed` is not a
+ * label a person may apply. It is reachable only from a retest the engine
+ * answered `closed`, and the columns recording which retest did it are part of
+ * the row. A human may say a risk is accepted, or that they have looked at
+ * something -- those are opinions and are stored as opinions. "Fixed" is a
+ * claim about the customer's system, and only evidence may make it.
+ */
+export const findings = sqliteTable("findings", {
+  id: id(),
+  /** Same issue, same fingerprint. Unique within an engagement. */
+  fingerprint: text("fingerprint").notNull(),
+  clientId: text("client_id").notNull(),
+  siteId: text("site_id"),
+  engagementRef: text("engagement_ref").notNull(),
+
+  type: text("type").notNull(),
+  severity: text("severity"),
+  message: text("message"),
+  /** Where it was found. One of these is what distinguishes it from its siblings. */
+  target: text("target"),
+  endpoint: text("endpoint"),
+  header: text("header"),
+
+  /** open | acknowledged | accepted | fixed */
+  status: text("status").notNull().default("open"),
+  /** Who is answerable for it. Null means nobody has taken it. */
+  ownerId: text("owner_id"),
+  /** Why it was acknowledged or accepted, in the words of whoever did it. */
+  statusNote: text("status_note"),
+  statusChangedBy: text("status_changed_by"),
+  statusChangedAt: timestamp("status_changed_at"),
+
+  firstSeenAt: timestamp("first_seen_at").notNull(),
+  lastSeenAt: timestamp("last_seen_at").notNull(),
+  /** How many scans have reported it. Not how many payloads triggered it. */
+  timesSeen: integer("times_seen").notNull().default(1),
+  lastTestId: text("last_test_id"),
+  lastRunId: text("last_run_id"),
+
+  /** The retest that closed it. Absent on anything not verified fixed. */
+  fixedAt: timestamp("fixed_at"),
+  fixedByRunId: text("fixed_by_run_id"),
+  /** The engine's own verdict word, kept so the claim can be checked. */
+  fixedVerdict: text("fixed_verdict"),
+  /** Set when a finding the engine had closed came back in a later scan. */
+  reopenedAt: timestamp("reopened_at"),
+  isSample: sample(),
+});
+
+/**
+ * Every time a run looked at a finding, and what it saw.
+ *
+ * One row per finding per run, kept for ever and never overwritten. This is
+ * what makes a second engagement a week later mean something: the client asks
+ * whether the things found in March are gone, and the answer is a record of
+ * what each run since then actually observed, rather than a status field whose
+ * history was thrown away every time it changed.
+ *
+ * `seen` has three readings and only three. True means the run reported this
+ * finding. False means the run went to this target and did not report it --
+ * which is NOT the same as fixed, and is deliberately not allowed to close
+ * anything: a scanner that was switched off, or a run that stopped early, also
+ * produces a finding nobody saw. Absence is evidence of absence only when
+ * something looked, and a scan cannot tell you it looked properly. Only a
+ * retest verdict of `closed` closes a finding.
+ */
+export const findingSightings = sqliteTable("finding_sightings", {
+  id: id(),
+  findingId: text("finding_id").notNull(),
+  /** The engine run. Null for a check that had none. */
+  runId: text("run_id"),
+  testId: text("test_id"),
+  /** Whether this run reported the finding. */
+  seen: bool("seen").notNull(),
+  observedAt: timestamp("observed_at").notNull(),
+});
+
+/**
+ * Every retest, kept as its own record.
+ *
+ * A retest is an independent question asked on a particular day, and the
+ * answer to the one asked in March is not replaced by the answer to the one
+ * asked in June. Each is stored with its own run and its own verdict so a
+ * client can be shown the sequence -- still_open, still_open, closed -- rather
+ * than only the last word.
+ */
+export const findingChecks = sqliteTable("finding_checks", {
+  id: id(),
+  findingId: text("finding_id").notNull(),
+  /** The engine's own word: closed | still_open | inconclusive. */
+  verdict: text("verdict").notNull(),
+  detail: text("detail"),
+  /** The run the retest performed, which is what makes the verdict checkable. */
+  runId: text("run_id"),
+  /** The detector set it ran with, so two verdicts can be compared fairly. */
+  inventoryDigest: text("inventory_digest"),
+  checkedBy: text("checked_by"),
+  checkedAt: timestamp("checked_at").notNull(),
+});
+
 export const documents = sqliteTable("documents", {
   id: id(),
   clientId: text("client_id").notNull(),
@@ -264,6 +380,12 @@ export const insertTestSchema = createInsertSchema(tests, {
   findings: optionalJson,
 }).omit({ id: true, startedAt: true });
 
+export const insertFindingSchema = createInsertSchema(findings, {
+  statusChangedAt: optionalDate,
+  fixedAt: optionalDate,
+  reopenedAt: optionalDate,
+}).omit({ id: true, firstSeenAt: true, lastSeenAt: true });
+
 export const insertDocumentSchema = createInsertSchema(documents, {
   title: z.string().min(1).max(300),
   documentType: z.string().min(1).max(100),
@@ -337,6 +459,21 @@ export type InsertSite = z.infer<typeof insertSiteSchema>;
 export type Site = typeof sites.$inferSelect;
 export type InsertTest = z.infer<typeof insertTestSchema>;
 export type Test = typeof tests.$inferSelect;
+export type InsertFinding = z.infer<typeof insertFindingSchema>;
+export type FindingSighting = typeof findingSightings.$inferSelect;
+export type FindingCheck = typeof findingChecks.$inferSelect;
+export type Finding = typeof findings.$inferSelect;
+
+/**
+ * The states a finding can be in.
+ *
+ * `fixed` is absent from what a person may set, on purpose. It is a claim
+ * about the customer's system, and only a retest the engine answered `closed`
+ * may make it. The other three are opinions and are stored as opinions.
+ */
+export const SETTABLE_FINDING_STATUS = ["open", "acknowledged", "accepted"] as const;
+export const FINDING_STATUS = [...SETTABLE_FINDING_STATUS, "fixed"] as const;
+export type FindingStatus = (typeof FINDING_STATUS)[number];
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;

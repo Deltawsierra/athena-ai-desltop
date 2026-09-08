@@ -135,6 +135,75 @@ function createSchema(handle: DatabaseType): void {
       is_sample INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_tests_client_id ON tests(client_id);
+
+    CREATE TABLE IF NOT EXISTS findings (
+      id TEXT PRIMARY KEY,
+      fingerprint TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      site_id TEXT,
+      engagement_ref TEXT NOT NULL,
+      type TEXT NOT NULL,
+      severity TEXT,
+      message TEXT,
+      target TEXT,
+      endpoint TEXT,
+      header TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      owner_id TEXT,
+      status_note TEXT,
+      status_changed_by TEXT,
+      status_changed_at INTEGER,
+      first_seen_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      times_seen INTEGER NOT NULL DEFAULT 1,
+      last_test_id TEXT,
+      last_run_id TEXT,
+      fixed_at INTEGER,
+      fixed_by_run_id TEXT,
+      fixed_verdict TEXT,
+      reopened_at INTEGER,
+      is_sample INTEGER NOT NULL DEFAULT 0
+    );
+    -- One row per issue per customer. The uniqueness is the dedupe: a rescan
+    -- that finds the same thing updates the row it collides with instead of
+    -- adding a second copy. Keyed on the client rather than the engagement
+    -- reference, because scanning a host with the site named and again
+    -- without it produces two engagement strings for one issue.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_findings_fingerprint
+      ON findings(client_id, fingerprint);
+    CREATE INDEX IF NOT EXISTS idx_findings_client_id ON findings(client_id);
+    CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
+
+    -- What each run observed, kept for ever. A seen value of 0 means the run
+    -- went to the target and did not report the finding, which is not the same
+    -- as fixed and closes nothing.
+    CREATE TABLE IF NOT EXISTS finding_sightings (
+      id TEXT PRIMARY KEY,
+      finding_id TEXT NOT NULL,
+      run_id TEXT,
+      test_id TEXT,
+      seen INTEGER NOT NULL,
+      observed_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sightings_finding ON finding_sightings(finding_id);
+    -- One observation per finding per run, so a poll that fires twice on the
+    -- same run does not write the same fact again.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_sightings_finding_run
+      ON finding_sightings(finding_id, run_id);
+
+    -- Every retest as its own record. The answer given in March is not
+    -- replaced by the answer given in June.
+    CREATE TABLE IF NOT EXISTS finding_checks (
+      id TEXT PRIMARY KEY,
+      finding_id TEXT NOT NULL,
+      verdict TEXT NOT NULL,
+      detail TEXT,
+      run_id TEXT,
+      inventory_digest TEXT,
+      checked_by TEXT,
+      checked_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_checks_finding ON finding_checks(finding_id);
     CREATE INDEX IF NOT EXISTS idx_tests_site_id ON tests(site_id);
 
     CREATE TABLE IF NOT EXISTS documents (

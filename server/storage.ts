@@ -3,6 +3,8 @@ import {
   type Client, type InsertClient,
   type Site, type InsertSite,
   type Test, type InsertTest,
+  type Finding, type InsertFinding,
+  type FindingSighting, type FindingCheck,
   type Document, type InsertDocument,
   type ActivityLog, type InsertActivityLog,
   type AIHealthMetric, type InsertAIHealthMetric,
@@ -54,6 +56,20 @@ export interface IStorage {
   createTest(test: InsertTest): Promise<Test>;
   updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined>;
   deleteTest(id: string): Promise<boolean>;
+
+  // Findings
+  getFinding(id: string): Promise<Finding | undefined>;
+  getFindingsByClient(clientId: string): Promise<Finding[]>;
+  /** The row this issue already has in this engagement, if any. */
+  findFindingByFingerprint(clientId: string, fingerprint: string): Promise<Finding | undefined>;
+  createFinding(finding: InsertFinding): Promise<Finding>;
+  updateFinding(id: string, finding: Partial<Finding>): Promise<Finding | undefined>;
+  /** What a run observed. Idempotent per (finding, run). */
+  recordSighting(findingId: string, runId: string | null, testId: string | null, seen: boolean): Promise<void>;
+  getSightings(findingId: string): Promise<FindingSighting[]>;
+  /** A retest, appended. Never replaces an earlier one. */
+  recordCheck(check: Omit<FindingCheck, "id" | "checkedAt">): Promise<FindingCheck>;
+  getChecks(findingId: string): Promise<FindingCheck[]>;
 
   // Documents
   getDocument(id: string): Promise<Document | undefined>;
@@ -292,6 +308,69 @@ export class MemStorage implements IStorage {
   async getTestsBySite(siteId: string) {
     return Array.from(this.tests.values()).filter((t) => t.siteId === siteId);
   }
+  // Findings
+  private findings = new Map<string, Finding>();
+
+  async getFinding(id: string) { return this.findings.get(id); }
+  async getFindingsByClient(clientId: string) {
+    return Array.from(this.findings.values()).filter((f) => f.clientId === clientId);
+  }
+  async findFindingByFingerprint(clientId: string, fingerprint: string) {
+    return Array.from(this.findings.values()).find(
+      (f) => f.clientId === clientId && f.fingerprint === fingerprint,
+    );
+  }
+  async createFinding(insert: InsertFinding): Promise<Finding> {
+    const now = new Date();
+    const finding: Finding = {
+      siteId: null, severity: null, message: null, target: null,
+      endpoint: null, header: null, status: "open", ownerId: null,
+      statusNote: null, statusChangedBy: null, statusChangedAt: null,
+      timesSeen: 1, lastTestId: null, lastRunId: null,
+      fixedAt: null, fixedByRunId: null, fixedVerdict: null, reopenedAt: null,
+      isSample: false,
+      ...insert,
+      id: randomUUID(),
+      firstSeenAt: now,
+      lastSeenAt: now,
+    } as Finding;
+    this.findings.set(finding.id, finding);
+    return finding;
+  }
+  async updateFinding(id: string, patch: Partial<Finding>) {
+    const existing = this.findings.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...patch, id: existing.id };
+    this.findings.set(id, updated);
+    return updated;
+  }
+
+  private sightings: FindingSighting[] = [];
+  private checks: FindingCheck[] = [];
+
+  async recordSighting(findingId: string, runId: string | null, testId: string | null, seen: boolean) {
+    // One observation per finding per run: a status poll that fires twice on
+    // the same run must not write the same fact twice.
+    const already = this.sightings.find(
+      (one) => one.findingId === findingId && one.runId === runId,
+    );
+    if (already) { already.seen = seen; return; }
+    this.sightings.push({
+      id: randomUUID(), findingId, runId, testId, seen, observedAt: new Date(),
+    });
+  }
+  async getSightings(findingId: string) {
+    return this.sightings.filter((one) => one.findingId === findingId);
+  }
+  async recordCheck(check: Omit<FindingCheck, "id" | "checkedAt">) {
+    const row: FindingCheck = { ...check, id: randomUUID(), checkedAt: new Date() };
+    this.checks.push(row);
+    return row;
+  }
+  async getChecks(findingId: string) {
+    return this.checks.filter((one) => one.findingId === findingId);
+  }
+
   async createTest(insertTest: InsertTest): Promise<Test> {
     const test: Test = {
       status: "pending",
