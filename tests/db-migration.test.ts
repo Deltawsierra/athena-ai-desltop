@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import Database from "better-sqlite3";
 import fs from "fs";
 import os from "os";
@@ -81,5 +81,54 @@ describe("adding a column to a database that already exists", () => {
     const removed = await storage.removeSampleData();
     expect(removed.clients).toBe(0);
     expect((await storage.getClient("c1"))?.name).toBe("Existing Client");
+  });
+
+  it("relaxes the health columns that have no source, keeping the rows", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "athena-health-"));
+    const file = path.join(dir, "athena.db");
+    const handle = new Database(file);
+    // ai_health_metrics exactly as it was: four columns NOT NULL, which is
+    // what obliged the installer to invent a detection accuracy -- the column
+    // would not accept the truth, which was that nobody had measured one.
+    handle.exec(`
+      CREATE TABLE ai_health_metrics (
+        id TEXT PRIMARY KEY, timestamp INTEGER NOT NULL,
+        cpu_usage INTEGER NOT NULL, memory_usage INTEGER NOT NULL,
+        active_scans INTEGER NOT NULL DEFAULT 0,
+        total_scans_today INTEGER NOT NULL DEFAULT 0,
+        success_rate INTEGER NOT NULL,
+        average_response_time INTEGER NOT NULL,
+        models_loaded TEXT, last_training_date INTEGER,
+        detection_accuracy INTEGER NOT NULL,
+        false_positive_rate INTEGER NOT NULL
+      );
+      INSERT INTO ai_health_metrics
+        (id, timestamp, cpu_usage, memory_usage, success_rate,
+         average_response_time, detection_accuracy, false_positive_rate)
+        VALUES ('m1', 1000, 24, 41, 98, 220, 94, 3);
+    `);
+    handle.close();
+
+    process.env.ATHENA_DB_PATH = file;
+    // The connection is a module singleton, so without this the previous case's
+    // database answers this one's questions.
+    vi.resetModules();
+    const { storage } = await import("../server/storage-sqlite");
+
+    // The old row survives the rebuild, fabricated figures and all. Removing
+    // somebody's data at startup is not this migration's business; what it
+    // does is make it possible to write the truth from now on.
+    const kept = await storage.getLatestAIHealthMetric();
+    expect(kept?.cpuUsage).toBe(24);
+    expect(kept?.detectionAccuracy).toBe(94);
+
+    // And a new reading can leave those columns empty, which the old shape
+    // rejected outright.
+    const written = await storage.createAIHealthMetric({
+      cpuUsage: 7, memoryUsage: 8, detectionAccuracy: null, falsePositiveRate: null,
+      successRate: null, averageResponseTime: null,
+    });
+    expect(written.detectionAccuracy).toBeNull();
+    expect(written.successRate).toBeNull();
   });
 });

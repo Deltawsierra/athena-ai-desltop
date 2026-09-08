@@ -171,12 +171,14 @@ function createSchema(handle: DatabaseType): void {
       memory_usage INTEGER NOT NULL,
       active_scans INTEGER NOT NULL DEFAULT 0,
       total_scans_today INTEGER NOT NULL DEFAULT 0,
-      success_rate INTEGER NOT NULL,
-      average_response_time INTEGER NOT NULL,
+      success_rate INTEGER,
+      average_response_time INTEGER,
       models_loaded TEXT,
       last_training_date INTEGER,
-      detection_accuracy INTEGER NOT NULL,
-      false_positive_rate INTEGER NOT NULL
+      detection_accuracy INTEGER,
+      false_positive_rate INTEGER,
+      guards_checked INTEGER,
+      guards_failing INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_ai_health_metrics_timestamp ON ai_health_metrics(timestamp);
 
@@ -232,6 +234,7 @@ function createSchema(handle: DatabaseType): void {
     );
   `);
   addMissingColumns(handle);
+  relaxHealthMetricColumns(handle);
 }
 
 /**
@@ -253,6 +256,8 @@ function addMissingColumns(handle: DatabaseType): void {
     ["sites", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
     ["tests", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
     ["documents", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+    ["ai_health_metrics", "guards_checked", "INTEGER"],
+    ["ai_health_metrics", "guards_failing", "INTEGER"],
   ];
   for (const [table, column, definition] of additions) {
     const present = handle
@@ -267,4 +272,64 @@ function addMissingColumns(handle: DatabaseType): void {
 /** Open the connection and create the schema if it is not there yet. */
 export function initDatabase(): void {
   connect();
+}
+
+/**
+ * Drop NOT NULL from the four health columns that have no source.
+ *
+ * SQLite cannot relax a constraint in place, so this is the copy-and-rename
+ * every schema tool emits for the same change. It is here rather than in
+ * addMissingColumns because that list is deliberately additive: adding a
+ * column cannot lose anything, and rebuilding a table can, so this one is
+ * written out where it can be read.
+ *
+ * It runs only when the old shape is still on disk, inside a transaction, and
+ * it copies every row. What it is undoing is a schema that obliged its only
+ * writer -- the installer -- to invent a detection-accuracy figure because the
+ * column would not accept the truth, which was that nobody had measured one.
+ */
+function relaxHealthMetricColumns(handle: DatabaseType): void {
+  const columns = handle
+    .prepare("PRAGMA table_info(ai_health_metrics)")
+    .all() as Array<{ name: string; notnull: number }>;
+  const stillRequired = columns.some(
+    (one) =>
+      one.notnull === 1 &&
+      ["success_rate", "average_response_time", "detection_accuracy", "false_positive_rate"]
+        .includes(one.name),
+  );
+  if (!stillRequired) return;
+
+  handle.transaction(() => {
+    handle.exec(`
+      CREATE TABLE ai_health_metrics_rebuilt (
+        id TEXT PRIMARY KEY,
+        timestamp INTEGER NOT NULL,
+        cpu_usage INTEGER NOT NULL,
+        memory_usage INTEGER NOT NULL,
+        active_scans INTEGER NOT NULL DEFAULT 0,
+        total_scans_today INTEGER NOT NULL DEFAULT 0,
+        success_rate INTEGER,
+        average_response_time INTEGER,
+        models_loaded TEXT,
+        last_training_date INTEGER,
+        detection_accuracy INTEGER,
+        false_positive_rate INTEGER,
+        guards_checked INTEGER,
+        guards_failing INTEGER
+      );
+      INSERT INTO ai_health_metrics_rebuilt (
+        id, timestamp, cpu_usage, memory_usage, active_scans, total_scans_today,
+        success_rate, average_response_time, models_loaded, last_training_date,
+        detection_accuracy, false_positive_rate
+      )
+      SELECT id, timestamp, cpu_usage, memory_usage, active_scans, total_scans_today,
+             success_rate, average_response_time, models_loaded, last_training_date,
+             detection_accuracy, false_positive_rate
+      FROM ai_health_metrics;
+      DROP TABLE ai_health_metrics;
+      ALTER TABLE ai_health_metrics_rebuilt RENAME TO ai_health_metrics;
+    `);
+  })();
+  console.log("[db] ai_health_metrics rebuilt: the unmeasured columns accept null");
 }

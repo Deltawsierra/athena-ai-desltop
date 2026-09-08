@@ -114,21 +114,11 @@ export async function initializeDefaultData(): Promise<void> {
     await storage.createDocument(docData);
   }
 
-  // AI Health: the screen asks for the latest metric on load. Nothing wrote one
-  // and nothing seeded one, so it answered 404 on every install and the whole
-  // screen rendered its empty fallback with two blank charts.
-  await storage.createAIHealthMetric({
-    cpuUsage: 24,
-    memoryUsage: 41,
-    activeScans: 0,
-    totalScansToday: 0,
-    successRate: 98,
-    averageResponseTime: 220,
-    modelsLoaded: ["threat-classifier", "cve-classifier"],
-    lastTrainingDate: null,
-    detectionAccuracy: 94,
-    falsePositiveRate: 3,
-  });
+  // No AI health metric is seeded any more. The one that used to be written
+  // here reported 98% success, 94% detection accuracy and a 3% false-positive
+  // rate on a machine that had measured nothing, and it was the only row that
+  // table ever held. server/health.ts takes a real reading a minute after the
+  // server starts and every minute after that.
 
   await storage.createActivityLog({
     action: "seeded",

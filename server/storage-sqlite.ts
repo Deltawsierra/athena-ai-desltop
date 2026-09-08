@@ -322,6 +322,14 @@ export class SqliteStorage implements IStorage {
       totalScansToday: 0,
       modelsLoaded: null,
       lastTrainingDate: null,
+      // Null, not zero. A figure nobody measured is absent; zero would read
+      // as a measured zero, which for a detection accuracy is a claim.
+      successRate: null,
+      averageResponseTime: null,
+      detectionAccuracy: null,
+      falsePositiveRate: null,
+      guardsChecked: null,
+      guardsFailing: null,
       ...metric,
       id: crypto.randomUUID(),
       timestamp: new Date(),

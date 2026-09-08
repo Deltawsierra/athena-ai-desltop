@@ -132,6 +132,22 @@ export const activityLogs = sqliteTable("activity_logs", {
   timestamp: timestamp("timestamp").notNull(),
 });
 
+/**
+ * What this deployment can actually measure about itself.
+ *
+ * Four of these columns used to be NOT NULL, which forced every writer to
+ * supply a number whether or not one existed -- and the only writer was the
+ * installer, which supplied 98% success, 94% detection accuracy and a 3%
+ * false-positive rate. Nothing measured anything; nothing ever wrote a second
+ * row; and the screen graded itself "excellent" off those three constants.
+ *
+ * They are nullable now, because null is the honest value for a figure with
+ * no source, and a screen can render "not measured" from a null and cannot
+ * render it from a 94. Detection accuracy and the false-positive rate are
+ * always null here: they come from a benchmark that runs in the engine's CI
+ * and is not exposed on any route, so this app has no way to know them and
+ * will not print a number that looks like it does.
+ */
 export const aiHealthMetrics = sqliteTable("ai_health_metrics", {
   id: id(),
   timestamp: timestamp("timestamp").notNull(),
@@ -139,12 +155,19 @@ export const aiHealthMetrics = sqliteTable("ai_health_metrics", {
   memoryUsage: integer("memory_usage").notNull(),
   activeScans: integer("active_scans").notNull().default(0),
   totalScansToday: integer("total_scans_today").notNull().default(0),
-  successRate: integer("success_rate").notNull(),
-  averageResponseTime: integer("average_response_time").notNull(),
+  /** Finished scans that completed rather than failed. Null before any finish. */
+  successRate: integer("success_rate"),
+  /** This server's own mean API response time. Null before any request. */
+  averageResponseTime: integer("average_response_time"),
   modelsLoaded: json<string[]>("models_loaded"),
   lastTrainingDate: timestamp("last_training_date"),
-  detectionAccuracy: integer("detection_accuracy").notNull(),
-  falsePositiveRate: integer("false_positive_rate").notNull(),
+  /** No source in this app. Always null; the screen says why. */
+  detectionAccuracy: integer("detection_accuracy"),
+  /** No source in this app. Always null; the screen says why. */
+  falsePositiveRate: integer("false_positive_rate"),
+  /** The engine's boot canary, when an engine answered. */
+  guardsChecked: integer("guards_checked"),
+  guardsFailing: integer("guards_failing"),
 });
 
 export const aiControlSettings = sqliteTable("ai_control_settings", {

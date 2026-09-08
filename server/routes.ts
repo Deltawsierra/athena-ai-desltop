@@ -801,9 +801,10 @@ export function registerRoutes(app: Express): void {
 
   // ==== AI HEALTH ====
   app.get("/api/ai-health/latest", asyncHandler(async (_req, res) => {
-    const metric = await storage.getLatestAIHealthMetric();
-    if (!metric) return notFound(res, "Health metric");
-    res.json(metric);
+    // null rather than 404. "No reading has been taken yet" is a state of a
+    // healthy deployment in its first minute, not a missing resource, and a
+    // 404 made the screen render its error fallback on every fresh install.
+    res.json((await storage.getLatestAIHealthMetric()) ?? null);
   }));
 
   app.get("/api/ai-health", asyncHandler(async (req, res) => {

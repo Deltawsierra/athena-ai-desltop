@@ -63,10 +63,20 @@ describe("the SQLite backend over HTTP", () => {
     expect(new Date(readBack.body.completedAt).toISOString()).toBe("2024-05-01T00:00:00.000Z");
     expect(readBack.body.vulnerabilitiesFound).toBe(0);
 
+    // An array column used to gain a stray element on read. Written here
+    // rather than read off a seeded row, because the installer no longer
+    // writes a health metric -- it used to invent one, including a detection
+    // accuracy nobody had measured.
+    await agent.post("/api/ai-health").send({
+      cpuUsage: 3, memoryUsage: 4,
+      modelsLoaded: ["threat-classifier", "cve-classifier"],
+    }).expect(201);
     const health = await agent.get("/api/ai-health/latest");
     expect(health.status).toBe(200);
-    // An array column used to gain a stray element on read.
     expect(health.body.modelsLoaded).toEqual(["threat-classifier", "cve-classifier"]);
+    // And the figures with no source come back absent, not as zero.
+    expect(health.body.detectionAccuracy).toBeNull();
+    expect(health.body.falsePositiveRate).toBeNull();
   });
 
   it("returns a user whose isActive is a real boolean, both ways", async () => {

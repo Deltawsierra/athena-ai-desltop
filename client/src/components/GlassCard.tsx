@@ -29,6 +29,13 @@ interface GlassCardProps {
    * hairline and the corners gold, which is reserved for exactly that.
    */
   ruling?: boolean;
+  /**
+   * Forwarded explicitly, because TypeScript does not excess-check JSX
+   * attributes whose names are not valid identifiers. A `data-testid` passed
+   * to this component therefore typechecked cleanly and was dropped on the
+   * floor, and the test that looked for it failed with no hint why.
+   */
+  "data-testid"?: string;
 }
 
 export default function GlassCard({
@@ -37,6 +44,7 @@ export default function GlassCard({
   hover = true,
   glow = true,
   ruling = false,
+  "data-testid": testId,
 }: GlassCardProps) {
   // Somebody who has asked their operating system to stop moving things has
   // asked this too.
@@ -57,6 +65,7 @@ export default function GlassCard({
       }
       transition={{ type: "spring", stiffness: 320, damping: 30 }}
       style={{ willChange: "transform, box-shadow" }}
+      data-testid={testId}
     >
       {/* One hairline of accent along the top edge. The cheapest way to make
           a rectangle look engineered rather than drawn, and it costs no

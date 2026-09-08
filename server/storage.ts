@@ -427,6 +427,14 @@ export class MemStorage implements IStorage {
       totalScansToday: 0,
       modelsLoaded: null,
       lastTrainingDate: null,
+      // Null, not zero. A figure nobody measured is absent; zero would read
+      // as a measured zero, which for a detection accuracy is a claim.
+      successRate: null,
+      averageResponseTime: null,
+      detectionAccuracy: null,
+      falsePositiveRate: null,
+      guardsChecked: null,
+      guardsFailing: null,
       ...insertMetric,
       id: randomUUID(),
       timestamp: new Date(),
