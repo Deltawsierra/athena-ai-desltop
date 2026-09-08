@@ -77,3 +77,6 @@ attached_assets/image_*.png
 
 # Session secret
 session-secret
+
+# Benchmark transcripts. Local measurements, not source.
+tools/assistant-bench/results/
