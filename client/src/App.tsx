@@ -17,6 +17,7 @@ import PentestScan from "@/pages/PentestScan";
 import CVEClassifier from "@/pages/CVEClassifier";
 import AdminPage from "@/pages/AdminPage";
 import Settings from "@/pages/Settings";
+import Evidence from "@/pages/Evidence";
 import AuditLogs from "@/pages/AuditLogs";
 import Clients from "@/pages/Clients";
 import Tests from "@/pages/Tests";
@@ -56,6 +57,7 @@ function AppRoutes({ admin }: { admin: boolean }) {
       {admin && <Route path="/audit-logs" component={AuditLogs} />}
       <Route path="/ai-chat" component={AIChat} />
       <Route path="/classifiers" component={Classifiers} />
+      {admin && <Route path="/evidence" component={Evidence} />}
       {admin && <Route path="/settings" component={Settings} />}
       {admin && <Route path="/admin" component={AdminPage} />}
       {admin && <Route path="/ai-control" component={AIControlPanel} />}

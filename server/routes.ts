@@ -1067,6 +1067,77 @@ export function registerRoutes(app: Express): void {
     res.json(result);
   }));
 
+  // ==== EVIDENCE ====
+  // "Evidence Pack" is one of the six things this product says it produces.
+  // The engine has built them all along -- signed, Merkle-committed, with a
+  // per-source status -- and nothing in this app ever asked for one.
+
+  const evidenceRequestSchema = z.object({
+    clientId: z.string().min(1),
+    siteId: z.string().optional(),
+    testId: z.string().optional(),
+    reason: z.string().trim().min(1, "say what this pack is for").max(1000),
+  });
+
+  app.post("/api/evidence-pack", requireAdmin, asyncHandler(async (req, res) => {
+    // Admin only. A pack is a cross-source record of what this deployment did
+    // to somebody's systems, assembled for handing to a third party.
+    const data = evidenceRequestSchema.parse(req.body);
+
+    const client = await storage.getClient(data.clientId);
+    if (!client) return notFound(res, "Client");
+    const site = data.siteId ? await storage.getSite(data.siteId) : null;
+    if (data.siteId && !site) return notFound(res, "Site");
+    if (site && site.clientId !== data.clientId) {
+      return void res.status(400).json({ error: "that site belongs to a different client" });
+    }
+
+    // The same engagement string the scan was filed under, composed the same
+    // way. A pack scoped to a different spelling of the engagement is a pack
+    // about nothing.
+    const engagementRef = site ? `${client.id}:${site.id}` : client.id;
+
+    // The engine's run id, when this pack is about one test. Recorded in the
+    // test's findings by the scan route.
+    let runId: string | undefined;
+    if (data.testId) {
+      const test = await storage.getTest(data.testId);
+      if (!test) return notFound(res, "Test");
+      if (test.clientId !== data.clientId) {
+        return void res.status(400).json({ error: "that test belongs to a different client" });
+      }
+      const recorded = (test.findings ?? {}) as Record<string, unknown>;
+      if (typeof recorded.runId === "string") runId = recorded.runId;
+    }
+
+    let pack;
+    try {
+      pack = await engine.buildEvidencePack({ engagementRef, reason: data.reason, runId });
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+
+    // Recorded because issuing one is an act: it assembles a customer's
+    // records into a document that leaves this machine. What it was for is
+    // part of that, which is why `reason` is required.
+    await storage.createActivityLog({
+      action: "issued", entityType: "evidence_pack", entityId: engagementRef,
+      details: {
+        reason: data.reason,
+        signed: pack.signed,
+        leafCount: pack.leafCount,
+        merkleRoot: pack.merkleRoot,
+        runId: runId ?? null,
+      },
+      ...actor(req),
+    });
+
+    res.json(pack);
+  }));
+
   app.get("/api/assistant/status", asyncHandler(async (_req, res) => {
     res.json(await assistant.status());
   }));
