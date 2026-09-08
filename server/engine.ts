@@ -290,6 +290,70 @@ export async function startScan(request: ScanRequest): Promise<EngineScan> {
   };
 }
 
+/**
+ * What the engine's CVE classifier made of a piece of text.
+ *
+ * `informative` is the field that matters. The model knows five classes, so
+ * an input it has no signal for comes back at exactly the floor -- one fifth
+ * -- carrying whichever label wins the tie-break, which is always `rce`.
+ * Measured: an empty string, "zzzz", "csrf token missing" and "xxe external
+ * entity" all answer `rce` at 0.200, because CSRF and XXE are not among the
+ * five. Rendering that as a classification would replace the constant this
+ * screen used to print with a different untruth.
+ */
+export interface CveClassification {
+  label: string | null;
+  confidence: number;
+  /** False when the model expressed no preference and the label is a tie-break. */
+  informative: boolean;
+  /** The no-information floor, 1/classes, as the engine computed it. */
+  baseline: number | null;
+  /** Every label this model can return, so a caller can say what it cannot. */
+  classes: string[];
+  engineVersion: string | null;
+  /** The engine's own words when the model is not loaded at all. */
+  unavailable: string | null;
+}
+
+/**
+ * Ask the engine to classify a vulnerability description.
+ *
+ * This screen once answered "SQL Injection, 92% confident" to every input,
+ * both constants. It then said no classification route existed, which was
+ * wrong -- `/api/classify-cve` has been there all along. This calls it.
+ */
+export async function classifyCve(text: string): Promise<CveClassification> {
+  const response = await call("/api/classify-cve", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    throw new EngineUnavailable(
+      `the engine answered ${response.status}: ${await body(response)}`,
+    );
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+  const classes = Array.isArray(payload.classes)
+    ? payload.classes.filter((one): one is string => typeof one === "string")
+    : [];
+
+  return {
+    label: typeof payload.label === "string" ? payload.label : null,
+    confidence: typeof payload.confidence === "number" ? payload.confidence : 0,
+    // Absent means false. An older engine that does not send this field has
+    // not told us the answer was informative, and assuming it was is how the
+    // floor case gets rendered as a finding.
+    informative: payload.informative === true,
+    baseline: typeof payload.baseline === "number" ? payload.baseline : null,
+    classes,
+    engineVersion:
+      typeof payload.engine_version === "string" ? payload.engine_version : null,
+    unavailable: typeof payload.error === "string" ? payload.error : null,
+  };
+}
+
 /** Where a run has got to. */
 export async function runState(runId: string): Promise<EngineScan> {
   const response = await call(`/api/scans/${encodeURIComponent(runId)}`);
