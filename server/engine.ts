@@ -713,3 +713,37 @@ export async function retest(request: RetestRequest): Promise<RetestResult> {
     checkedAt: typeof check.checked_at === "string" ? check.checked_at : null,
   };
 }
+
+/**
+ * Which scanners this engine has loaded.
+ *
+ * Measured by the engine from the artifacts on disk rather than read back from
+ * a table, and it is the difference between "a scanner looked and found
+ * nothing" and "nothing looked". The compliance map needs that difference:
+ * without it a requirement nobody tested renders identically to one that
+ * passed.
+ *
+ * Returns null when the engine could not be asked. Null is not an empty list:
+ * an empty list says the engine has no scanners, and null says we do not know,
+ * and the map treats them differently on purpose.
+ */
+export async function loadedScanners(): Promise<string[] | null> {
+  let response;
+  try {
+    response = await call("/api/extensions");
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  const payload = (await response.json()) as Record<string, unknown>;
+  const listed = Array.isArray(payload.extensions) ? payload.extensions : [];
+  return listed
+    .map((one) => one as Record<string, unknown>)
+    // `kind` separates scanners from detectors, adapters and the rest; only a
+    // scanner produces the findings a requirement is judged on. `enabled`
+    // matters as much: a scanner present on disk but switched off did not run.
+    .filter((one) => one.kind === "scanner" && one.enabled === true)
+    .map((one) => String(one.name))
+    .sort();
+}

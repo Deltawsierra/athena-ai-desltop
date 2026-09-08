@@ -14,6 +14,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import PentestScan from "@/pages/PentestScan";
+import Compliance from "@/pages/Compliance";
 import CVEClassifier from "@/pages/CVEClassifier";
 import AdminPage from "@/pages/AdminPage";
 import Settings from "@/pages/Settings";
@@ -52,6 +53,7 @@ function AppRoutes({ admin }: { admin: boolean }) {
       <Route path="/tests" component={Tests} />
       <Route path="/documents" component={Documents} />
       <Route path="/pentest" component={PentestScan} />
+      <Route path="/compliance" component={Compliance} />
       <Route path="/classify-cve" component={CVEClassifier} />
       <Route path="/ai-health" component={AIHealth} />
       {admin && <Route path="/audit-logs" component={AuditLogs} />}
