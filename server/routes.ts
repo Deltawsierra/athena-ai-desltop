@@ -6,6 +6,7 @@ import * as assistant from "./assistant";
 import * as settings from "./settings";
 import * as engine from "./engine";
 import { controlMap, type ScanFinding } from "./compliance";
+import * as lifecycle from "./findings";
 import {
   insertClientSchema, insertSiteSchema, insertTestSchema,
   insertDocumentSchema, insertAIHealthMetricSchema,
@@ -13,6 +14,7 @@ import {
   updateConnectionSettingsSchema,
   insertClassifierSchema, USER_ROLES,
   type User, type PublicUser,
+  SETTABLE_FINDING_STATUS,
 } from "@shared/schema";
 
 /**
@@ -743,13 +745,25 @@ export function registerRoutes(app: Express): void {
       executedBy: req.session.userId ?? null,
     });
 
+    // File what came back as findings with a life of their own. A scan that
+    // completes inline has its results now; one still running is filed when
+    // it finishes, on the status route.
+    const filed = await lifecycle.ingest(storage, started.findings ?? [], {
+      clientId: data.clientId,
+      siteId: data.siteId ?? null,
+      engagementRef,
+      target: data.target,
+      testId: test.id,
+      runId: started.runId ?? null,
+    });
+
     await storage.createActivityLog({
       action: "started", entityType: "test", entityId: test.id,
-      details: { target: data.target, engagementRef, runId: started.runId },
+      details: { target: data.target, engagementRef, runId: started.runId, filed },
       ...actor(req),
     });
 
-    res.status(201).json({ test, runId: started.runId, state: started.state });
+    res.status(201).json({ test, runId: started.runId, state: started.state, filed });
   }));
 
   /**
@@ -836,7 +850,26 @@ export function registerRoutes(app: Express): void {
       ...counts,
     });
 
-    res.json({ test: updated ?? test, state: current.state, engine: current });
+    // Filed once the run has stopped moving. Filing a scan still in flight
+    // would record half a picture as the current state of the engagement,
+    // and the next poll would file the same findings again.
+    let filed: lifecycle.IngestResult | null = null;
+    if (finished) {
+      const client = await storage.getClient(test.clientId);
+      const site = test.siteId ? await storage.getSite(test.siteId) : null;
+      if (client) {
+        filed = await lifecycle.ingest(storage, current.findings ?? [], {
+          clientId: client.id,
+          siteId: test.siteId ?? null,
+          engagementRef: site ? `${client.id}:${site.id}` : client.id,
+          target: typeof recorded.target === "string" ? recorded.target : null,
+          testId: test.id,
+          runId,
+        });
+      }
+    }
+
+    res.json({ test: updated ?? test, state: current.state, engine: current, filed });
   }));
 
   // ==== RETEST ====
@@ -924,6 +957,51 @@ export function registerRoutes(app: Express): void {
       throw cause;
     }
 
+    // Carry the verdict into the finding it is about.
+    //
+    // The finding is identified from the twin's own recorded place, fetched
+    // from the engine -- not from anything the caller sent. A caller who could
+    // name the finding to mark fixed could mark any finding fixed, which is
+    // the one thing this lifecycle exists to prevent.
+    let applied: { findingId: string; status: string; detail: string } | null = null;
+    const recorded = (test.findings ?? {}) as Record<string, unknown>;
+    const runId = typeof recorded.runId === "string" ? recorded.runId : null;
+    if (runId) {
+      try {
+        const listed = await engine.listDecisions(runId);
+        const twin = listed.decisions.find((one) => one.id === data.twinId);
+        if (twin) {
+          const key = lifecycle.fingerprint(client.id, {
+            type: twin.findingType,
+            severity: null, message: null,
+            target: twin.target,
+            endpoint: twin.endpoint,
+            header: null,
+          });
+          const finding = await storage.findFindingByFingerprint(client.id, key);
+          if (finding) {
+            const decided = lifecycle.statusFromVerdict(result.verdict, finding.status);
+            await storage.updateFinding(finding.id, {
+              status: decided.status,
+              statusNote: decided.detail,
+              statusChangedBy: req.session.userId ?? null,
+              statusChangedAt: new Date(),
+              // Only a `closed` verdict writes these, and they are what makes
+              // the claim checkable afterwards.
+              ...(decided.fixed
+                ? { fixedAt: new Date(), fixedByRunId: result.runId, fixedVerdict: result.verdict }
+                : { fixedAt: null, fixedByRunId: null, fixedVerdict: null }),
+            });
+            applied = { findingId: finding.id, status: decided.status, detail: decided.detail };
+          }
+        }
+      } catch (cause) {
+        // The retest itself succeeded; failing to file it is worth saying but
+        // is not worth throwing away the verdict the operator asked for.
+        if (!(cause instanceof engine.EngineUnavailable)) throw cause;
+      }
+    }
+
     // A retest sends real requests to somebody's system, so it is an act and
     // belongs in the record with the authority it ran under.
     await storage.createActivityLog({
@@ -934,11 +1012,12 @@ export function registerRoutes(app: Express): void {
         verdict: result.verdict,
         findingType: result.findingType,
         target: result.target,
+        applied,
       },
       ...actor(req),
     });
 
-    res.json(result);
+    res.json({ ...result, applied });
   }));
 
   // ==== DOCUMENTS ====
@@ -1018,6 +1097,21 @@ export function registerRoutes(app: Express): void {
   }));
 
   // ==== USERS (admin only) ====
+  /**
+   * Who a finding can be given to.
+   *
+   * Separate from /api/users, which is admin-only and returns the whole user
+   * record. Assigning an owner is ordinary work for any operator, and this
+   * returns only what a picker needs -- an id and a name. The findings list
+   * already shows owners by name, so this discloses nothing it does not.
+   */
+  app.get("/api/users/assignable", asyncHandler(async (_req, res) => {
+    const users = await storage.getAllUsers();
+    res.json(users
+      .filter((one) => one.isActive)
+      .map((one) => ({ id: one.id, username: one.username })));
+  }));
+
   app.get("/api/users", requireAdmin, asyncHandler(async (_req, res) => {
     const users = await storage.getAllUsers();
     res.json(users.map(publicUser));
@@ -1239,6 +1333,100 @@ export function registerRoutes(app: Express): void {
     });
 
     res.json(pack);
+  }));
+
+  // ==== FINDING LIFECYCLE ====
+  //
+  // A finding as a thing with a life: an identity that survives a rescan, an
+  // owner, and a status. The rule that matters is what a person may set.
+  // `fixed` is not on that list. It is a claim about the customer's system and
+  // only a retest the engine answered `closed` may make it -- the route below
+  // refuses it, and the retest route writes it along with the run that earned
+  // it. A human may accept a risk or say they have looked at something; those
+  // are opinions, stored under their name as opinions.
+
+  app.get("/api/findings", asyncHandler(async (req, res) => {
+    const clientId = typeof req.query.clientId === "string" ? req.query.clientId : null;
+    if (!clientId) {
+      return void res.status(400).json({ error: "name the engagement: ?clientId=" });
+    }
+    const client = await storage.getClient(clientId);
+    if (!client) return notFound(res, "Client");
+
+    const status = typeof req.query.status === "string" ? req.query.status : null;
+    const rows = (await storage.getFindingsByClient(clientId))
+      .filter((one) => (status ? one.status === status : true))
+      .sort((a, b) => Number(b.lastSeenAt) - Number(a.lastSeenAt));
+
+    // Owners as names, so the page does not have to hold a user table to
+    // render "who has this".
+    const users = await storage.getAllUsers();
+    const nameOf = new Map(users.map((one) => [one.id, one.username]));
+
+    res.json({
+      findings: rows.map((one) => ({
+        ...one,
+        ownerName: one.ownerId ? nameOf.get(one.ownerId) ?? null : null,
+      })),
+      counts: {
+        open: rows.filter((one) => one.status === "open").length,
+        acknowledged: rows.filter((one) => one.status === "acknowledged").length,
+        accepted: rows.filter((one) => one.status === "accepted").length,
+        fixed: rows.filter((one) => one.status === "fixed").length,
+      },
+    });
+  }));
+
+  const findingPatchSchema = z.object({
+    // `fixed` is deliberately absent. A caller who sends it gets the sentence
+    // below rather than a silent rejection, because the reason is the point.
+    status: z.enum(SETTABLE_FINDING_STATUS).optional(),
+    ownerId: z.string().nullable().optional(),
+    note: z.string().trim().max(1000).optional(),
+  });
+
+  app.patch("/api/findings/:id", asyncHandler(async (req, res) => {
+    if (req.body?.status === "fixed") {
+      return void res.status(400).json({
+        error:
+          "a finding cannot be marked fixed by hand. Fixed means the engine went " +
+          "back to the target and did not find it: run a retest, and if it comes " +
+          "back closed the finding is closed with the run that proved it. If the " +
+          "risk is being carried rather than removed, mark it accepted.",
+      });
+    }
+    const data = findingPatchSchema.parse(req.body);
+
+    const finding = await storage.getFinding(req.params.id);
+    if (!finding) return notFound(res, "Finding");
+
+    if (data.ownerId) {
+      const owner = await storage.getUser(data.ownerId);
+      if (!owner) return void res.status(400).json({ error: "no such user to own it" });
+    }
+
+    const updated = await storage.updateFinding(finding.id, {
+      ...(data.status ? { status: data.status } : {}),
+      ...(data.ownerId !== undefined ? { ownerId: data.ownerId } : {}),
+      ...(data.note !== undefined ? { statusNote: data.note } : {}),
+      ...(data.status || data.note !== undefined
+        ? { statusChangedBy: req.session.userId ?? null, statusChangedAt: new Date() }
+        : {}),
+      // Whatever a person does here, the evidence columns are theirs to read
+      // and nobody's to write.
+    });
+
+    await storage.createActivityLog({
+      action: "updated", entityType: "finding", entityId: finding.id,
+      details: {
+        status: data.status ?? finding.status,
+        ownerId: data.ownerId ?? finding.ownerId,
+        note: data.note ?? null,
+      },
+      ...actor(req),
+    });
+
+    res.json(updated);
   }));
 
   // ==== COMPLIANCE ====

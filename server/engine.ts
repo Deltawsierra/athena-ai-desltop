@@ -282,10 +282,19 @@ export async function startScan(request: ScanRequest): Promise<EngineScan> {
   }
 
   const payload = (await response.json()) as Record<string, unknown>;
+  // Measured against a live engine: results come back under `result.results`,
+  // never at the top level. This read `payload.results` -- a key the engine
+  // does not send -- so a scan that completed inline had its findings silently
+  // dropped, and only the polling route ever saw them. Harmless while nothing
+  // asks the engine to wait, and a silent loss the moment anything does.
+  // `runState` has always read the nested form; both agree now.
+  const inline = (payload.result ?? {}) as Record<string, unknown>;
   return {
     runId: (payload.run_id as string) ?? null,
     state: (payload.state as string) ?? "running",
-    findings: Array.isArray(payload.results) ? payload.results : [],
+    findings: Array.isArray(inline.results)
+      ? inline.results
+      : Array.isArray(payload.results) ? payload.results : [],
     detail: "the engine accepted the scan",
   };
 }

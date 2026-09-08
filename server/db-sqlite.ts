@@ -135,6 +135,44 @@ function createSchema(handle: DatabaseType): void {
       is_sample INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_tests_client_id ON tests(client_id);
+
+    CREATE TABLE IF NOT EXISTS findings (
+      id TEXT PRIMARY KEY,
+      fingerprint TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      site_id TEXT,
+      engagement_ref TEXT NOT NULL,
+      type TEXT NOT NULL,
+      severity TEXT,
+      message TEXT,
+      target TEXT,
+      endpoint TEXT,
+      header TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      owner_id TEXT,
+      status_note TEXT,
+      status_changed_by TEXT,
+      status_changed_at INTEGER,
+      first_seen_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      times_seen INTEGER NOT NULL DEFAULT 1,
+      last_test_id TEXT,
+      last_run_id TEXT,
+      fixed_at INTEGER,
+      fixed_by_run_id TEXT,
+      fixed_verdict TEXT,
+      reopened_at INTEGER,
+      is_sample INTEGER NOT NULL DEFAULT 0
+    );
+    -- One row per issue per customer. The uniqueness is the dedupe: a rescan
+    -- that finds the same thing updates the row it collides with instead of
+    -- adding a second copy. Keyed on the client rather than the engagement
+    -- reference, because scanning a host with the site named and again
+    -- without it produces two engagement strings for one issue.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_findings_fingerprint
+      ON findings(client_id, fingerprint);
+    CREATE INDEX IF NOT EXISTS idx_findings_client_id ON findings(client_id);
+    CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
     CREATE INDEX IF NOT EXISTS idx_tests_site_id ON tests(site_id);
 
     CREATE TABLE IF NOT EXISTS documents (

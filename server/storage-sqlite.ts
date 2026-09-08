@@ -2,6 +2,7 @@ import { db } from "./db-sqlite";
 import * as schema from "@shared/schema";
 import { and, desc, eq } from "drizzle-orm";
 import crypto from "crypto";
+import { randomUUID } from "crypto";
 import type { IStorage } from "./storage";
 import { hashPassword, verifyPassword, dummyVerify } from "./password";
 import type {
@@ -9,6 +10,7 @@ import type {
   Client, InsertClient,
   Site, InsertSite,
   Test, InsertTest,
+  Finding, InsertFinding,
   Document, InsertDocument,
   ActivityLog, InsertActivityLog,
   AIHealthMetric, InsertAIHealthMetric,
@@ -184,6 +186,51 @@ export class SqliteStorage implements IStorage {
   async getTestsBySite(siteId: string): Promise<Test[]> {
     return db.select().from(schema.tests).where(eq(schema.tests.siteId, siteId)).all();
   }
+  // Findings
+  async getFinding(id: string): Promise<Finding | undefined> {
+    return db.select().from(schema.findings).where(eq(schema.findings.id, id)).get();
+  }
+  async getFindingsByClient(clientId: string): Promise<Finding[]> {
+    return db.select().from(schema.findings)
+      .where(eq(schema.findings.clientId, clientId)).all();
+  }
+  async findFindingByFingerprint(
+    clientId: string, fingerprint: string,
+  ): Promise<Finding | undefined> {
+    // Keyed on the customer, which is what the unique index is on. Not the
+    // engagement string: one customer scanned with a site named and again
+    // without it yields two engagement references for the same issue.
+    return db.select().from(schema.findings)
+      .where(and(
+        eq(schema.findings.clientId, clientId),
+        eq(schema.findings.fingerprint, fingerprint),
+      )).get();
+  }
+  async createFinding(insert: InsertFinding): Promise<Finding> {
+    const now = new Date();
+    const row: Finding = {
+      siteId: null, severity: null, message: null, target: null,
+      endpoint: null, header: null, status: "open", ownerId: null,
+      statusNote: null, statusChangedBy: null, statusChangedAt: null,
+      timesSeen: 1, lastTestId: null, lastRunId: null,
+      fixedAt: null, fixedByRunId: null, fixedVerdict: null, reopenedAt: null,
+      isSample: false,
+      ...insert,
+      id: randomUUID(),
+      firstSeenAt: now,
+      lastSeenAt: now,
+    } as Finding;
+    db.insert(schema.findings).values(row).run();
+    return row;
+  }
+  async updateFinding(id: string, patch: Partial<Finding>): Promise<Finding | undefined> {
+    const { id: _ignored, ...fields } = patch;
+    if (Object.keys(fields).length > 0) {
+      db.update(schema.findings).set(fields).where(eq(schema.findings.id, id)).run();
+    }
+    return this.getFinding(id);
+  }
+
   async createTest(test: InsertTest): Promise<Test> {
     const row: Test = {
       status: "pending",
