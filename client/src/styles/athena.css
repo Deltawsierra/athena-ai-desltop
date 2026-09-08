@@ -182,3 +182,185 @@
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------- */
+/* Olympus                                                                 */
+/*                                                                         */
+/* The brand mark is an owl and a shield drawn as one continuous line, and */
+/* the gradient runs cobalt through indigo into gold. That is the whole    */
+/* idea and it is worth stating: cyan is the machine speaking, gold is     */
+/* the judgement. A temple is instruments and authority in one building,   */
+/* and so is this.                                                        */
+/*                                                                         */
+/* Everything below is geometry -- brackets, a meander, fluting, a plinth. */
+/* No marble, no serifs, no laurel. The Greek reference has to survive     */
+/* being next to a severity table, and the way it survives is by being     */
+/* built from the same straight lines as the HUD.                          */
+/* ---------------------------------------------------------------------- */
+
+.dark {
+  /* The second accent, from the logo's right wing. Reserved for judgement:
+     an approval, a verified chain, a signature that checked out. Never for
+     decoration, and never for severity -- amber already means medium. */
+  --gold: 43 96% 62%;
+  --gold-dim: 43 60% 44%;
+
+  --glow-gold: 0 0 24px hsl(43 96% 62% / 0.3);
+}
+
+/* Corner brackets, for a surface that is not a GlassCard.
+ *
+ * GlassCard draws its own -- as elements, so `overflow-hidden` cannot clip
+ * them and a caller can choose the colour -- and nearly everything in this
+ * app is one. This is here for the exceptions: a bare section, a table
+ * header, anything that wants the frame without the panel.
+ */
+.athena-bracket {
+  position: relative;
+}
+
+.athena-bracket::before,
+.athena-bracket::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  border-color: hsl(var(--primary) / 0.55);
+}
+
+.athena-bracket::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+  border-top-left-radius: 14px;
+}
+
+.athena-bracket::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+  border-bottom-right-radius: 14px;
+}
+
+.athena-bracket--gold::before,
+.athena-bracket--gold::after {
+  border-color: hsl(var(--gold) / 0.6);
+}
+
+/* The meander.
+ *
+ * Drawn as an SVG data URI rather than stacked gradients. The gradient
+ * version was three background layers at a twelve-pixel repeat and it read as
+ * a row of tick marks -- the Greek key needs the corner turns to be legible or
+ * it is just a dashed line, and at that size they were not. One unit is 24
+ * wide and 10 tall, which is enough for the turn to register at the size a
+ * rule under a heading actually gets.
+ *
+ * currentColor rather than a variable, so a caller decides whether this rule
+ * carries gold (a judgement) or the primary (a measurement).
+ */
+.athena-meander {
+  height: 10px;
+  color: hsl(var(--gold) / 0.75);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='10' viewBox='0 0 24 10'%3E%3Cpath d='M0 8.5h4.5v-7h7v5h-3v-2h4.5v6h7v-7h4' fill='none' stroke='%23e0b13a' stroke-width='1.4'/%3E%3C/svg%3E");
+  background-size: 24px 10px;
+  background-repeat: repeat-x;
+  opacity: 0.85;
+}
+
+/* Fluting. A column's vertical grooves, at the density of a hairline grid --
+   close enough to read as texture, far enough not to moire on a laptop. */
+.athena-fluted {
+  background-image: repeating-linear-gradient(
+    90deg,
+    hsl(var(--primary) / 0.05) 0px,
+    hsl(var(--primary) / 0.05) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+}
+
+/* The plinth. The lit disc the brand art stands its constellation on: a
+   column base seen from above, and the anchor a figure sits on. */
+.athena-plinth {
+  position: relative;
+}
+
+.athena-plinth::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  width: 62%;
+  height: 22px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    hsl(var(--primary) / 0.28),
+    transparent 68%
+  );
+  pointer-events: none;
+}
+
+/* The horizon grid, in CSS rather than WebGL, for a header or an empty
+   state that should not cost a canvas. Perspective by way of a mask: the
+   lines are uniform and the fade does the work. */
+.athena-horizon {
+  position: relative;
+  overflow: hidden;
+}
+
+.athena-horizon::before {
+  content: "";
+  position: absolute;
+  inset: 40% -20% -20% -20%;
+  background-image:
+    linear-gradient(hsl(var(--primary) / 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--primary) / 0.18) 1px, transparent 1px);
+  background-size: 44px 44px;
+  transform: perspective(340px) rotateX(62deg);
+  transform-origin: 50% 0;
+  -webkit-mask-image: linear-gradient(hsl(0 0% 0% / 0.9), transparent 72%);
+  mask-image: linear-gradient(hsl(0 0% 0% / 0.9), transparent 72%);
+  pointer-events: none;
+}
+
+/* Judgement. A field the system has ruled on rather than measured. */
+.athena-gold {
+  color: hsl(var(--gold));
+}
+
+.athena-panel--gold {
+  border-color: hsl(var(--gold) / 0.34);
+}
+
+.athena-panel--gold::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--gold) / 0.6) 22%,
+    hsl(var(--gold) / 0.6) 78%,
+    transparent
+  );
+}
+
+/* Instrument ticks, from the strips in the corners of the brand art. A
+   density readout that is honest about being decoration: it is given its
+   value, and renders nothing when there is nothing to show. */
+.athena-ticks {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+}
+
+.athena-ticks > i {
+  display: block;
+  width: 2px;
+  background: hsl(var(--primary) / 0.5);
+  border-radius: 1px;
+}

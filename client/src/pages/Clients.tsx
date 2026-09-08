@@ -118,6 +118,7 @@ export default function Clients() {
                 <Building2 className="w-10 h-10 text-primary" />
                 Client Management
               </h1>
+              <div className="athena-meander max-w-xs" aria-hidden="true" />
               <p className="text-muted-foreground mt-2">
                 Manage clients, sites, and security assessments
               </p>

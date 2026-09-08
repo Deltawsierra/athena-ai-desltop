@@ -71,6 +71,7 @@ export default function AIHealth() {
               <Brain className="w-10 h-10 text-primary" />
               AI Health <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Monitoring</span>
             </motion.h1>
+            <div className="athena-meander max-w-xs" aria-hidden="true" />
             <motion.p
               className="text-muted-foreground"
               initial={{ opacity: 0 }}

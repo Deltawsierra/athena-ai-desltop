@@ -2,6 +2,7 @@ import type { Express, Request, RequestHandler, Response } from "express";
 import { z } from "zod";
 import { storage } from "./storage-unified";
 import { requireAuth, requireAdmin, asyncHandler, actor } from "./auth";
+import * as engine from "./engine";
 import {
   insertClientSchema, insertSiteSchema, insertTestSchema,
   insertDocumentSchema, insertAIHealthMetricSchema,
@@ -16,6 +17,59 @@ import {
  * and in an audit product "who ran this test" is evidence.
  */
 const createTestSchema = insertTestSchema.omit({ executedBy: true });
+
+// What a scan needs before the engine is asked anything: a target, and the
+// engagement it is being run under. The engagement is a client and, where
+// there is one, a site -- both looked up rather than taken on trust, because
+// a scan filed under an engagement nobody opened is a scan nobody authorised.
+const startScanSchema = z.object({
+  clientId: z.string().min(1),
+  siteId: z.string().min(1).optional(),
+  target: z.string().min(1).max(2000),
+  testType: z.string().min(1).max(100).default("penetration_test"),
+});
+
+/**
+ * The severity counts, taken from the findings the engine returned.
+ *
+ * Counted here rather than accepted from anywhere: these numbers are what a
+ * client reads on a report, and the only honest source for them is the list
+ * of findings they claim to summarise.
+ */
+function countSeverities(findings: unknown[]): {
+  vulnerabilitiesFound: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  severity: string | null;
+} {
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+  let total = 0;
+  for (const finding of findings) {
+    if (!finding || typeof finding !== "object") continue;
+    const entry = finding as Record<string, unknown>;
+    // The engine marks its own diagnostics `internal`. They are worth showing
+    // and they are not vulnerabilities, so they are not counted as any.
+    if (entry.internal === true) continue;
+    total += 1;
+    const severity = String(entry.severity ?? "").toLowerCase();
+    if (severity in counts) counts[severity as keyof typeof counts] += 1;
+  }
+  const worst = counts.critical ? "critical"
+    : counts.high ? "high"
+    : counts.medium ? "medium"
+    : counts.low ? "low"
+    : null;
+  return {
+    vulnerabilitiesFound: total,
+    criticalCount: counts.critical,
+    highCount: counts.high,
+    mediumCount: counts.medium,
+    lowCount: counts.low,
+    severity: worst,
+  };
+}
 const createDocumentSchema = insertDocumentSchema.omit({ createdBy: true });
 
 const updateClientSchema = insertClientSchema.partial();
@@ -513,6 +567,123 @@ export function registerRoutes(app: Express): void {
     if (!success) return notFound(res, "Test");
     await storage.createActivityLog({ action: "deleted", entityType: "test", entityId: req.params.id, details: null, ...actor(req) });
     res.json({ success: true });
+  }));
+
+  // ==== SCANS: the engine, and what it found ====
+  //
+  // A test row is the record; the engine is what makes it true. These two
+  // routes are the only place the two meet, and they are deliberately thin:
+  // Athena decides who may ask and under which engagement, the engine decides
+  // whether the target may be reached, and neither pretends to do the other's
+  // job. A refusal from the engine is passed through with its reason intact,
+  // because "the target is a loopback address" is the sentence the operator
+  // needs and "scan failed" is not.
+
+  app.get("/api/engine/status", asyncHandler(async (_req, res) => {
+    res.json(await engine.status());
+  }));
+
+  app.post("/api/scans", asyncHandler(async (req, res) => {
+    const data = startScanSchema.parse(req.body);
+
+    const client = await storage.getClient(data.clientId);
+    if (!client) return notFound(res, "Client");
+    const site = data.siteId ? await storage.getSite(data.siteId) : null;
+    if (data.siteId && !site) return notFound(res, "Site");
+    // A site that belongs to another client is not a site of this engagement.
+    if (site && site.clientId !== data.clientId) {
+      return void res.status(400).json({
+        error: "that site belongs to a different client",
+      });
+    }
+
+    // The engagement the engine will record against every effect. It is the
+    // client and the site, not something the caller composes, so a scan
+    // cannot be filed under an engagement nobody opened.
+    const engagementRef = site ? `${client.id}:${site.id}` : client.id;
+
+    let started;
+    try {
+      started = await engine.startScan({ target: data.target, engagementRef });
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        // 503, not 500. Nothing is broken: the engine is not there, or not
+        // answering, and that is a fact about the deployment.
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+
+    if (started.state === "refused") {
+      return void res.status(409).json({
+        error: "the engine refused this scan",
+        detail: started.refused ?? "",
+      });
+    }
+
+    const test = await storage.createTest({
+      clientId: data.clientId,
+      siteId: data.siteId ?? null,
+      testType: data.testType,
+      status: started.state === "completed" ? "completed" : "running",
+      severity: null,
+      completedAt: null,
+      summary: `${data.target} — engine run ${started.runId ?? "unknown"}`,
+      findings: { runId: started.runId, target: data.target, results: started.findings },
+      vulnerabilitiesFound: 0,
+      criticalCount: 0,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      executedBy: req.session.userId ?? null,
+    });
+
+    await storage.createActivityLog({
+      action: "started", entityType: "test", entityId: test.id,
+      details: { target: data.target, engagementRef, runId: started.runId },
+      ...actor(req),
+    });
+
+    res.status(201).json({ test, runId: started.runId, state: started.state });
+  }));
+
+  app.get("/api/scans/:testId", asyncHandler(async (req, res) => {
+    const test = await storage.getTest(req.params.testId);
+    if (!test) return notFound(res, "Test");
+
+    const recorded = (test.findings ?? {}) as Record<string, unknown>;
+    const runId = typeof recorded.runId === "string" ? recorded.runId : null;
+    if (!runId || test.status === "completed") {
+      return void res.json({ test, state: test.status, engine: null });
+    }
+
+    let current;
+    try {
+      current = await engine.runState(runId);
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        // The record stands even when the engine has gone. Saying so beats
+        // reporting the row's last known status as if it were current.
+        return void res.status(200).json({
+          test, state: test.status, engine: null, detail: cause.message,
+        });
+      }
+      throw cause;
+    }
+
+    // Counted from what came back, never from what was asked for.
+    const counts = countSeverities(current.findings);
+    const finished = current.state === "completed" || current.state === "aborted"
+      || current.state === "failed";
+
+    const updated = await storage.updateTest(test.id, {
+      status: current.state,
+      completedAt: finished ? new Date() : null,
+      findings: { ...recorded, results: current.findings },
+      ...counts,
+    });
+
+    res.json({ test: updated ?? test, state: current.state, engine: current });
   }));
 
   // ==== DOCUMENTS ====

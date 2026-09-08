@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Shield, Activity, Bug, Settings, LogOut, Users, Brain, FileText, ListChecks, FolderOpen, MessageSquare, Trash2, ChevronDown, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import athenaLogo from "@assets/generated_images/Athena_AI_owl_shield_logo_3eda4960.png";
+import athenaLogo from "@assets/generated_images/athena-mark.png";
 import ThemeToggle from "./ThemeToggle";
 import { cn } from "@/lib/utils";
 import {

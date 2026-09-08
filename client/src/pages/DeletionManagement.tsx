@@ -104,6 +104,7 @@ export default function DeletionManagement() {
               <Trash2 className="w-10 h-10 text-destructive" />
               Deletion <span className="bg-gradient-to-r from-destructive via-red-500 to-orange-500 bg-clip-text text-transparent">Management</span>
             </motion.h1>
+            <div className="athena-meander max-w-xs" aria-hidden="true" />
             <motion.p
               className="text-muted-foreground"
               initial={{ opacity: 0 }}
