@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Shield, Activity, Bug, Settings, LogOut, Users, Brain, FileText, ListChecks, FolderOpen, MessageSquare, Trash2, ChevronDown, LayoutDashboard, Link2 } from "lucide-react";
+import { Shield, Activity, Bug, Settings, LogOut, Users, Brain, FileText, ListChecks, FolderOpen, MessageSquare, Trash2, ChevronDown, LayoutDashboard, Link2, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import athenaLogo from "@assets/generated_images/athena-mark.png";
 import ThemeToggle from "./ThemeToggle";
@@ -21,6 +21,7 @@ interface NavigationProps {
 const testsDropdownItems = [
   { path: "/pentest", label: "Pentest", icon: Shield },
   { path: "/tests", label: "Tests", icon: ListChecks },
+  { path: "/compliance", label: "Compliance", icon: ScrollText },
   { path: "/documents", label: "Documents", icon: FolderOpen },
   { path: "/clients", label: "Clients", icon: Users },
   { path: "/classifiers", label: "Classifiers", icon: Brain },
