@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import GlassCard from "@/components/GlassCard";
 import AnimatedContainer from "@/components/AnimatedContainer";
+import SampleDataNotice from "@/components/SampleDataNotice";
 import type { Client, InsertClient } from "@shared/schema";
 
 export default function Clients() {
@@ -229,6 +230,10 @@ export default function Clients() {
               </DialogContent>
             </Dialog>
           </div>
+        </AnimatedContainer>
+
+        <AnimatedContainer direction="up" delay={0.05}>
+          <SampleDataNotice counts={["clients", "sites"]} />
         </AnimatedContainer>
 
         <AnimatedContainer direction="up" delay={0.1}>

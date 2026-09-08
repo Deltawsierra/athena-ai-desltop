@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import SampleDataNotice from "@/components/SampleDataNotice";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Test, Client, Site, InsertTest } from "@shared/schema";
@@ -421,6 +422,10 @@ export default function Tests() {
               </DialogContent>
             </Dialog>
           </div>
+        </AnimatedContainer>
+
+        <AnimatedContainer direction="up" delay={0.05}>
+          <SampleDataNotice counts={["tests", "findings"]} />
         </AnimatedContainer>
 
         <AnimatedContainer direction="up" delay={0.1}>

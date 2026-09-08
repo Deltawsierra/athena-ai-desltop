@@ -19,7 +19,16 @@ import {
  * request body at all. Taking `data.executedBy ?? session` let the client win,
  * and in an audit product "who ran this test" is evidence.
  */
-const createTestSchema = insertTestSchema.omit({ executedBy: true });
+const createTestSchema = insertTestSchema.omit({ executedBy: true, isSample: true });
+
+/**
+ * `isSample` marks a row the installer wrote, and nothing else may claim it.
+ * A caller who could set it could hide real findings behind a label that says
+ * "not real", or dress invented ones up as measured. It is stripped from
+ * every schema the API parses; the seeder is the only writer.
+ */
+const createClientSchema = insertClientSchema.omit({ isSample: true });
+const createSiteSchema = insertSiteSchema.omit({ isSample: true });
 
 // What a scan needs before the engine is asked anything: a target, and the
 // engagement it is being run under. The engagement is a client and, where
@@ -122,10 +131,10 @@ function countSeverities(findings: unknown[]): {
     severity: worst,
   };
 }
-const createDocumentSchema = insertDocumentSchema.omit({ createdBy: true });
+const createDocumentSchema = insertDocumentSchema.omit({ createdBy: true, isSample: true });
 
-const updateClientSchema = insertClientSchema.partial();
-const updateSiteSchema = insertSiteSchema.partial();
+const updateClientSchema = createClientSchema.partial();
+const updateSiteSchema = createSiteSchema.partial();
 // Derived from the create schemas, so attribution is excluded on update too.
 // It was stripped on create and left open on update, which meant any
 // authenticated user could rewrite "who ran this test" to anyone.
@@ -499,7 +508,7 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.post("/api/clients", asyncHandler(async (req, res) => {
-    const data = insertClientSchema.parse(req.body);
+    const data = createClientSchema.parse(req.body);
     const client = await storage.createClient(data);
     await storage.createActivityLog({
       action: "created", entityType: "client", entityId: client.id,
@@ -545,7 +554,7 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.post("/api/sites", asyncHandler(async (req, res) => {
-    const data = insertSiteSchema.parse(req.body);
+    const data = createSiteSchema.parse(req.body);
     if (await parentMissing(res, (data as { clientId?: string }).clientId, (data as { siteId?: string | null }).siteId)) return;
     const site = await storage.createSite(data);
     await storage.createActivityLog({
@@ -907,6 +916,27 @@ export function registerRoutes(app: Express): void {
     });
 
     res.json({ fields: settings.readable() });
+  }));
+
+  // ==== SAMPLE DATA ====
+  // The installer seeds three clients, four sites, three tests and three
+  // documents so a fresh install is not a blank screen. Two of those tests
+  // carry severity counts, and until now the dashboard added them into its
+  // totals with nothing to say they were written rather than found. Reading
+  // is open to anyone signed in, because every screen that counts these rows
+  // needs to say so; removing them is an admin's.
+
+  app.get("/api/sample-data", asyncHandler(async (_req, res) => {
+    res.json(await storage.countSampleData());
+  }));
+
+  app.delete("/api/sample-data", requireAdmin, asyncHandler(async (req, res) => {
+    const removed = await storage.removeSampleData();
+    await storage.createActivityLog({
+      action: "deleted", entityType: "sample_data", entityId: null,
+      details: removed, ...actor(req),
+    });
+    res.json({ removed });
   }));
 
   app.get("/api/assistant/status", asyncHandler(async (_req, res) => {

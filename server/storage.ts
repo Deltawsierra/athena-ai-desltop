@@ -10,6 +10,7 @@ import {
   type AIChatMessage, type InsertAIChatMessage,
   type Classifier, type InsertClassifier,
   type ConnectionSetting, type UpdateConnectionSettings,
+  type SampleDataCounts,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { hashPassword, verifyPassword, dummyVerify } from "./password";
@@ -61,6 +62,17 @@ export interface IStorage {
   createDocument(document: InsertDocument): Promise<Document>;
   updateDocument(id: string, document: Partial<InsertDocument>): Promise<Document | undefined>;
   deleteDocument(id: string): Promise<boolean>;
+
+  /**
+   * How much of what the screens are showing was written by the installer.
+   *
+   * Counted rather than assumed: a deployment that seeded once and has been
+   * used since has both kinds of row in the same tables, and "sample data is
+   * present" is not the same statement as "these three tests are samples".
+   */
+  countSampleData(): Promise<SampleDataCounts>;
+  /** Remove every seeded row. Real records are untouched. */
+  removeSampleData(): Promise<SampleDataCounts>;
 
   // Activity logs
   getAllActivityLogs(): Promise<ActivityLog[]>;
@@ -120,6 +132,19 @@ function defaultControlSettings(): AIControlSetting {
  */
 function copy<T>(value: T | undefined): T | undefined {
   return value === undefined ? undefined : ({ ...(value as object) } as T);
+}
+
+/**
+ * A test's findings, as the dashboard adds them up.
+ *
+ * vulnerabilitiesFound is a separate column the seeder set to 15 while the
+ * severity counts add to 15 as well; the dashboard sums the severities, so
+ * that is what "findings" has to mean here or the notice reports a different
+ * number from the figure it is explaining.
+ */
+function countFindings(test: Test): number {
+  return (test.criticalCount ?? 0) + (test.highCount ?? 0)
+    + (test.mediumCount ?? 0) + (test.lowCount ?? 0);
 }
 
 export class MemStorage implements IStorage {
@@ -202,6 +227,7 @@ export class MemStorage implements IStorage {
       phone: null,
       notes: null,
       lastTestDate: null,
+      isSample: false,
       ...insertClient,
       id: randomUUID(),
       createdAt: new Date(),
@@ -240,6 +266,7 @@ export class MemStorage implements IStorage {
     const site: Site = {
       environment: "production",
       status: "active",
+      isSample: false,
       ...insertSite,
       id: randomUUID(),
       createdAt: new Date(),
@@ -279,6 +306,7 @@ export class MemStorage implements IStorage {
       mediumCount: 0,
       lowCount: 0,
       executedBy: null,
+      isSample: false,
       ...insertTest,
       id: randomUUID(),
       startedAt: new Date(),
@@ -307,6 +335,7 @@ export class MemStorage implements IStorage {
       description: null,
       fileUrl: null,
       createdBy: null,
+      isSample: false,
       ...insertDocument,
       id: randomUUID(),
       createdAt: now,
@@ -323,6 +352,31 @@ export class MemStorage implements IStorage {
     return updated;
   }
   async deleteDocument(id: string) { return this.documents.delete(id); }
+
+  // Sample data
+  async countSampleData(): Promise<SampleDataCounts> {
+    const clients = Array.from(this.clients.values()).filter((one) => one.isSample);
+    const sites = Array.from(this.sites.values()).filter((one) => one.isSample);
+    const tests = Array.from(this.tests.values()).filter((one) => one.isSample);
+    const documents = Array.from(this.documents.values()).filter((one) => one.isSample);
+    return {
+      clients: clients.length,
+      sites: sites.length,
+      tests: tests.length,
+      documents: documents.length,
+      findings: tests.reduce((sum, test) => sum + countFindings(test), 0),
+    };
+  }
+  async removeSampleData(): Promise<SampleDataCounts> {
+    const removed = await this.countSampleData();
+    // Children first, so a failure part-way leaves orphans rather than
+    // clients whose tests point at nothing.
+    for (const [id, one] of Array.from(this.tests.entries())) if (one.isSample) this.tests.delete(id);
+    for (const [id, one] of Array.from(this.documents.entries())) if (one.isSample) this.documents.delete(id);
+    for (const [id, one] of Array.from(this.sites.entries())) if (one.isSample) this.sites.delete(id);
+    for (const [id, one] of Array.from(this.clients.entries())) if (one.isSample) this.clients.delete(id);
+    return removed;
+  }
 
   // Activity logs
   async getAllActivityLogs() {

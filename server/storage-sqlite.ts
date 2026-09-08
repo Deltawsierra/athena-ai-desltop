@@ -16,6 +16,7 @@ import type {
   AIChatMessage, InsertAIChatMessage,
   Classifier, InsertClassifier,
   ConnectionSetting, UpdateConnectionSettings,
+  SampleDataCounts,
 } from "@shared/schema";
 
 /**
@@ -37,6 +38,12 @@ function definedKeys(updates: object): string[] {
   return Object.entries(updates)
     .filter(([, value]) => value !== undefined)
     .map(([key]) => key);
+}
+
+/** The severity counts a dashboard adds up, for one test. */
+function countFindings(test: Test): number {
+  return (test.criticalCount ?? 0) + (test.highCount ?? 0)
+    + (test.mediumCount ?? 0) + (test.lowCount ?? 0);
 }
 
 export class SqliteStorage implements IStorage {
@@ -105,6 +112,7 @@ export class SqliteStorage implements IStorage {
       phone: null,
       notes: null,
       lastTestDate: null,
+      isSample: false,
       ...client,
       id: crypto.randomUUID(),
       createdAt: new Date(),
@@ -145,6 +153,7 @@ export class SqliteStorage implements IStorage {
     const row: Site = {
       environment: "production",
       status: "active",
+      isSample: false,
       ...site,
       id: crypto.randomUUID(),
       createdAt: new Date(),
@@ -189,6 +198,7 @@ export class SqliteStorage implements IStorage {
       mediumCount: 0,
       lowCount: 0,
       executedBy: null,
+      isSample: false,
       ...test,
       id: crypto.randomUUID(),
       startedAt: new Date(),
@@ -222,6 +232,7 @@ export class SqliteStorage implements IStorage {
       description: null,
       fileUrl: null,
       createdBy: null,
+      isSample: false,
       ...document,
       id: crypto.randomUUID(),
       createdAt: now,
@@ -239,6 +250,32 @@ export class SqliteStorage implements IStorage {
   }
   async deleteDocument(id: string): Promise<boolean> {
     return db.delete(schema.documents).where(eq(schema.documents.id, id)).run().changes > 0;
+  }
+
+  // Sample data
+  async countSampleData(): Promise<SampleDataCounts> {
+    const tests = db.select().from(schema.tests)
+      .where(eq(schema.tests.isSample, true)).all();
+    return {
+      clients: db.select().from(schema.clients).where(eq(schema.clients.isSample, true)).all().length,
+      sites: db.select().from(schema.sites).where(eq(schema.sites.isSample, true)).all().length,
+      tests: tests.length,
+      documents: db.select().from(schema.documents).where(eq(schema.documents.isSample, true)).all().length,
+      findings: tests.reduce((sum, test) => sum + countFindings(test), 0),
+    };
+  }
+  async removeSampleData(): Promise<SampleDataCounts> {
+    const removed = await this.countSampleData();
+    // One transaction: a half-removed seed leaves a dashboard whose notice
+    // says one thing and whose figures say another, which is worse than
+    // either state on its own.
+    db.transaction(() => {
+      db.delete(schema.tests).where(eq(schema.tests.isSample, true)).run();
+      db.delete(schema.documents).where(eq(schema.documents.isSample, true)).run();
+      db.delete(schema.sites).where(eq(schema.sites.isSample, true)).run();
+      db.delete(schema.clients).where(eq(schema.clients.isSample, true)).run();
+    });
+    return removed;
   }
 
   // Activity logs

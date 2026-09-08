@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import SampleDataNotice from "@/components/SampleDataNotice";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Document, Client, InsertDocument } from "@shared/schema";
@@ -234,6 +235,10 @@ export default function Documents() {
               </DialogContent>
             </Dialog>
           </div>
+        </AnimatedContainer>
+
+        <AnimatedContainer direction="up" delay={0.05}>
+          <SampleDataNotice counts={["documents"]} />
         </AnimatedContainer>
 
         <AnimatedContainer direction="up" delay={0.1}>

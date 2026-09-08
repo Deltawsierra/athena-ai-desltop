@@ -14,6 +14,20 @@ const id = () => text("id").primaryKey();
 const timestamp = (name: string) => integer(name, { mode: "timestamp_ms" });
 const bool = (name: string) => integer(name, { mode: "boolean" });
 /**
+ * Written by the installer rather than by anybody's work.
+ *
+ * The first run seeds three clients, four sites and three tests so that a
+ * fresh install has something to look at. Those tests carry severity counts,
+ * and a dashboard that adds them up alongside real ones is presenting
+ * invented findings as measurements -- which is the single thing this product
+ * cannot be caught doing. So the rows say what they are, every screen that
+ * counts them says so too, and one button removes them.
+ *
+ * Callers cannot set it: it is omitted from every schema the API parses, and
+ * the seeder is the only code that passes it.
+ */
+const sample = () => integer("is_sample", { mode: "boolean" }).notNull().default(false);
+/**
  * A JSON column that tolerates a value it did not write.
  *
  * drizzle's own json mode calls JSON.parse on every read, so one malformed cell
@@ -60,6 +74,7 @@ export const clients = sqliteTable("clients", {
   createdAt: timestamp("created_at").notNull(),
   lastTestDate: timestamp("last_test_date"),
   notes: text("notes"),
+  isSample: sample(),
 });
 
 export const sites = sqliteTable("sites", {
@@ -70,6 +85,7 @@ export const sites = sqliteTable("sites", {
   environment: text("environment").notNull().default("production"),
   status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at").notNull(),
+  isSample: sample(),
 });
 
 export const tests = sqliteTable("tests", {
@@ -89,6 +105,7 @@ export const tests = sqliteTable("tests", {
   mediumCount: integer("medium_count").notNull().default(0),
   lowCount: integer("low_count").notNull().default(0),
   executedBy: text("executed_by"),
+  isSample: sample(),
 });
 
 export const documents = sqliteTable("documents", {
@@ -101,6 +118,7 @@ export const documents = sqliteTable("documents", {
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
   createdBy: text("created_by"),
+  isSample: sample(),
 });
 
 export const activityLogs = sqliteTable("activity_logs", {
@@ -310,3 +328,19 @@ export type ConnectionSetting = typeof connectionSettings.$inferSelect;
 export type UpdateConnectionSettings = z.infer<typeof updateConnectionSettingsSchema>;
 export type InsertClassifier = z.infer<typeof insertClassifierSchema>;
 export type Classifier = typeof classifiers.$inferSelect;
+
+/**
+ * How many seeded rows are still in the database, per table.
+ *
+ * Shared with the client because the notice on the dashboard states these
+ * numbers rather than saying "some of this is sample data", which is the kind
+ * of hedge a reader discounts.
+ */
+export interface SampleDataCounts {
+  clients: number;
+  sites: number;
+  tests: number;
+  documents: number;
+  /** Findings across the seeded tests: what the severity totals are inflated by. */
+  findings: number;
+}

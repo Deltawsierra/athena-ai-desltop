@@ -99,7 +99,8 @@ function createSchema(handle: DatabaseType): void {
       status TEXT NOT NULL DEFAULT 'active',
       created_at INTEGER NOT NULL,
       last_test_date INTEGER,
-      notes TEXT
+      notes TEXT,
+      is_sample INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS sites (
@@ -109,7 +110,8 @@ function createSchema(handle: DatabaseType): void {
       name TEXT NOT NULL,
       environment TEXT NOT NULL DEFAULT 'production',
       status TEXT NOT NULL DEFAULT 'active',
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      is_sample INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_sites_client_id ON sites(client_id);
 
@@ -129,7 +131,8 @@ function createSchema(handle: DatabaseType): void {
       high_count INTEGER NOT NULL DEFAULT 0,
       medium_count INTEGER NOT NULL DEFAULT 0,
       low_count INTEGER NOT NULL DEFAULT 0,
-      executed_by TEXT
+      executed_by TEXT,
+      is_sample INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_tests_client_id ON tests(client_id);
     CREATE INDEX IF NOT EXISTS idx_tests_site_id ON tests(site_id);
@@ -143,7 +146,8 @@ function createSchema(handle: DatabaseType): void {
       file_url TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      created_by TEXT
+      created_by TEXT,
+      is_sample INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_documents_client_id ON documents(client_id);
 
@@ -227,6 +231,37 @@ function createSchema(handle: DatabaseType): void {
       description TEXT
     );
   `);
+  addMissingColumns(handle);
+}
+
+/**
+ * Columns added to a table after somebody's database was already created.
+ *
+ * CREATE TABLE IF NOT EXISTS does nothing at all to a table that exists, so a
+ * column added above reaches new installs and no others: every query naming it
+ * answers "no such column" on a database from the previous version, which is
+ * every database anybody is actually using. Each entry here is applied once
+ * and skipped when the column is already present, so this stays idempotent
+ * and safe to run on every open.
+ *
+ * Additive only. A column that has to change type or lose a constraint needs
+ * a table rebuild, and that is not something to do silently at startup.
+ */
+function addMissingColumns(handle: DatabaseType): void {
+  const additions: ReadonlyArray<readonly [string, string, string]> = [
+    ["clients", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+    ["sites", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+    ["tests", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+    ["documents", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+  ];
+  for (const [table, column, definition] of additions) {
+    const present = handle
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as Array<{ name: string }>;
+    if (present.some((one) => one.name === column)) continue;
+    handle.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`[db] added ${table}.${column}`);
+  }
 }
 
 /** Open the connection and create the schema if it is not there yet. */

@@ -10,6 +10,12 @@
  *
  * So: real counts, and an empty state that says the estate is empty. A demo
  * that admits it has no data is a demo you can put real data into on the call.
+ *
+ * That left one thing standing. The installer seeds three tests carrying
+ * twenty-three findings, so every figure here was derived from a database row
+ * and every figure was still describing an estate nobody had scanned -- the
+ * same claim as before, one layer further down. The notice above the figures
+ * says how many of them the installer wrote, and removes them on a click.
  */
 
 import { Suspense, lazy, useMemo } from "react";
@@ -40,6 +46,7 @@ import WebGLBoundary from "@/components/three/WebGLBoundary";
 import type { FieldNode } from "@/components/three/ThreatField";
 
 import AnimatedContainer from "@/components/AnimatedContainer";
+import SampleDataNotice from "@/components/SampleDataNotice";
 import type { Client, Site, Test } from "@shared/schema";
 
 // three.js is a megabyte before gzip and only two screens use it. Loading it
@@ -284,6 +291,12 @@ export default function Dashboard() {
           </AnimatedContainer>
         ) : (
           <>
+            <AnimatedContainer direction="up" delay={0.02}>
+              {/* Above the figures, not below them: a disclosure somebody
+                  scrolls past is a disclosure that did not happen. */}
+              <SampleDataNotice counts={["tests", "findings", "sites"]} />
+            </AnimatedContainer>
+
             <div
               className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4"
               data-testid="metrics-grid"
