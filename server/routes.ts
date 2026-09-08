@@ -751,6 +751,54 @@ export function registerRoutes(app: Express): void {
     res.status(201).json({ test, runId: started.runId, state: started.state });
   }));
 
+  /**
+   * Stop a scan that is going wrong.
+   *
+   * The engine has had a stop button since the abort registry landed, and the
+   * client here has had `abort` since the engine was first wired up. Nothing
+   * called it: there was no route, so there was no button, and an operator
+   * watching a scan they wanted to halt could revoke the whole API key or
+   * nothing. Making the stop fast is worth little while it is unreachable.
+   */
+  app.post("/api/scans/:testId/abort", asyncHandler(async (req, res) => {
+    const test = await storage.getTest(req.params.testId);
+    if (!test) return notFound(res, "Test");
+
+    const recorded = (test.findings ?? {}) as Record<string, unknown>;
+    const runId = typeof recorded.runId === "string" ? recorded.runId : null;
+    if (!runId) {
+      return void res.status(409).json({
+        error: "this test has no engine run recorded against it, so there is nothing to stop",
+      });
+    }
+
+    let stopped: boolean;
+    try {
+      stopped = await engine.abort(runId);
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+
+    // The engine's answer, not an assumption. Recording "aborted" on a stop
+    // the engine did not accept would be the record saying a scan halted when
+    // it is still running against somebody's system.
+    if (!stopped) {
+      return void res.status(502).json({
+        error: "the engine did not accept the stop; the scan may still be running",
+      });
+    }
+
+    await storage.createActivityLog({
+      action: "aborted", entityType: "test", entityId: test.id,
+      details: { runId }, ...actor(req),
+    });
+
+    res.json({ stopped: true, runId });
+  }));
+
   app.get("/api/scans/:testId", asyncHandler(async (req, res) => {
     const test = await storage.getTest(req.params.testId);
     if (!test) return notFound(res, "Test");

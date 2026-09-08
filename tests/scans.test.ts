@@ -219,3 +219,102 @@ describe("what authorises a scan", () => {
     expect(sent[0].scope).toEqual(["shop.example.test"]);
   });
 });
+
+/**
+ * Stopping a scan from the app.
+ *
+ * The engine has had a stop button since the abort registry and the client
+ * here has had `abort` since the engine was wired up. Nothing called it --
+ * there was no route, so there was no button, and an operator watching a scan
+ * they wanted to halt could revoke the whole API key or nothing.
+ */
+describe("stopping a scan", () => {
+  let app: Express;
+  let agent: Awaited<ReturnType<typeof signIn>>;
+  let server: import("http").Server;
+  let aborts: string[] = [];
+  let accept = true;
+
+  beforeAll(async () => {
+    const http = await import("http");
+    server = http.createServer((req, res) => {
+      let raw = "";
+      req.on("data", (c) => { raw += c; });
+      req.on("end", () => {
+        const url = req.url ?? "";
+        if (url === "/health") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ status: "ok" }));
+        }
+        if (url.endsWith("/abort")) {
+          aborts.push(url);
+          res.writeHead(accept ? 200 : 500, { "Content-Type": "application/json" });
+          return res.end("{}");
+        }
+        res.writeHead(202, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ run_id: "run-stop", state: "running" }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as import("net").AddressInfo).port;
+    process.env.ATHENA_ENGINE_URL = `http://127.0.0.1:${port}`;
+    process.env.ATHENA_ENGINE_KEY = "ce_op_test";
+    vi.resetModules();
+    app = await makeApp();
+    agent = await signIn(app);
+  });
+
+  afterAll(async () => {
+    delete process.env.ATHENA_ENGINE_URL;
+    delete process.env.ATHENA_ENGINE_KEY;
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  async function startOne() {
+    const client = await agent.post("/api/clients")
+      .send({ name: "Stoppable", company: "Stop Ltd", email: "s@stop.test" });
+    await agent.post("/api/sites")
+      .send({ clientId: client.body.id, name: "S", url: "https://stop.example" });
+    const started = await agent.post("/api/scans")
+      .send({ clientId: client.body.id, target: "https://stop.example/" });
+    return started.body.test.id as string;
+  }
+
+  it("sends the engine's own run id, and records who stopped it", async () => {
+    aborts = []; accept = true;
+    const testId = await startOne();
+
+    const stopped = await agent.post(`/api/scans/${testId}/abort`);
+    expect(stopped.status).toBe(200);
+    expect(stopped.body).toEqual({ stopped: true, runId: "run-stop" });
+    expect(aborts).toEqual(["/api/scans/run-stop/abort"]);
+
+    const logs = await agent.get("/api/logs");
+    expect(logs.body.some(
+      (one: { action: string; entityType: string }) =>
+        one.action === "aborted" && one.entityType === "test",
+    )).toBe(true);
+  });
+
+  it("does not report a scan stopped when the engine did not accept it", async () => {
+    aborts = []; accept = false;
+    const testId = await startOne();
+
+    const stopped = await agent.post(`/api/scans/${testId}/abort`);
+    // Recording "aborted" here would be the record saying a scan halted while
+    // it is still running against somebody's system.
+    expect(stopped.status).toBe(502);
+    expect(stopped.body.error).toContain("may still be running");
+  });
+
+  it("refuses to stop a test with no engine run behind it", async () => {
+    const client = await agent.post("/api/clients")
+      .send({ name: "Manual", company: "Manual Ltd", email: "m@stop.test" });
+    const test = await agent.post("/api/tests")
+      .send({ clientId: client.body.id, testType: "manual" });
+
+    const stopped = await agent.post(`/api/scans/${test.body.id}/abort`);
+    expect(stopped.status).toBe(409);
+    expect(stopped.body.error).toContain("nothing to stop");
+  });
+});
