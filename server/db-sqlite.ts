@@ -99,7 +99,8 @@ function createSchema(handle: DatabaseType): void {
       status TEXT NOT NULL DEFAULT 'active',
       created_at INTEGER NOT NULL,
       last_test_date INTEGER,
-      notes TEXT
+      notes TEXT,
+      is_sample INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS sites (
@@ -109,7 +110,8 @@ function createSchema(handle: DatabaseType): void {
       name TEXT NOT NULL,
       environment TEXT NOT NULL DEFAULT 'production',
       status TEXT NOT NULL DEFAULT 'active',
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      is_sample INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_sites_client_id ON sites(client_id);
 
@@ -129,7 +131,8 @@ function createSchema(handle: DatabaseType): void {
       high_count INTEGER NOT NULL DEFAULT 0,
       medium_count INTEGER NOT NULL DEFAULT 0,
       low_count INTEGER NOT NULL DEFAULT 0,
-      executed_by TEXT
+      executed_by TEXT,
+      is_sample INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_tests_client_id ON tests(client_id);
     CREATE INDEX IF NOT EXISTS idx_tests_site_id ON tests(site_id);
@@ -143,7 +146,8 @@ function createSchema(handle: DatabaseType): void {
       file_url TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      created_by TEXT
+      created_by TEXT,
+      is_sample INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_documents_client_id ON documents(client_id);
 
@@ -167,12 +171,14 @@ function createSchema(handle: DatabaseType): void {
       memory_usage INTEGER NOT NULL,
       active_scans INTEGER NOT NULL DEFAULT 0,
       total_scans_today INTEGER NOT NULL DEFAULT 0,
-      success_rate INTEGER NOT NULL,
-      average_response_time INTEGER NOT NULL,
+      success_rate INTEGER,
+      average_response_time INTEGER,
       models_loaded TEXT,
       last_training_date INTEGER,
-      detection_accuracy INTEGER NOT NULL,
-      false_positive_rate INTEGER NOT NULL
+      detection_accuracy INTEGER,
+      false_positive_rate INTEGER,
+      guards_checked INTEGER,
+      guards_failing INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_ai_health_metrics_timestamp ON ai_health_metrics(timestamp);
 
@@ -186,6 +192,23 @@ function createSchema(handle: DatabaseType): void {
       auto_shutdown_threshold INTEGER NOT NULL DEFAULT 90,
       last_modified_by TEXT,
       last_modified_at INTEGER NOT NULL
+    );
+
+    -- Where this deployment talks to, and with what. One row.
+    --
+    -- The keys are stored as written: encrypting them with something else on
+    -- the same disk would be theatre, since anything the app can decrypt
+    -- unattended so can anyone holding the file. The file's own permissions
+    -- are what protect them, and the API never sends one back.
+    CREATE TABLE IF NOT EXISTS connection_settings (
+      id TEXT PRIMARY KEY,
+      engine_url TEXT,
+      engine_key TEXT,
+      assistant_url TEXT,
+      assistant_key TEXT,
+      assistant_model TEXT,
+      updated_at INTEGER NOT NULL,
+      updated_by TEXT
     );
 
     CREATE TABLE IF NOT EXISTS ai_chat_messages (
@@ -210,9 +233,103 @@ function createSchema(handle: DatabaseType): void {
       description TEXT
     );
   `);
+  addMissingColumns(handle);
+  relaxHealthMetricColumns(handle);
+}
+
+/**
+ * Columns added to a table after somebody's database was already created.
+ *
+ * CREATE TABLE IF NOT EXISTS does nothing at all to a table that exists, so a
+ * column added above reaches new installs and no others: every query naming it
+ * answers "no such column" on a database from the previous version, which is
+ * every database anybody is actually using. Each entry here is applied once
+ * and skipped when the column is already present, so this stays idempotent
+ * and safe to run on every open.
+ *
+ * Additive only. A column that has to change type or lose a constraint needs
+ * a table rebuild, and that is not something to do silently at startup.
+ */
+function addMissingColumns(handle: DatabaseType): void {
+  const additions: ReadonlyArray<readonly [string, string, string]> = [
+    ["clients", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+    ["sites", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+    ["tests", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+    ["documents", "is_sample", "INTEGER NOT NULL DEFAULT 0"],
+    ["ai_health_metrics", "guards_checked", "INTEGER"],
+    ["ai_health_metrics", "guards_failing", "INTEGER"],
+  ];
+  for (const [table, column, definition] of additions) {
+    const present = handle
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as Array<{ name: string }>;
+    if (present.some((one) => one.name === column)) continue;
+    handle.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`[db] added ${table}.${column}`);
+  }
 }
 
 /** Open the connection and create the schema if it is not there yet. */
 export function initDatabase(): void {
   connect();
+}
+
+/**
+ * Drop NOT NULL from the four health columns that have no source.
+ *
+ * SQLite cannot relax a constraint in place, so this is the copy-and-rename
+ * every schema tool emits for the same change. It is here rather than in
+ * addMissingColumns because that list is deliberately additive: adding a
+ * column cannot lose anything, and rebuilding a table can, so this one is
+ * written out where it can be read.
+ *
+ * It runs only when the old shape is still on disk, inside a transaction, and
+ * it copies every row. What it is undoing is a schema that obliged its only
+ * writer -- the installer -- to invent a detection-accuracy figure because the
+ * column would not accept the truth, which was that nobody had measured one.
+ */
+function relaxHealthMetricColumns(handle: DatabaseType): void {
+  const columns = handle
+    .prepare("PRAGMA table_info(ai_health_metrics)")
+    .all() as Array<{ name: string; notnull: number }>;
+  const stillRequired = columns.some(
+    (one) =>
+      one.notnull === 1 &&
+      ["success_rate", "average_response_time", "detection_accuracy", "false_positive_rate"]
+        .includes(one.name),
+  );
+  if (!stillRequired) return;
+
+  handle.transaction(() => {
+    handle.exec(`
+      CREATE TABLE ai_health_metrics_rebuilt (
+        id TEXT PRIMARY KEY,
+        timestamp INTEGER NOT NULL,
+        cpu_usage INTEGER NOT NULL,
+        memory_usage INTEGER NOT NULL,
+        active_scans INTEGER NOT NULL DEFAULT 0,
+        total_scans_today INTEGER NOT NULL DEFAULT 0,
+        success_rate INTEGER,
+        average_response_time INTEGER,
+        models_loaded TEXT,
+        last_training_date INTEGER,
+        detection_accuracy INTEGER,
+        false_positive_rate INTEGER,
+        guards_checked INTEGER,
+        guards_failing INTEGER
+      );
+      INSERT INTO ai_health_metrics_rebuilt (
+        id, timestamp, cpu_usage, memory_usage, active_scans, total_scans_today,
+        success_rate, average_response_time, models_loaded, last_training_date,
+        detection_accuracy, false_positive_rate
+      )
+      SELECT id, timestamp, cpu_usage, memory_usage, active_scans, total_scans_today,
+             success_rate, average_response_time, models_loaded, last_training_date,
+             detection_accuracy, false_positive_rate
+      FROM ai_health_metrics;
+      DROP TABLE ai_health_metrics;
+      ALTER TABLE ai_health_metrics_rebuilt RENAME TO ai_health_metrics;
+    `);
+  })();
+  console.log("[db] ai_health_metrics rebuilt: the unmeasured columns accept null");
 }

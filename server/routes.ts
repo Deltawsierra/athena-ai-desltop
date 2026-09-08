@@ -2,10 +2,14 @@ import type { Express, Request, RequestHandler, Response } from "express";
 import { z } from "zod";
 import { storage } from "./storage-unified";
 import { requireAuth, requireAdmin, asyncHandler, actor } from "./auth";
+import * as assistant from "./assistant";
+import * as settings from "./settings";
+import * as engine from "./engine";
 import {
   insertClientSchema, insertSiteSchema, insertTestSchema,
   insertDocumentSchema, insertAIHealthMetricSchema,
   insertUserSchema, insertAIControlSettingSchema, insertAIChatMessageSchema,
+  updateConnectionSettingsSchema,
   insertClassifierSchema, USER_ROLES,
   type User, type PublicUser,
 } from "@shared/schema";
@@ -15,11 +19,140 @@ import {
  * request body at all. Taking `data.executedBy ?? session` let the client win,
  * and in an audit product "who ran this test" is evidence.
  */
-const createTestSchema = insertTestSchema.omit({ executedBy: true });
-const createDocumentSchema = insertDocumentSchema.omit({ createdBy: true });
+/**
+ * The host a recorded site names, or null if it does not name one.
+ *
+ * Sites are stored as URLs typed by a person, so this has to survive a bare
+ * hostname as well as a URL. It does not invent a scheme for anything with a
+ * colon in it: "engine.internal:8099" parses as a scheme, which is the same
+ * trap the settings screen's URL validation fell into.
+ */
+function hostOf(url: string): string | null {
+  const raw = (url ?? "").trim();
+  if (!raw) return null;
+  try {
+    return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname || null;
+  } catch {
+    return null;
+  }
+}
 
-const updateClientSchema = insertClientSchema.partial();
-const updateSiteSchema = insertSiteSchema.partial();
+const createTestSchema = insertTestSchema.omit({ executedBy: true, isSample: true });
+
+/**
+ * `isSample` marks a row the installer wrote, and nothing else may claim it.
+ * A caller who could set it could hide real findings behind a label that says
+ * "not real", or dress invented ones up as measured. It is stripped from
+ * every schema the API parses; the seeder is the only writer.
+ */
+const createClientSchema = insertClientSchema.omit({ isSample: true });
+const createSiteSchema = insertSiteSchema.omit({ isSample: true });
+
+// What a scan needs before the engine is asked anything: a target, and the
+// engagement it is being run under. The engagement is a client and, where
+// there is one, a site -- both looked up rather than taken on trust, because
+// a scan filed under an engagement nobody opened is a scan nobody authorised.
+/**
+ * What the assistant is told about this deployment.
+ *
+ * Deliberately structural: how many clients, sites and tests exist, what the
+ * sites are called, and the severity counts already on the record. Not the
+ * bodies of findings, not documents, not anything from the audit log.
+ *
+ * The reason is that this leaves the machine. An operator who points
+ * ATHENA_ASSISTANT_URL at a hosted provider is sending whatever is in here to
+ * a third party, and in a product whose subject matter is other companies'
+ * vulnerabilities the smallest useful context is the right one. The chat
+ * screen says so in a line above the composer, because a disclosure nobody
+ * reads is not a disclosure.
+ */
+async function deploymentSummary(): Promise<string> {
+  const [clients, sites, tests] = await Promise.all([
+    storage.getAllClients(), storage.getAllSites(), storage.getAllTests(),
+  ]);
+
+  const totals = tests.reduce(
+    (acc, test) => ({
+      critical: acc.critical + test.criticalCount,
+      high: acc.high + test.highCount,
+      medium: acc.medium + test.mediumCount,
+      low: acc.low + test.lowCount,
+    }),
+    { critical: 0, high: 0, medium: 0, low: 0 },
+  );
+
+  const recent = tests
+    .slice()
+    .sort((a, b) => Number(new Date(b.startedAt)) - Number(new Date(a.startedAt)))
+    .slice(0, 8)
+    .map((test) => {
+      const site = sites.find((one) => one.id === test.siteId);
+      return `- ${test.testType} on ${site?.name ?? "an unnamed site"}: `
+        + `${test.status}, ${test.criticalCount} critical / ${test.highCount} high `
+        + `/ ${test.mediumCount} medium / ${test.lowCount} low`;
+    });
+
+  return [
+    `${clients.length} clients, ${sites.length} sites, ${tests.length} tests recorded.`,
+    `Across all tests: ${totals.critical} critical, ${totals.high} high, `
+      + `${totals.medium} medium, ${totals.low} low.`,
+    recent.length ? "Most recent tests:" : "No tests have been recorded yet.",
+    ...recent,
+  ].join("\n");
+}
+
+const startScanSchema = z.object({
+  clientId: z.string().min(1),
+  siteId: z.string().min(1).optional(),
+  target: z.string().min(1).max(2000),
+  testType: z.string().min(1).max(100).default("penetration_test"),
+});
+
+/**
+ * The severity counts, taken from the findings the engine returned.
+ *
+ * Counted here rather than accepted from anywhere: these numbers are what a
+ * client reads on a report, and the only honest source for them is the list
+ * of findings they claim to summarise.
+ */
+function countSeverities(findings: unknown[]): {
+  vulnerabilitiesFound: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  severity: string | null;
+} {
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+  let total = 0;
+  for (const finding of findings) {
+    if (!finding || typeof finding !== "object") continue;
+    const entry = finding as Record<string, unknown>;
+    // The engine marks its own diagnostics `internal`. They are worth showing
+    // and they are not vulnerabilities, so they are not counted as any.
+    if (entry.internal === true) continue;
+    total += 1;
+    const severity = String(entry.severity ?? "").toLowerCase();
+    if (severity in counts) counts[severity as keyof typeof counts] += 1;
+  }
+  const worst = counts.critical ? "critical"
+    : counts.high ? "high"
+    : counts.medium ? "medium"
+    : counts.low ? "low"
+    : null;
+  return {
+    vulnerabilitiesFound: total,
+    criticalCount: counts.critical,
+    highCount: counts.high,
+    mediumCount: counts.medium,
+    lowCount: counts.low,
+    severity: worst,
+  };
+}
+const createDocumentSchema = insertDocumentSchema.omit({ createdBy: true, isSample: true });
+
+const updateClientSchema = createClientSchema.partial();
+const updateSiteSchema = createSiteSchema.partial();
 // Derived from the create schemas, so attribution is excluded on update too.
 // It was stripped on create and left open on update, which meant any
 // authenticated user could rewrite "who ran this test" to anyone.
@@ -393,7 +526,7 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.post("/api/clients", asyncHandler(async (req, res) => {
-    const data = insertClientSchema.parse(req.body);
+    const data = createClientSchema.parse(req.body);
     const client = await storage.createClient(data);
     await storage.createActivityLog({
       action: "created", entityType: "client", entityId: client.id,
@@ -439,7 +572,7 @@ export function registerRoutes(app: Express): void {
   }));
 
   app.post("/api/sites", asyncHandler(async (req, res) => {
-    const data = insertSiteSchema.parse(req.body);
+    const data = createSiteSchema.parse(req.body);
     if (await parentMissing(res, (data as { clientId?: string }).clientId, (data as { siteId?: string | null }).siteId)) return;
     const site = await storage.createSite(data);
     await storage.createActivityLog({
@@ -515,6 +648,196 @@ export function registerRoutes(app: Express): void {
     res.json({ success: true });
   }));
 
+  // ==== SCANS: the engine, and what it found ====
+  //
+  // A test row is the record; the engine is what makes it true. These two
+  // routes are the only place the two meet, and they are deliberately thin:
+  // Athena decides who may ask and under which engagement, the engine decides
+  // whether the target may be reached, and neither pretends to do the other's
+  // job. A refusal from the engine is passed through with its reason intact,
+  // because "the target is a loopback address" is the sentence the operator
+  // needs and "scan failed" is not.
+
+  app.get("/api/engine/status", asyncHandler(async (_req, res) => {
+    res.json(await engine.status());
+  }));
+
+  app.post("/api/scans", asyncHandler(async (req, res) => {
+    const data = startScanSchema.parse(req.body);
+
+    const client = await storage.getClient(data.clientId);
+    if (!client) return notFound(res, "Client");
+    const site = data.siteId ? await storage.getSite(data.siteId) : null;
+    if (data.siteId && !site) return notFound(res, "Site");
+    // A site that belongs to another client is not a site of this engagement.
+    if (site && site.clientId !== data.clientId) {
+      return void res.status(400).json({
+        error: "that site belongs to a different client",
+      });
+    }
+
+    // The engagement the engine will record against every effect. It is the
+    // client and the site, not something the caller composes, so a scan
+    // cannot be filed under an engagement nobody opened.
+    const engagementRef = site ? `${client.id}:${site.id}` : client.id;
+
+    // The hosts this engagement authorises, taken from the sites somebody
+    // recorded against the client. One site if one was chosen, otherwise all
+    // of the client's.
+    //
+    // This is the half of the scope check the engine cannot do. Given no
+    // scope it falls back to the target's own host, and a check whose only
+    // possible answer is "yes" is not a check -- so the side holding the site
+    // list is the side that has to send it.
+    const engagementSites = site ? [site] : await storage.getSitesByClient(client.id);
+    const scope = engagementSites
+      .map((one) => hostOf(one.url))
+      .filter((host): host is string => host !== null);
+
+    if (scope.length === 0) {
+      // No recorded site means nothing on record authorises any host, and
+      // scanning on the strength of the target the caller just typed is the
+      // unfalsifiable check again, one layer up. Refuse and say what is
+      // missing.
+      return void res.status(400).json({
+        error:
+          `no site is recorded for ${client.name}, so nothing on record ` +
+          `authorises scanning ${data.target}. Add the site to the client first.`,
+      });
+    }
+
+    let started;
+    try {
+      started = await engine.startScan({ target: data.target, engagementRef, scope });
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        // 503, not 500. Nothing is broken: the engine is not there, or not
+        // answering, and that is a fact about the deployment.
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+
+    if (started.state === "refused") {
+      return void res.status(409).json({
+        error: "the engine refused this scan",
+        detail: started.refused ?? "",
+      });
+    }
+
+    const test = await storage.createTest({
+      clientId: data.clientId,
+      siteId: data.siteId ?? null,
+      testType: data.testType,
+      status: started.state === "completed" ? "completed" : "running",
+      severity: null,
+      completedAt: null,
+      summary: `${data.target} — engine run ${started.runId ?? "unknown"}`,
+      findings: { runId: started.runId, target: data.target, results: started.findings },
+      vulnerabilitiesFound: 0,
+      criticalCount: 0,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      executedBy: req.session.userId ?? null,
+    });
+
+    await storage.createActivityLog({
+      action: "started", entityType: "test", entityId: test.id,
+      details: { target: data.target, engagementRef, runId: started.runId },
+      ...actor(req),
+    });
+
+    res.status(201).json({ test, runId: started.runId, state: started.state });
+  }));
+
+  /**
+   * Stop a scan that is going wrong.
+   *
+   * The engine has had a stop button since the abort registry landed, and the
+   * client here has had `abort` since the engine was first wired up. Nothing
+   * called it: there was no route, so there was no button, and an operator
+   * watching a scan they wanted to halt could revoke the whole API key or
+   * nothing. Making the stop fast is worth little while it is unreachable.
+   */
+  app.post("/api/scans/:testId/abort", asyncHandler(async (req, res) => {
+    const test = await storage.getTest(req.params.testId);
+    if (!test) return notFound(res, "Test");
+
+    const recorded = (test.findings ?? {}) as Record<string, unknown>;
+    const runId = typeof recorded.runId === "string" ? recorded.runId : null;
+    if (!runId) {
+      return void res.status(409).json({
+        error: "this test has no engine run recorded against it, so there is nothing to stop",
+      });
+    }
+
+    let stopped: boolean;
+    try {
+      stopped = await engine.abort(runId);
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+
+    // The engine's answer, not an assumption. Recording "aborted" on a stop
+    // the engine did not accept would be the record saying a scan halted when
+    // it is still running against somebody's system.
+    if (!stopped) {
+      return void res.status(502).json({
+        error: "the engine did not accept the stop; the scan may still be running",
+      });
+    }
+
+    await storage.createActivityLog({
+      action: "aborted", entityType: "test", entityId: test.id,
+      details: { runId }, ...actor(req),
+    });
+
+    res.json({ stopped: true, runId });
+  }));
+
+  app.get("/api/scans/:testId", asyncHandler(async (req, res) => {
+    const test = await storage.getTest(req.params.testId);
+    if (!test) return notFound(res, "Test");
+
+    const recorded = (test.findings ?? {}) as Record<string, unknown>;
+    const runId = typeof recorded.runId === "string" ? recorded.runId : null;
+    if (!runId || test.status === "completed") {
+      return void res.json({ test, state: test.status, engine: null });
+    }
+
+    let current;
+    try {
+      current = await engine.runState(runId);
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        // The record stands even when the engine has gone. Saying so beats
+        // reporting the row's last known status as if it were current.
+        return void res.status(200).json({
+          test, state: test.status, engine: null, detail: cause.message,
+        });
+      }
+      throw cause;
+    }
+
+    // Counted from what came back, never from what was asked for.
+    const counts = countSeverities(current.findings);
+    const finished = current.state === "completed" || current.state === "aborted"
+      || current.state === "failed";
+
+    const updated = await storage.updateTest(test.id, {
+      status: current.state,
+      completedAt: finished ? new Date() : null,
+      findings: { ...recorded, results: current.findings },
+      ...counts,
+    });
+
+    res.json({ test: updated ?? test, state: current.state, engine: current });
+  }));
+
   // ==== DOCUMENTS ====
   app.get("/api/documents", asyncHandler(async (req, res) => {
     const clientId = typeof req.query.clientId === "string" ? req.query.clientId : undefined;
@@ -569,9 +892,10 @@ export function registerRoutes(app: Express): void {
 
   // ==== AI HEALTH ====
   app.get("/api/ai-health/latest", asyncHandler(async (_req, res) => {
-    const metric = await storage.getLatestAIHealthMetric();
-    if (!metric) return notFound(res, "Health metric");
-    res.json(metric);
+    // null rather than 404. "No reading has been taken yet" is a state of a
+    // healthy deployment in its first minute, not a missing resource, and a
+    // 404 made the screen render its error fallback on every fresh install.
+    res.json((await storage.getLatestAIHealthMetric()) ?? null);
   }));
 
   app.get("/api/ai-health", asyncHandler(async (req, res) => {
@@ -656,14 +980,114 @@ export function registerRoutes(app: Express): void {
     res.json(await storage.getChatMessagesByUser(req.session.userId!));
   }));
 
+  // ==== SETTINGS: where this deployment talks to ====
+  //
+  // Admin only, both ways. These fields decide where a customer's data goes
+  // -- which engine is asked to scan them, and which third party sees a
+  // summary of what was found -- so they are not an ordinary user's to read
+  // or to change.
+
+  app.get("/api/settings/connections", requireAdmin, asyncHandler(async (_req, res) => {
+    // Secrets come back as `set: true` and `value: null`. There is no benign
+    // version of an API key on the wire: it reaches a browser, a devtools
+    // network tab and whatever is between, and the only thing the screen
+    // needs is whether somebody has to type one.
+    res.json({ fields: settings.readable() });
+  }));
+
+  app.patch("/api/settings/connections", requireAdmin, asyncHandler(async (req, res) => {
+    const data = updateConnectionSettingsSchema.parse(req.body);
+    await settings.save(data, req.session.userId ?? null);
+
+    // Which fields moved, never what they moved to. An audit log that records
+    // a credential is a second place the credential lives.
+    await storage.createActivityLog({
+      action: "updated", entityType: "connection_settings", entityId: "singleton",
+      details: { fields: Object.keys(data).sort() },
+      ...actor(req),
+    });
+
+    res.json({ fields: settings.readable() });
+  }));
+
+  // ==== SAMPLE DATA ====
+  // The installer seeds three clients, four sites, three tests and three
+  // documents so a fresh install is not a blank screen. Two of those tests
+  // carry severity counts, and until now the dashboard added them into its
+  // totals with nothing to say they were written rather than found. Reading
+  // is open to anyone signed in, because every screen that counts these rows
+  // needs to say so; removing them is an admin's.
+
+  app.get("/api/sample-data", asyncHandler(async (_req, res) => {
+    res.json(await storage.countSampleData());
+  }));
+
+  app.delete("/api/sample-data", requireAdmin, asyncHandler(async (req, res) => {
+    const removed = await storage.removeSampleData();
+    await storage.createActivityLog({
+      action: "deleted", entityType: "sample_data", entityId: null,
+      details: removed, ...actor(req),
+    });
+    res.json({ removed });
+  }));
+
+  app.get("/api/assistant/status", asyncHandler(async (_req, res) => {
+    res.json(await assistant.status());
+  }));
+
   app.post("/api/chat", asyncHandler(async (req, res) => {
-    const data = insertAIChatMessageSchema.parse({ ...req.body, userId: req.session.userId });
+    // `sender` is the server's to set, not the caller's. The browser used to
+    // POST `sender: "ai"` with a string it had chosen itself, so the record
+    // could not distinguish a message an assistant produced from one the page
+    // made up -- which is exactly what it was doing. A caller may say what
+    // they typed; who said it is decided here.
+    const data = insertAIChatMessageSchema.parse({
+      ...req.body, sender: "user", userId: req.session.userId,
+    });
     const message = await storage.createChatMessage(data);
     await storage.createActivityLog({
       action: "created", entityType: "chat_message", entityId: message.id,
       details: null, ...actor(req),
     });
-    res.status(201).json(message);
+
+    // The reply is produced here, not in the browser.
+    //
+    // It used to be produced in the browser, by picking one of five strings
+    // out of the page's own source and POSTing it back with `sender: "ai"`.
+    // Anything a client can POST as an assistant message is a message the
+    // record cannot vouch for, so the client no longer sends one at all --
+    // and a client that tries is refused above, because `sender` is now the
+    // server's to set on this path.
+    if (!assistant.isConfigured()) {
+      return void res.status(201).json({ message, reply: null });
+    }
+
+    const history = await storage.getChatMessagesByUser(req.session.userId!);
+    let text: string;
+    try {
+      text = await assistant.reply(
+        history.map((one) => ({
+          role: one.sender === "ai" ? ("assistant" as const) : ("user" as const),
+          content: one.message,
+        })),
+        await deploymentSummary(),
+      );
+    } catch (cause) {
+      if (cause instanceof assistant.AssistantUnavailable) {
+        // The operator's message is kept -- they typed it, it is theirs --
+        // and the failure is reported instead of being papered over with a
+        // sentence nothing produced.
+        return void res.status(201).json({
+          message, reply: null, error: cause.message,
+        });
+      }
+      throw cause;
+    }
+
+    const answer = await storage.createChatMessage({
+      userId: req.session.userId!, message: text, sender: "ai", attachments: null,
+    });
+    res.status(201).json({ message, reply: answer });
   }));
 
   app.delete("/api/chat/:id", asyncHandler(async (req, res) => {

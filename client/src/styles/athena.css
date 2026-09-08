@@ -1,0 +1,451 @@
+/*
+ * Athena's visual system.
+ *
+ * The palette is built around one idea: this is an instrument, not a game.
+ * Deep near-black grounds so the data is the brightest thing on screen, a
+ * single cyan primary that means "the system is speaking", and severity
+ * colours that are only ever used for severity -- never for decoration, so
+ * that a red pixel always means something.
+ *
+ * Everything is defined on top of the existing shadcn token names, so the
+ * components already built keep working while looking entirely different.
+ */
+
+/* ---------------------------------------------------------------------- */
+/* Light                                                                   */
+/*                                                                         */
+/* The palette above is defined under `.dark` alone, so a machine set to    */
+/* light rendered the shadcn defaults: white inputs on the horizon grid,    */
+/* an invisible gold, and severity colours mixed for a near-black ground    */
+/* sitting on paper. The theme toggle was offering a mode the product had   */
+/* not been drawn for.                                                     */
+/*                                                                         */
+/* This is not the dark palette inverted. Two things change deliberately:   */
+/* the hues are held and the lightness is re-picked against white, because  */
+/* a cyan that reads as "live" at 52% on near-black is a highlighter pen at */
+/* the same value on paper; and depth stops being carried by glow, which    */
+/* needs a dark ground to exist at all, and is carried by borders instead.  */
+/*                                                                         */
+/* Severity keeps its meaning and loses its brightness. A critical red has  */
+/* to be legible as text on white, which the dark palette's 60% lightness   */
+/* is not, so each of the five is darkened until it passes as body text     */
+/* while staying the same hue -- the colour still means the same thing.     */
+/* ---------------------------------------------------------------------- */
+
+/*
+ * A note on the selectors below.
+ *
+ * index.css @imports this file, so this file's rules come first and index.css's
+ * own `:root` and `.dark` -- the stock shadcn tokens -- overrode the house
+ * palette at equal specificity. Dark mostly survived because the two agree on
+ * most names; light did not survive at all, and `--background` resolved to
+ * shadcn's `210 40% 98%` rather than the value written here.
+ *
+ * `:root:not(.dark)` and `:root.dark` are one class heavier, so this file wins
+ * wherever the two disagree, whatever the import order becomes later. The two
+ * selectors are mutually exclusive, so nothing has to be reasoned about twice.
+ */
+
+:root:not(.dark) {
+  --background: 210 30% 98%;
+  --surface-0: 210 28% 96%;
+  --surface-1: 210 26% 93%;
+  --surface-2: 210 22% 89%;
+
+  --card: 0 0% 100%;
+  --card-border: 200 40% 78%;
+  --border: 214 20% 84%;
+
+  --foreground: 222 40% 12%;
+  --muted-foreground: 215 16% 40%;
+
+  /* Cyan at dark-palette brightness is unreadable on white, so the primary
+     drops into the teal it becomes when you turn the lights on. Same hue,
+     same meaning. */
+  --primary: 190 84% 30%;
+  --primary-foreground: 0 0% 100%;
+
+  --accent-violet: 268 60% 45%;
+  --accent-amber: 34 88% 38%;
+
+  --sev-critical: 348 78% 42%;
+  --sev-high: 14 82% 40%;
+  --sev-medium: 34 88% 34%;
+  --sev-low: 195 78% 32%;
+  --sev-info: 215 18% 42%;
+
+  --chart-1: 190 84% 34%;
+  --chart-2: 268 60% 50%;
+  --chart-3: 34 88% 40%;
+  --chart-4: 348 78% 46%;
+  --chart-5: 158 62% 32%;
+
+  --ring: 190 84% 30%;
+
+  /* Glow needs a dark ground to be anything but a smudge. On paper the same
+     job -- "this surface is raised" -- is done by an edge and a shadow. */
+  --glow-primary: 0 0 0 1px hsl(190 84% 30% / 0.28);
+  --glow-critical: 0 0 0 1px hsl(348 78% 42% / 0.32);
+  --edge: inset 0 1px 0 hsl(0 0% 100% / 0.9);
+
+  /* Gold on white is a pale smear, so judgement becomes bronze. It is the
+     same reservation: an approval, a verified chain, a signature that
+     checked out, and never severity. */
+  --gold: 38 72% 34%;
+  --gold-dim: 38 45% 46%;
+  --glow-gold: 0 0 0 1px hsl(38 72% 34% / 0.3);
+}
+
+:root.dark {
+  /* Ground. Not pure black: a slight blue cast reads as depth on an OLED
+     panel and stops large fills looking like a dead pixel field. */
+  --background: 224 47% 4%;
+  --surface-0: 225 40% 6%;
+  --surface-1: 224 36% 9%;
+  --surface-2: 223 32% 13%;
+
+  --card: 224 36% 8%;
+  --card-border: 200 60% 20%;
+  --border: 220 25% 16%;
+
+  --foreground: 190 30% 96%;
+  --muted-foreground: 210 16% 62%;
+
+  /* The one accent that means "live". Used for the active state, the focus
+     ring, and the leading edge of anything animating. */
+  --primary: 184 92% 52%;
+  --primary-foreground: 224 47% 6%;
+
+  --accent-violet: 268 88% 68%;
+  --accent-amber: 38 96% 60%;
+
+  /* Severity. These five are reserved. A component that needs a colour and
+     is not expressing severity takes a surface or the primary. */
+  --sev-critical: 348 90% 60%;
+  --sev-high: 14 92% 58%;
+  --sev-medium: 38 96% 60%;
+  --sev-low: 190 85% 55%;
+  --sev-info: 215 20% 55%;
+
+  --chart-1: 184 92% 52%;
+  --chart-2: 268 88% 68%;
+  --chart-3: 38 96% 60%;
+  --chart-4: 348 90% 60%;
+  --chart-5: 158 78% 48%;
+
+  --ring: 184 92% 52%;
+
+  /* Depth is carried by light, not by borders. */
+  --glow-primary: 0 0 24px hsl(184 92% 52% / 0.35);
+  --glow-critical: 0 0 24px hsl(348 90% 60% / 0.4);
+  --edge: inset 0 1px 0 hsl(0 0% 100% / 0.06);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Surfaces                                                                */
+/* ---------------------------------------------------------------------- */
+
+.athena-panel {
+  position: relative;
+  background: linear-gradient(
+    hsl(var(--surface-1) / 0.72),
+    hsl(var(--surface-0) / 0.86)
+  );
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  box-shadow: var(--edge), 0 18px 40px -24px hsl(224 60% 2% / 0.9);
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+
+/* One hairline of primary along the top edge. It is the cheapest way to make
+   a rectangle look engineered rather than drawn, and it costs no layout. */
+.athena-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--primary) / 0.55) 22%,
+    hsl(var(--primary) / 0.55) 78%,
+    transparent
+  );
+  border-radius: 14px 14px 0 0;
+  pointer-events: none;
+}
+
+.athena-panel--critical {
+  border-color: hsl(var(--sev-critical) / 0.42);
+  box-shadow: var(--edge), 0 0 32px -12px hsl(var(--sev-critical) / 0.5);
+}
+
+.athena-panel--critical::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--sev-critical) / 0.75) 20%,
+    hsl(var(--sev-critical) / 0.75) 80%,
+    transparent
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Type                                                                    */
+/* ---------------------------------------------------------------------- */
+
+.athena-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Numbers that update in place must not reflow the layout under them. */
+.athena-figure {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.athena-mono {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Motion                                                                  */
+/* ---------------------------------------------------------------------- */
+
+@keyframes athena-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.athena-scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.athena-scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--primary) / 0.1),
+    transparent
+  );
+  animation: athena-sweep 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes athena-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.athena-live {
+  animation: athena-pulse 2s ease-in-out infinite;
+}
+
+/* Every animation here is decorative. Somebody who has asked their operating
+   system to stop moving things has asked this too. */
+@media (prefers-reduced-motion: reduce) {
+  .athena-scanline::after,
+  .athena-live {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Olympus                                                                 */
+/*                                                                         */
+/* The brand mark is an owl and a shield drawn as one continuous line, and */
+/* the gradient runs cobalt through indigo into gold. That is the whole    */
+/* idea and it is worth stating: cyan is the machine speaking, gold is     */
+/* the judgement. A temple is instruments and authority in one building,   */
+/* and so is this.                                                        */
+/*                                                                         */
+/* Everything below is geometry -- brackets, a meander, fluting, a plinth. */
+/* No marble, no serifs, no laurel. The Greek reference has to survive     */
+/* being next to a severity table, and the way it survives is by being     */
+/* built from the same straight lines as the HUD.                          */
+/* ---------------------------------------------------------------------- */
+
+:root.dark {
+  /* The second accent, from the logo's right wing. Reserved for judgement:
+     an approval, a verified chain, a signature that checked out. Never for
+     decoration, and never for severity -- amber already means medium. */
+  --gold: 43 96% 62%;
+  --gold-dim: 43 60% 44%;
+
+  --glow-gold: 0 0 24px hsl(43 96% 62% / 0.3);
+}
+
+/* Corner brackets, for a surface that is not a GlassCard.
+ *
+ * GlassCard draws its own -- as elements, so `overflow-hidden` cannot clip
+ * them and a caller can choose the colour -- and nearly everything in this
+ * app is one. This is here for the exceptions: a bare section, a table
+ * header, anything that wants the frame without the panel.
+ */
+.athena-bracket {
+  position: relative;
+}
+
+.athena-bracket::before,
+.athena-bracket::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  border-color: hsl(var(--primary) / 0.55);
+}
+
+.athena-bracket::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+  border-top-left-radius: 14px;
+}
+
+.athena-bracket::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+  border-bottom-right-radius: 14px;
+}
+
+.athena-bracket--gold::before,
+.athena-bracket--gold::after {
+  border-color: hsl(var(--gold) / 0.6);
+}
+
+/* The meander.
+ *
+ * Drawn as an SVG data URI rather than stacked gradients. The gradient
+ * version was three background layers at a twelve-pixel repeat and it read as
+ * a row of tick marks -- the Greek key needs the corner turns to be legible or
+ * it is just a dashed line, and at that size they were not. One unit is 24
+ * wide and 10 tall, which is enough for the turn to register at the size a
+ * rule under a heading actually gets.
+ *
+ * currentColor rather than a variable, so a caller decides whether this rule
+ * carries gold (a judgement) or the primary (a measurement).
+ */
+.athena-meander {
+  height: 10px;
+  color: hsl(var(--gold) / 0.75);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='10' viewBox='0 0 24 10'%3E%3Cpath d='M0 8.5h4.5v-7h7v5h-3v-2h4.5v6h7v-7h4' fill='none' stroke='%23e0b13a' stroke-width='1.4'/%3E%3C/svg%3E");
+  background-size: 24px 10px;
+  background-repeat: repeat-x;
+  opacity: 0.85;
+}
+
+/* Fluting. A column's vertical grooves, at the density of a hairline grid --
+   close enough to read as texture, far enough not to moire on a laptop. */
+.athena-fluted {
+  background-image: repeating-linear-gradient(
+    90deg,
+    hsl(var(--primary) / 0.05) 0px,
+    hsl(var(--primary) / 0.05) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+}
+
+/* The plinth. The lit disc the brand art stands its constellation on: a
+   column base seen from above, and the anchor a figure sits on. */
+.athena-plinth {
+  position: relative;
+}
+
+.athena-plinth::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  width: 62%;
+  height: 22px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    hsl(var(--primary) / 0.28),
+    transparent 68%
+  );
+  pointer-events: none;
+}
+
+/* The horizon grid, in CSS rather than WebGL, for a header or an empty
+   state that should not cost a canvas. Perspective by way of a mask: the
+   lines are uniform and the fade does the work. */
+.athena-horizon {
+  position: relative;
+  overflow: hidden;
+}
+
+.athena-horizon::before {
+  content: "";
+  position: absolute;
+  inset: 40% -20% -20% -20%;
+  background-image:
+    linear-gradient(hsl(var(--primary) / 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--primary) / 0.18) 1px, transparent 1px);
+  background-size: 44px 44px;
+  transform: perspective(340px) rotateX(62deg);
+  transform-origin: 50% 0;
+  -webkit-mask-image: linear-gradient(hsl(0 0% 0% / 0.9), transparent 72%);
+  mask-image: linear-gradient(hsl(0 0% 0% / 0.9), transparent 72%);
+  pointer-events: none;
+}
+
+/* Judgement. A field the system has ruled on rather than measured. */
+.athena-gold {
+  color: hsl(var(--gold));
+}
+
+.athena-panel--gold {
+  border-color: hsl(var(--gold) / 0.34);
+}
+
+.athena-panel--gold::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--gold) / 0.6) 22%,
+    hsl(var(--gold) / 0.6) 78%,
+    transparent
+  );
+}
+
+/* Instrument ticks, from the strips in the corners of the brand art. A
+   density readout that is honest about being decoration: it is given its
+   value, and renders nothing when there is nothing to show. */
+.athena-ticks {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+}
+
+.athena-ticks > i {
+  display: block;
+  width: 2px;
+  background: hsl(var(--primary) / 0.5);
+  border-radius: 1px;
+}

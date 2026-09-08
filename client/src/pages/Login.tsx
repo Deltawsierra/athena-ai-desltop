@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import GlassCard from "@/components/GlassCard";
-import athenaLogo from "@assets/generated_images/Athena_AI_owl_shield_logo_3eda4960.png";
+import athenaLogo from "@assets/generated_images/athena-mark.png";
 import { login } from "@/utils/auth";
 import type { PublicUser } from "@shared/schema";
 
@@ -37,15 +37,44 @@ export default function Login({ onAuthenticated }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    // The horizon grid, which is the brand art's floor. In CSS rather than a
+    // canvas: this screen renders before anything is signed in, and a WebGL
+    // context is a lot to ask of a machine for the two seconds somebody spends
+    // typing a password.
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden athena-horizon">
       <GlassCard className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <img src={athenaLogo} alt="" width={64} height={64} className="h-16 w-16" />
+          {/* The plinth: the lit disc the brand art stands its constellation
+              on, which is a column base seen from above. */}
+          <div className="flex justify-center mb-6 athena-plinth">
+            <img
+              src={athenaLogo}
+              alt=""
+              width={80}
+              height={80}
+              className="h-20 w-20"
+            />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent mb-2">
+          {/* The mark's own gradient -- cobalt through indigo into gold --
+              rather than the cyan-to-purple this had, which is in the logo
+              nowhere. */}
+          <h1
+            className="text-3xl font-bold mb-2 bg-clip-text text-transparent"
+            style={{
+              backgroundImage:
+                "linear-gradient(100deg, hsl(var(--primary)), " +
+                "hsl(var(--accent-violet)) 38%, hsl(var(--gold)) 78%)",
+              // Both spellings. Tailwind's bg-clip-text sets the prefixed one
+              // and an inline backgroundImage on the same element does not
+              // inherit it, so the heading rendered as transparent text over
+              // nothing -- an invisible title on the first screen.
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+            }}
+          >
             Athena AI
           </h1>
+          <div className="athena-meander w-32 mx-auto mb-3" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">Cybersecurity Intelligence Platform</p>
         </div>
 

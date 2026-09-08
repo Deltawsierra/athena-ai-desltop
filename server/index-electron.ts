@@ -5,6 +5,7 @@ import { createServer } from "http";
 import path from "path";
 import { createApp, errorHandler } from "./app";
 import { initializeDefaultData } from "./init-data";
+import { startSampling } from "./health";
 
 function serveStatic(app: express.Application): void {
   // The bundle lives in dist/, the client build in dist/public.
@@ -21,6 +22,9 @@ function serveStatic(app: express.Application): void {
 (async () => {
   const app = createApp({ deferErrorHandler: true });
   await initializeDefaultData();
+  // Take a reading now and every minute after, so the health screen draws a
+  // real trend rather than reading one row somebody wrote at install time.
+  startSampling();
 
   const server = createServer(app);
   serveStatic(app);

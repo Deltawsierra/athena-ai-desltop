@@ -6,6 +6,8 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { registerRoutes } from "./routes";
+import * as settings from "./settings";
+import * as health from "./health";
 
 const SESSION_COOKIE = "athena.sid";
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -91,14 +93,24 @@ export function createApp(options: CreateAppOptions = {}): Express {
   app.use(express.urlencoded({ extended: false }));
 
   // Request log for API calls: method, path, status, duration. No bodies.
+  // The same duration feeds the health sample, so the average response time on
+  // that screen is this server's own, measured here, rather than a constant.
   app.use((req, res, next) => {
     if (!req.path.startsWith("/api")) return next();
     const start = Date.now();
     res.on("finish", () => {
-      console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - start}ms`);
+      const took = Date.now() - start;
+      console.log(`${req.method} ${req.path} ${res.statusCode} ${took}ms`);
+      health.recordResponseTime(took);
     });
     next();
   });
+
+  // The stored connection settings, read once so both outward-facing clients
+  // can answer synchronously. Not awaited: a database that is not ready yet
+  // must not hold up the server, and until it answers the environment applies
+  // -- which is what a fresh install has anyway.
+  void settings.load();
 
   registerRoutes(app);
 

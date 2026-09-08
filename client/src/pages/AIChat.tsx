@@ -1,13 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Send, Paperclip, Image, FileText, Copy, Check, Bot, User } from "lucide-react";
+import { MessageSquare, Send, Paperclip, Image, FileText, Copy, Check, Bot, User, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { AIChatMessage } from "@shared/schema";
+
+interface AssistantStatus {
+  configured: boolean;
+  model: string | null;
+  detail: string;
+}
 import AnimatedContainer from "@/components/AnimatedContainer";
 import GlassCard from "@/components/GlassCard";
 import { Badge } from "@/components/ui/badge";
@@ -24,36 +30,33 @@ export default function AIChat() {
     queryKey: ["/api/chat"],
   });
 
+  const { data: assistant } = useQuery<AssistantStatus>({
+    queryKey: ["/api/assistant/status"],
+  });
+
   const sendMutation = useMutation({
-    mutationFn: async (data: { message: string; sender: string; attachments?: any }) => {
-      return await apiRequest("POST", "/api/chat", {
-        userId: "current-user",
-        message: data.message,
-        sender: data.sender,
-        attachments: data.attachments,
-      });
+    mutationFn: async (text: string) => {
+      const response = await apiRequest("POST", "/api/chat", { message: text });
+      return (await response.json()) as {
+        message: AIChatMessage;
+        reply: AIChatMessage | null;
+        error?: string;
+      };
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat"] });
       setMessage("");
-      
-      // Only simulate AI response for user messages, not AI messages
-      if (variables.sender === "user") {
-        setTimeout(() => {
-          const responses = [
-            "I'm analyzing the security data you provided. I've identified several critical vulnerabilities.",
-            "Based on the test results, I recommend prioritizing the high-severity findings first.",
-            "The penetration test has been scheduled. I'll monitor the progress and alert you of any issues.",
-            "I've compiled the security report. Would you like me to send it to the client?",
-            "System scan complete. I found 3 critical issues that need immediate attention.",
-          ];
-          const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-          
-          sendMutation.mutate({
-            message: randomResponse,
-            sender: "ai",
-          });
-        }, 1500);
+      // The reply comes back from the server or it does not come back. What
+      // used to be here picked one of five strings out of this file at random
+      // and POSTed it as an AI message -- so the record could not tell an
+      // answer from a placeholder, and three messages in the same sentence
+      // came round again.
+      if (result.error) {
+        toast({
+          title: "The assistant did not answer",
+          description: result.error,
+          variant: "destructive",
+        });
       }
     },
     onError: (error: Error) => {
@@ -68,10 +71,7 @@ export default function AIChat() {
   const handleSend = () => {
     if (!message.trim()) return;
     
-    sendMutation.mutate({
-      message: message.trim(),
-      sender: "user",
-    });
+    sendMutation.mutate(message.trim());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -131,6 +131,7 @@ export default function AIChat() {
               <MessageSquare className="w-10 h-10 text-primary" />
               AI <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Assistant</span>
             </motion.h1>
+            <div className="athena-meander max-w-xs" aria-hidden="true" />
             <motion.p
               className="text-muted-foreground"
               initial={{ opacity: 0 }}
@@ -142,6 +143,27 @@ export default function AIChat() {
           </div>
         </AnimatedContainer>
 
+        {assistant && !assistant.configured && (
+          <GlassCard ruling>
+            <div className="flex gap-3 items-start">
+              <Unplug className="w-5 h-5 mt-0.5 athena-gold shrink-0" />
+              <div className="space-y-1">
+                <div className="athena-label">No assistant connected</div>
+                <p
+                  className="text-sm text-muted-foreground"
+                  data-testid="text-assistant-detail"
+                >
+                  {assistant.detail}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  What you type is still kept, so this stays a record of the
+                  conversation. It will not be answered.
+                </p>
+              </div>
+            </div>
+          </GlassCard>
+        )}
+
         {/* Chat Container */}
         <AnimatedContainer direction="up" delay={0.2}>
           <GlassCard className="overflow-hidden">
@@ -151,9 +173,27 @@ export default function AIChat() {
                   <Bot className="w-5 h-5 text-primary" />
                   Athena AI Assistant
                 </CardTitle>
-                <Badge variant="default" className="gap-1">
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                  Online
+                {/* What the badge says is now a fact about the deployment.
+                    It was the literal word "Online" beside a pulsing green
+                    dot, hardcoded -- so it read Online on a machine with no
+                    assistant configured at all, which is the same defect as
+                    the five canned replies wearing a smaller badge. */}
+                <Badge
+                  variant={assistant?.configured ? "default" : "outline"}
+                  className="gap-1"
+                  data-testid="badge-assistant"
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      assistant?.configured ? "athena-live" : ""
+                    }`}
+                    style={{
+                      background: assistant?.configured
+                        ? "hsl(var(--primary))"
+                        : "hsl(var(--sev-info))",
+                    }}
+                  />
+                  {assistant?.configured ? assistant.model : "Not connected"}
                 </Badge>
               </div>
             </CardHeader>
@@ -269,7 +309,11 @@ export default function AIChat() {
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder="Type your message... (Shift+Enter for new line)"
+                      placeholder={
+                        assistant?.configured
+                          ? "Ask about this deployment… (Shift+Enter for a new line)"
+                          : "No assistant is connected. This will be kept, not answered."
+                      }
                       className="resize-none pr-12 min-h-[60px]"
                       data-testid="input-message"
                     />
@@ -286,9 +330,24 @@ export default function AIChat() {
                   </Button>
                 </div>
 
+                {/* Where the text goes, said before it goes. This product's
+                    subject matter is other companies' vulnerabilities, and an
+                    operator pointing the assistant at a hosted provider is
+                    sending to a third party -- so the disclosure sits under
+                    the composer rather than in a settings page nobody opens. */}
                 <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                  <FileText className="w-3 h-3" />
-                  <span>Supports text, images, and documents</span>
+                  <FileText className="w-3 h-3 shrink-0" />
+                  {assistant?.configured ? (
+                    <span data-testid="text-assistant-disclosure">
+                      Sent to the configured endpoint as{" "}
+                      <span className="athena-mono">{assistant.model}</span>,
+                      with a summary of this deployment: how many clients,
+                      sites and tests exist, and the severity counts already on
+                      the record. Not the contents of findings or documents.
+                    </span>
+                  ) : (
+                    <span>Kept on this machine. Nothing is sent anywhere.</span>
+                  )}
                 </div>
               </div>
             </CardContent>

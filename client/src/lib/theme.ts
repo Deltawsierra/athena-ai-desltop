@@ -9,7 +9,19 @@ export function getStoredTheme(): Theme {
   } catch {
     // Storage can be unavailable (private mode); fall through to system.
   }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // Dark, unless somebody has chosen otherwise on this machine.
+  //
+  // This used to be because there was no light palette at all -- the tokens
+  // were defined under `.dark` only, so a machine set to light rendered white
+  // inputs on the dark horizon and an unreadable heading. There is one now,
+  // and the toggle leads somewhere.
+  //
+  // It stays dark rather than following the system preference for a smaller
+  // reason: this is an instrument, the severity ramp was picked against a
+  // near-black ground, and a red that means "critical" is louder there. The
+  // light palette exists so that somebody who wants it is not punished for
+  // asking, not because it is the better way to read this data.
+  return "dark";
 }
 
 export function setTheme(theme: Theme): void {

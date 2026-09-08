@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import SampleDataNotice from "@/components/SampleDataNotice";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Test, Client, Site, InsertTest } from "@shared/schema";
@@ -233,6 +234,7 @@ export default function Tests() {
                 <Shield className="w-10 h-10 text-primary" />
                 Security <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Tests</span>
               </motion.h1>
+              <div className="athena-meander max-w-xs" aria-hidden="true" />
               <motion.p
                 className="text-muted-foreground"
                 initial={{ opacity: 0 }}
@@ -420,6 +422,10 @@ export default function Tests() {
               </DialogContent>
             </Dialog>
           </div>
+        </AnimatedContainer>
+
+        <AnimatedContainer direction="up" delay={0.05}>
+          <SampleDataNotice counts={["tests", "findings"]} />
         </AnimatedContainer>
 
         <AnimatedContainer direction="up" delay={0.1}>

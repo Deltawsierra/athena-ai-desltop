@@ -3,10 +3,10 @@ import { queryClient, onUnauthorized } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 
 import Navigation from "@/components/Navigation";
-import HolographicBackground from "@/components/HolographicBackground";
+import WebGLBoundary from "@/components/three/WebGLBoundary";
 import MagneticCursor from "@/components/MagneticCursor";
 import CursorGlow from "@/components/CursorGlow";
 import SmoothScroll from "@/components/SmoothScroll";
@@ -16,6 +16,7 @@ import Dashboard from "@/pages/Dashboard";
 import PentestScan from "@/pages/PentestScan";
 import CVEClassifier from "@/pages/CVEClassifier";
 import AdminPage from "@/pages/AdminPage";
+import Settings from "@/pages/Settings";
 import AuditLogs from "@/pages/AuditLogs";
 import Clients from "@/pages/Clients";
 import Tests from "@/pages/Tests";
@@ -29,6 +30,8 @@ import NotFound from "@/pages/not-found";
 import { checkAuth, logout as apiLogout, isAdmin } from "@/utils/auth";
 import { applyStoredTheme } from "@/lib/theme";
 import type { PublicUser } from "@shared/schema";
+
+const AmbientField = lazy(() => import("@/components/three/AmbientField"));
 
 type AuthStatus = "loading" | "authenticated" | "anonymous";
 
@@ -53,6 +56,7 @@ function AppRoutes({ admin }: { admin: boolean }) {
       {admin && <Route path="/audit-logs" component={AuditLogs} />}
       <Route path="/ai-chat" component={AIChat} />
       <Route path="/classifiers" component={Classifiers} />
+      {admin && <Route path="/settings" component={Settings} />}
       {admin && <Route path="/admin" component={AdminPage} />}
       {admin && <Route path="/ai-control" component={AIControlPanel} />}
       {admin && <Route path="/deletion" component={DeletionManagement} />}
@@ -144,7 +148,13 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <SmoothScroll>
-            <HolographicBackground />
+            {/* The ambient layer is decorative, so a machine that cannot give
+                it a WebGL context loses the gradient and keeps the app. */}
+            <WebGLBoundary label="ambient field" fallback={null}>
+              <Suspense fallback={null}>
+                <AmbientField />
+              </Suspense>
+            </WebGLBoundary>
             <MagneticCursor />
             <CursorGlow />
             <Toaster />

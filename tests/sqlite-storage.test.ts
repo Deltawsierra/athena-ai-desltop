@@ -160,4 +160,43 @@ describe("SQLite storage", () => {
     expect(await storage.deleteDocument("no-such-id")).toBe(false);
     expect(await storage.deleteClassifier("no-such-id")).toBe(false);
   });
+
+  /**
+   * The settings row, against the real backend.
+   *
+   * The whole suite above this one runs on in-memory storage, which is why it
+   * could not catch that `connection_settings` was in the Drizzle schema and
+   * not in the hand-written DDL that actually creates the tables. Saving a
+   * setting answered 500 with `no such table` on a real database while every
+   * test passed.
+   */
+  it("creates the connection settings row and reads it back", async () => {
+    expect(await storage.getConnectionSettings()).toBeUndefined();
+
+    const saved = await storage.updateConnectionSettings(
+      { engineUrl: "https://engine.internal:8099", engineKey: "a-key" },
+      "admin-id",
+    );
+    expect(saved.engineUrl).toBe("https://engine.internal:8099");
+    expect(saved.engineKey).toBe("a-key");
+    expect(saved.updatedBy).toBe("admin-id");
+    // A timestamp column that reads back as Invalid Date is the defect this
+    // whole file exists for.
+    expect(saved.updatedAt).toBeInstanceOf(Date);
+    expect(Number.isNaN(saved.updatedAt.getTime())).toBe(false);
+
+    const again = await storage.getConnectionSettings();
+    expect(again?.engineUrl).toBe("https://engine.internal:8099");
+  });
+
+  it("leaves fields it was not given alone, and clears the ones set to null", async () => {
+    await storage.updateConnectionSettings({ assistantModel: "a-model" }, null);
+    expect((await storage.getConnectionSettings())?.engineUrl)
+      .toBe("https://engine.internal:8099");
+
+    await storage.updateConnectionSettings({ engineKey: null }, null);
+    const row = await storage.getConnectionSettings();
+    expect(row?.engineKey).toBeNull();
+    expect(row?.assistantModel).toBe("a-model");
+  });
 });

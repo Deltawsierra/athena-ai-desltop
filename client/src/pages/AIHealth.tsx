@@ -1,364 +1,334 @@
+/**
+ * What this deployment can measure about itself.
+ *
+ * What this replaced is the point. The page read a single row that the
+ * installer had written -- 24% CPU, 41% memory, a 98% success rate, 94%
+ * detection accuracy, a 3% false-positive rate -- and graded itself
+ * "excellent" off three of those constants. Nothing measured any of it and
+ * nothing ever wrote a second row, so the two charts drew one point and the
+ * badge said the same word on every machine forever.
+ *
+ * On a screen called AI Health, where detection accuracy and the
+ * false-positive rate are the two figures a customer or an investor would
+ * most want to trust.
+ *
+ * Now the server takes a reading every minute and this draws them. Where
+ * there is no source, the figure is absent and the page says so in a
+ * sentence: a gap invites a reader to assume, and the assumption is always
+ * more flattering than the truth. Detection accuracy and the false-positive
+ * rate come from a benchmark that runs in the engine's CI and is on no route,
+ * so they are not shown at all -- what is shown instead is the engine's boot
+ * canary, which is a real statement about whether detection is working.
+ */
+
 import { useQuery } from "@tanstack/react-query";
-import { Brain, Cpu, Database, TrendingUp, Activity, CheckCircle, AlertTriangle, Clock } from "lucide-react";
-import { motion } from "framer-motion";
-import { format } from "date-fns";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
+import { formatDistanceToNow } from "date-fns";
+import {
+  Activity, Boxes, Clock, Cpu, Gauge, MemoryStick, ScanLine, ShieldCheck,
+} from "lucide-react";
+import {
+  Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer,
+  Tooltip, XAxis, YAxis,
+} from "recharts";
+
 import GlassCard from "@/components/GlassCard";
+import PageHeader from "@/components/PageHeader";
 import AnimatedContainer from "@/components/AnimatedContainer";
-import MetricCard from "@/components/MetricCard";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import type { AIHealthMetric } from "@shared/schema";
 
-export default function AIHealth() {
-  const { data: latestMetric, isLoading } = useQuery<AIHealthMetric>({
-    queryKey: ["/api/ai-health/latest"],
-  });
+/** A reading that has not been taken. Never rendered as a number. */
+function Absent({ why }: { why: string }) {
+  return (
+    <div>
+      <div className="athena-figure text-2xl text-muted-foreground">—</div>
+      <p className="mt-1 text-xs text-muted-foreground">{why}</p>
+    </div>
+  );
+}
 
-  const { data: metricsHistory = [] } = useQuery<AIHealthMetric[]>({
-    queryKey: ["/api/ai-health"],
-  });
-
-  const getHealthStatus = (metric: AIHealthMetric | undefined) => {
-    if (!metric) return { status: "unknown", color: "secondary" as const };
-    if (metric.successRate >= 95 && metric.detectionAccuracy >= 90) {
-      return { status: "excellent", color: "default" as const };
-    }
-    if (metric.successRate >= 85 && metric.detectionAccuracy >= 80) {
-      return { status: "good", color: "default" as const };
-    }
-    if (metric.successRate >= 70 && metric.detectionAccuracy >= 70) {
-      return { status: "fair", color: "secondary" as const };
-    }
-    return { status: "needs attention", color: "destructive" as const };
-  };
-
-  const healthStatus = getHealthStatus(latestMetric);
-
-  const performanceData = metricsHistory.slice(0, 24).reverse().map((metric, index) => ({
-    time: format(new Date(metric.timestamp), "HH:mm"),
-    cpu: metric.cpuUsage,
-    memory: metric.memoryUsage,
-    responseTime: metric.averageResponseTime,
-  }));
-
-  const accuracyData = metricsHistory.slice(0, 24).reverse().map((metric) => ({
-    time: format(new Date(metric.timestamp), "HH:mm"),
-    accuracy: metric.detectionAccuracy,
-    successRate: metric.successRate,
-    falsePositive: metric.falsePositiveRate,
-  }));
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+function Reading({
+  label, value, unit, icon: Icon, absent, testId,
+}: {
+  label: string;
+  value: number | null;
+  unit?: string;
+  icon: typeof Cpu;
+  /** Said when the value is null. Why there is no number, not "no data". */
+  absent: string;
+  testId: string;
+}) {
+  return (
+    <GlassCard data-testid={testId}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="athena-label">{label}</div>
+          {value === null ? (
+            <Absent why={absent} />
+          ) : (
+            <div className="athena-figure mt-1 text-3xl">
+              {value}
+              {unit && <span className="ml-1 text-lg text-muted-foreground">{unit}</span>}
+            </div>
+          )}
+        </div>
+        <Icon className="h-4 w-4 shrink-0 text-primary" />
       </div>
-    );
-  }
+    </GlassCard>
+  );
+}
+
+const AXIS = { fontSize: 11, fill: "hsl(var(--muted-foreground))" } as const;
+const TOOLTIP = {
+  background: "hsl(var(--surface-1))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: 10,
+  fontSize: 12,
+} as const;
+
+export default function AIHealth() {
+  const { data: latest, isLoading } = useQuery<AIHealthMetric | null>({
+    queryKey: ["/api/ai-health/latest"],
+    // A sample is written every minute; there is no point reading faster.
+    refetchInterval: 60_000,
+  });
+
+  const { data: history = [] } = useQuery<AIHealthMetric[]>({
+    queryKey: ["/api/ai-health"],
+    refetchInterval: 60_000,
+  });
+
+  // Oldest first, so time runs left to right.
+  const series = [...history]
+    .slice(0, 60)
+    .reverse()
+    .map((one) => ({
+      time: new Date(one.timestamp).toLocaleTimeString([], {
+        hour: "2-digit", minute: "2-digit",
+      }),
+      cpu: one.cpuUsage,
+      memory: one.memoryUsage,
+      response: one.averageResponseTime,
+      scans: one.activeScans,
+    }));
+
+  const models = latest?.modelsLoaded ?? [];
 
   return (
     <div className="min-h-screen">
-      <div className="container mx-auto p-6 space-y-8">
-        <AnimatedContainer direction="up" delay={0}>
-          <div className="space-y-2">
-            <motion.h1
-              className="text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1.2, delay: 0.3 }}
-            >
-              <Brain className="w-10 h-10 text-primary" />
-              AI Health <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Monitoring</span>
-            </motion.h1>
-            <motion.p
-              className="text-muted-foreground"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.8, duration: 1 }}
-            >
-              Real-time monitoring of Athena AI performance, accuracy, and system health
-            </motion.p>
-          </div>
-        </AnimatedContainer>
+      <div className="container mx-auto space-y-6 p-6">
+        <PageHeader
+          title="Health"
+          icon={<Activity className="h-8 w-8 text-primary" />}
+          description="Measured on this machine, once a minute. Anything without a source is shown as absent rather than as a number."
+        />
 
-        {latestMetric && (
+        {!isLoading && !latest && (
+          <GlassCard ruling>
+            <div className="athena-label">No reading yet</div>
+            <p className="mt-2 text-sm text-muted-foreground" data-testid="text-no-reading">
+              The first sample is taken when the server starts and one follows
+              every minute. If this persists, the server is not running the
+              sampler.
+            </p>
+          </GlassCard>
+        )}
+
+        {latest && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <AnimatedContainer direction="up" delay={0.05}>
+                <Reading
+                  testId="reading-cpu" label="CPU" icon={Cpu} unit="%"
+                  value={latest.cpuUsage} absent="not measured"
+                />
+              </AnimatedContainer>
               <AnimatedContainer direction="up" delay={0.1}>
-                <MetricCard
-                  title="System Status"
-                  value={healthStatus.status.toUpperCase()}
-                  icon={CheckCircle}
-                  trend={{ value: latestMetric.successRate, isPositive: latestMetric.successRate >= 85 }}
+                <Reading
+                  testId="reading-memory" label="Memory" icon={MemoryStick} unit="%"
+                  value={latest.memoryUsage} absent="not measured"
+                />
+              </AnimatedContainer>
+              <AnimatedContainer direction="up" delay={0.15}>
+                <Reading
+                  testId="reading-active" label="Scans running" icon={ScanLine}
+                  value={latest.activeScans} absent="not counted"
                 />
               </AnimatedContainer>
               <AnimatedContainer direction="up" delay={0.2}>
-                <MetricCard
-                  title="Active Scans"
-                  value={latestMetric.activeScans}
-                  icon={Activity}
-                />
-              </AnimatedContainer>
-              <AnimatedContainer direction="up" delay={0.3}>
-                <MetricCard
-                  title="Scans Today"
-                  value={latestMetric.totalScansToday}
-                  icon={TrendingUp}
-                />
-              </AnimatedContainer>
-              <AnimatedContainer direction="up" delay={0.4}>
-                <MetricCard
-                  title="Avg Response"
-                  value={`${latestMetric.averageResponseTime}ms`}
-                  icon={Clock}
+                <Reading
+                  testId="reading-today" label="Scans today" icon={Gauge}
+                  value={latest.totalScansToday} absent="not counted"
                 />
               </AnimatedContainer>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AnimatedContainer direction="left" delay={0.2}>
-                <GlassCard>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <Cpu className="w-5 h-5 text-primary" />
-                    System Resources
-                  </h3>
-                  <div className="space-y-6">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">CPU Usage</span>
-                        <Badge variant="outline" data-testid="badge-cpu-usage">
-                          {latestMetric.cpuUsage}%
-                        </Badge>
-                      </div>
-                      <Progress value={latestMetric.cpuUsage} className="h-2" />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {latestMetric.cpuUsage < 70 ? "Normal" : latestMetric.cpuUsage < 85 ? "Moderate" : "High"}
-                      </p>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Memory Usage</span>
-                        <Badge variant="outline" data-testid="badge-memory-usage">
-                          {latestMetric.memoryUsage}%
-                        </Badge>
-                      </div>
-                      <Progress value={latestMetric.memoryUsage} className="h-2" />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {latestMetric.memoryUsage < 70 ? "Normal" : latestMetric.memoryUsage < 85 ? "Moderate" : "High"}
-                      </p>
-                    </div>
-                  </div>
-                </GlassCard>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <AnimatedContainer direction="up" delay={0.1}>
+                <Reading
+                  testId="reading-success" label="Scans that completed" icon={ShieldCheck} unit="%"
+                  value={latest.successRate}
+                  absent="no scan has finished yet, and 100% of nothing is not a success rate"
+                />
               </AnimatedContainer>
-
-              <AnimatedContainer direction="right" delay={0.2}>
-                <GlassCard>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <Brain className="w-5 h-5 text-primary" />
-                    AI Performance Metrics
-                  </h3>
-                  <div className="space-y-6">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Detection Accuracy</span>
-                        <Badge variant="default" data-testid="badge-accuracy">
-                          {latestMetric.detectionAccuracy}%
-                        </Badge>
-                      </div>
-                      <Progress value={latestMetric.detectionAccuracy} className="h-2" />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Success Rate</span>
-                        <Badge variant="default" data-testid="badge-success-rate">
-                          {latestMetric.successRate}%
-                        </Badge>
-                      </div>
-                      <Progress value={latestMetric.successRate} className="h-2" />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">False Positive Rate</span>
-                        <Badge variant={latestMetric.falsePositiveRate < 5 ? "default" : "destructive"} data-testid="badge-false-positive">
-                          {latestMetric.falsePositiveRate}%
-                        </Badge>
-                      </div>
-                      <Progress value={latestMetric.falsePositiveRate} className="h-2" />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {latestMetric.falsePositiveRate < 5 ? "Excellent" : latestMetric.falsePositiveRate < 10 ? "Good" : "Needs Improvement"}
-                      </p>
-                    </div>
-                  </div>
-                </GlassCard>
+              <AnimatedContainer direction="up" delay={0.15}>
+                <Reading
+                  testId="reading-response" label="Response time" icon={Clock} unit="ms"
+                  value={latest.averageResponseTime}
+                  absent="no requests were served in the last interval"
+                />
               </AnimatedContainer>
-            </div>
-
-            <AnimatedContainer direction="up" delay={0.3}>
-              <GlassCard>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-primary" />
-                  Resource Usage Over Time
-                </h3>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={performanceData}>
-                      <defs>
-                        <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="memoryGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" />
-                      <YAxis stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Area type="monotone" dataKey="cpu" stroke="hsl(var(--primary))" fill="url(#cpuGradient)" name="CPU %" />
-                      <Area type="monotone" dataKey="memory" stroke="hsl(var(--chart-2))" fill="url(#memoryGradient)" name="Memory %" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </GlassCard>
-            </AnimatedContainer>
-
-            <AnimatedContainer direction="up" delay={0.4}>
-              <GlassCard>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  AI Accuracy Trends
-                </h3>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={accuracyData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" />
-                      <YAxis stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Line type="monotone" dataKey="accuracy" stroke="hsl(var(--primary))" strokeWidth={2} name="Detection Accuracy %" />
-                      <Line type="monotone" dataKey="successRate" stroke="hsl(var(--chart-1))" strokeWidth={2} name="Success Rate %" />
-                      <Line type="monotone" dataKey="falsePositive" stroke="hsl(var(--destructive))" strokeWidth={2} name="False Positive %" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </GlassCard>
-            </AnimatedContainer>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AnimatedContainer direction="left" delay={0.5}>
-                <GlassCard>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <Database className="w-5 h-5 text-primary" />
-                    Models & Training
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Loaded Models</p>
-                      <div className="flex flex-wrap gap-2">
-                        {latestMetric.modelsLoaded && latestMetric.modelsLoaded.length > 0 ? (
-                          latestMetric.modelsLoaded.map((model, index) => (
-                            <Badge key={index} variant="outline" data-testid={`badge-model-${index}`}>
-                              {model}
-                            </Badge>
-                          ))
-                        ) : (
-                          <Badge variant="secondary">No models loaded</Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Last Training Session</p>
-                      <p className="font-medium" data-testid="text-last-training">
-                        {latestMetric.lastTrainingDate
-                          ? format(new Date(latestMetric.lastTrainingDate), "MMM dd, yyyy 'at' HH:mm")
-                          : "Never trained"}
-                      </p>
-                    </div>
-                  </div>
-                </GlassCard>
-              </AnimatedContainer>
-
-              <AnimatedContainer direction="right" delay={0.5}>
-                <GlassCard>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-primary" />
-                    System Alerts
-                  </h3>
-                  <div className="space-y-3">
-                    {latestMetric.cpuUsage > 85 && (
-                      <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                        <AlertTriangle className="w-4 h-4 text-destructive mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">High CPU Usage</p>
-                          <p className="text-xs text-muted-foreground">CPU usage is above 85%. Consider optimizing workload.</p>
-                        </div>
-                      </div>
-                    )}
-                    {latestMetric.memoryUsage > 85 && (
-                      <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                        <AlertTriangle className="w-4 h-4 text-destructive mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">High Memory Usage</p>
-                          <p className="text-xs text-muted-foreground">Memory usage is above 85%. System may slow down.</p>
-                        </div>
-                      </div>
-                    )}
-                    {latestMetric.falsePositiveRate > 10 && (
-                      <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                        <AlertTriangle className="w-4 h-4 text-destructive mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">High False Positive Rate</p>
-                          <p className="text-xs text-muted-foreground">
-                            False positive rate is {latestMetric.falsePositiveRate}%. Model retraining recommended.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    {latestMetric.cpuUsage <= 85 &&
-                      latestMetric.memoryUsage <= 85 &&
-                      latestMetric.falsePositiveRate <= 10 && (
-                        <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                          <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
-                          <div>
-                            <p className="text-sm font-medium">All Systems Operational</p>
-                            <p className="text-xs text-muted-foreground">No alerts at this time. AI is performing optimally.</p>
+              <AnimatedContainer direction="up" delay={0.2}>
+                <GlassCard data-testid="reading-guards">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="athena-label">Engine detection guards</div>
+                      {latest.guardsChecked === null ? (
+                        <Absent why="no engine answered when this reading was taken" />
+                      ) : (
+                        <>
+                          <div
+                            className="athena-figure mt-1 text-3xl"
+                            style={{
+                              color:
+                                (latest.guardsFailing ?? 0) > 0
+                                  ? "hsl(var(--sev-critical))"
+                                  : "hsl(var(--primary))",
+                            }}
+                          >
+                            {latest.guardsChecked - (latest.guardsFailing ?? 0)}
+                            <span className="text-lg text-muted-foreground">
+                              /{latest.guardsChecked}
+                            </span>
                           </div>
-                        </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            answering at the engine's last start
+                          </p>
+                        </>
                       )}
+                    </div>
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
                   </div>
                 </GlassCard>
               </AnimatedContainer>
             </div>
-          </>
-        )}
 
-        {!latestMetric && !isLoading && (
-          <AnimatedContainer direction="up" delay={0.2}>
-            <GlassCard>
-              <div className="text-center py-12">
-                <Brain className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No Health Data Available</h3>
-                <p className="text-muted-foreground">
-                  AI health metrics will appear here once the system starts collecting data.
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <AnimatedContainer direction="up" delay={0.1}>
+                <GlassCard>
+                  <div className="athena-label mb-4">This machine</div>
+                  {series.length < 2 ? (
+                    <p className="text-sm text-muted-foreground" data-testid="text-thin-series">
+                      One reading so far. The line appears once there are two,
+                      about a minute from now.
+                    </p>
+                  ) : (
+                    <div className="h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={series}>
+                          <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                          <XAxis dataKey="time" tick={AXIS} axisLine={false} tickLine={false} />
+                          <YAxis tick={AXIS} axisLine={false} tickLine={false} domain={[0, 100]} />
+                          <Tooltip contentStyle={TOOLTIP} />
+                          <Area
+                            type="monotone" dataKey="cpu" name="CPU %"
+                            stroke="hsl(var(--primary))"
+                            fill="hsl(var(--primary) / 0.18)"
+                          />
+                          <Area
+                            type="monotone" dataKey="memory" name="Memory %"
+                            stroke="hsl(var(--accent-violet))"
+                            fill="hsl(var(--accent-violet) / 0.14)"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </GlassCard>
+              </AnimatedContainer>
+
+              <AnimatedContainer direction="up" delay={0.15}>
+                <GlassCard>
+                  <div className="athena-label mb-4">Response time</div>
+                  {series.filter((one) => one.response !== null).length < 2 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Not enough readings with traffic in them to draw a line.
+                    </p>
+                  ) : (
+                    <div className="h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={series}>
+                          <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                          <XAxis dataKey="time" tick={AXIS} axisLine={false} tickLine={false} />
+                          <YAxis tick={AXIS} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={TOOLTIP} />
+                          <Line
+                            type="monotone" dataKey="response" name="ms"
+                            stroke="hsl(var(--gold))" dot={false}
+                            // A reading with no traffic has no response time.
+                            // Joining across it would draw a line through a
+                            // number that does not exist.
+                            connectNulls={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </GlassCard>
+              </AnimatedContainer>
+            </div>
+
+            <AnimatedContainer direction="up" delay={0.2}>
+              <GlassCard>
+                <div className="athena-label mb-3 flex items-center gap-2">
+                  <Boxes className="h-3.5 w-3.5" />
+                  Models loaded
+                </div>
+                {models.length === 0 ? (
+                  <p className="text-sm text-muted-foreground" data-testid="text-no-models">
+                    No classifier is registered as active, so nothing is loaded.
+                  </p>
+                ) : (
+                  <ul className="flex flex-wrap gap-2" data-testid="list-models">
+                    {models.map((name) => (
+                      <li
+                        key={name}
+                        className="athena-mono rounded-md border px-2 py-1 text-xs"
+                        style={{ borderColor: "hsl(var(--border))" }}
+                      >
+                        {name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {latest.lastTrainingDate
+                    ? `Most recently trained ${formatDistanceToNow(new Date(latest.lastTrainingDate), { addSuffix: true })}.`
+                    : "No training date is recorded against any of them."}
                 </p>
-              </div>
-            </GlassCard>
-          </AnimatedContainer>
+              </GlassCard>
+            </AnimatedContainer>
+
+            <AnimatedContainer direction="up" delay={0.25}>
+              <GlassCard ruling>
+                <div className="athena-label athena-gold">
+                  Detection accuracy and false positives
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground" data-testid="text-not-measured">
+                  This page does not show either, because this app has no way to
+                  measure them. They come from a benchmark that runs against the
+                  engine in its CI, with gates on the true- and false-positive
+                  rates, and the engine exposes no route that reports the
+                  result. When it does, the figures will appear here and be its
+                  measurements rather than this app's estimate.
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Until then the guard count above is the honest version of the
+                  same question: how many of the engine's detection checks were
+                  answering when it last started.
+                </p>
+              </GlassCard>
+            </AnimatedContainer>
+          </>
         )}
       </div>
     </div>
