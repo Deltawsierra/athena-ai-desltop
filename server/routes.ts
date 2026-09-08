@@ -1031,6 +1031,42 @@ export function registerRoutes(app: Express): void {
     res.json({ removed });
   }));
 
+  /**
+   * Classify a vulnerability description with the engine's model.
+   *
+   * The screen behind this printed "SQL Injection, 92% confident" for every
+   * input, then stopped classifying at all on the stated grounds that the
+   * engine had no such route. It has one. This is that route.
+   */
+  const classifyRequestSchema = z.object({
+    text: z.string().trim().min(1, "there is nothing to classify").max(20_000),
+  });
+
+  app.post("/api/classify-cve", asyncHandler(async (req, res) => {
+    // Rejected here rather than sent on. An empty string is a question the
+    // model cannot be asked: it answers at the floor with a tie-break label,
+    // which reads exactly like a finding.
+    const data = classifyRequestSchema.parse(req.body);
+
+    let result;
+    try {
+      result = await engine.classifyCve(data.text);
+    } catch (cause) {
+      if (cause instanceof engine.EngineUnavailable) {
+        return void res.status(503).json({ error: cause.message });
+      }
+      throw cause;
+    }
+
+    if (result.unavailable) {
+      // The engine's own words. Its model can be absent while the engine is
+      // up, and that is a different thing from the engine being down.
+      return void res.status(503).json({ error: result.unavailable });
+    }
+
+    res.json(result);
+  }));
+
   app.get("/api/assistant/status", asyncHandler(async (_req, res) => {
     res.json(await assistant.status());
   }));

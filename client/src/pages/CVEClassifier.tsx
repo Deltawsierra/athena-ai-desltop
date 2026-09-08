@@ -8,18 +8,36 @@
  * confidence figure is the most load-bearing number a security product
  * displays, and that one was decoration.
  *
- * There is no classification endpoint on the engine yet, so this does not
- * offer classification. It shows the registry instead: every model recorded,
- * its measured accuracy, the size of the set that measurement came from, and
- * when it was last trained. That is a smaller claim and it is one the app can
- * actually support, and it happens to answer the question a technical visitor
- * asks anyway -- how good is it, and measured how?
+ * It classifies again, and the second version of this page is the more
+ * interesting one, because the first replacement was also wrong.
+ *
+ * That version said "there is no classification endpoint on the engine yet"
+ * and showed only the registry. The endpoint existed the whole time --
+ * POST /api/classify-cve, auth-gated, a real TF-IDF model. Absence was
+ * asserted without reading the engine's route table, which is the same defect
+ * as the invented confidence, arrived at from the opposite direction.
+ *
+ * So it calls the endpoint. What it will not do is print the answer without
+ * the context needed to read it. The model knows five classes, so an input it
+ * has no signal for scores exactly one fifth and comes back carrying whichever
+ * label wins the tie-break -- always `rce`. Measured: an empty string, "zzzz",
+ * "csrf token missing" and "xxe external entity" all answer `rce` at 0.200,
+ * because CSRF and XXE are not among the five. Printing that as a finding
+ * would be the third version of the same lie.
+ *
+ * The registry stays below it. How good is it, and measured how, is the
+ * question a technical visitor asks, and a 0.28 confidence beside a 0.20 floor
+ * is a more honest answer than the 92% this page used to give.
  */
 
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Boxes, CircleSlash, FlaskConical } from "lucide-react";
+import { Boxes, CircleSlash, FlaskConical, ScanSearch } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { apiRequest } from "@/lib/queryClient";
 
 import GlassCard from "@/components/GlassCard";
 import PageHeader from "@/components/PageHeader";
@@ -39,7 +57,94 @@ function accuracyColour(accuracy: number): string {
   return "hsl(var(--sev-high))";
 }
 
+interface Classification {
+  label: string | null;
+  confidence: number;
+  informative: boolean;
+  baseline: number | null;
+  classes: string[];
+  engineVersion: string | null;
+}
+
+/**
+ * The answer, rendered so that "no answer" cannot be mistaken for one.
+ *
+ * The label is shown either way -- hiding it would be its own dishonesty --
+ * but at the floor it is presented as what it is: the model expressing no
+ * preference, with the tie-break winner attached.
+ */
+function Verdict({ result }: { result: Classification }) {
+  const floor = result.baseline;
+  const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
+
+  if (!result.informative) {
+    return (
+      <div
+        className="rounded-lg border p-4 space-y-2"
+        style={{ borderColor: "hsl(var(--gold) / 0.45)" }}
+        data-testid="verdict-uninformative"
+      >
+        <div className="athena-label athena-gold">No classification</div>
+        <p className="text-sm text-muted-foreground">
+          The model scored every one of its classes equally
+          {floor !== null && <> — {pct(floor)} each, the no-information floor</>}
+          , so it has expressed no preference. It returned{" "}
+          <span className="athena-mono">{result.label}</span> because something
+          has to win a tie, not because it recognised anything.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          It can only recognise{" "}
+          {result.classes.map((one, index) => (
+            <span key={one}>
+              {index > 0 && ", "}
+              <span className="athena-mono">{one}</span>
+            </span>
+          ))}
+          . Anything else lands here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-lg border p-4 space-y-2"
+      style={{ borderColor: "hsl(var(--primary) / 0.4)" }}
+      data-testid="verdict-classified"
+    >
+      <div className="flex items-baseline gap-3">
+        <span className="athena-figure text-2xl" data-testid="text-label">
+          {result.label}
+        </span>
+        <span className="athena-mono text-sm text-muted-foreground" data-testid="text-confidence">
+          {pct(result.confidence)}
+        </span>
+      </div>
+      {floor !== null && (
+        <p className="text-xs text-muted-foreground">
+          Against a {pct(floor)} floor — what every class scores when the model
+          has no signal. This model separates weakly; the number is the model's,
+          not a presentation of it.
+        </p>
+      )}
+      {result.engineVersion && (
+        <p className="athena-mono text-xs text-muted-foreground">
+          {result.engineVersion}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function CVEClassifier() {
+  const [text, setText] = useState("");
+
+  const classify = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/classify-cve", { text });
+      return (await response.json()) as Classification;
+    },
+  });
   const { data: classifiers = [], isLoading } = useQuery<Classifier[]>({
     queryKey: ["/api/classifiers"],
   });
@@ -187,13 +292,49 @@ export default function CVEClassifier() {
         )}
 
         <GlassCard className="athena-fluted">
-          <div className="athena-label">Classifying something</div>
-          <p className="text-sm text-muted-foreground mt-2">
-            Classification runs in the engine, not in this app, and there is no
-            route for it yet. When there is, it will appear here and its answer
-            will be the engine's — including its confidence, which is a
-            measurement and not a flourish.
-          </p>
+          <div className="athena-label mb-3 flex items-center gap-2">
+            <ScanSearch className="w-3.5 h-3.5" />
+            Classify a description
+          </div>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (text.trim()) classify.mutate();
+            }}
+          >
+            <Textarea
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              rows={4}
+              placeholder="Paste a vulnerability description or advisory text."
+              data-testid="input-cve-text"
+            />
+            <div className="flex items-center gap-3">
+              <Button
+                type="submit"
+                disabled={!text.trim() || classify.isPending}
+                data-testid="button-classify"
+              >
+                {classify.isPending ? "Asking the engine…" : "Classify"}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                The engine's model answers. This app does not score anything.
+              </span>
+            </div>
+          </form>
+
+          {classify.isError && (
+            <div className="mt-4 text-sm text-destructive" data-testid="text-classify-error">
+              {(classify.error as Error).message}
+            </div>
+          )}
+
+          {classify.data && (
+            <div className="mt-4">
+              <Verdict result={classify.data} />
+            </div>
+          )}
         </GlassCard>
       </div>
     </div>
