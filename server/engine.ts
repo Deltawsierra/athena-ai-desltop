@@ -231,6 +231,16 @@ export interface ScanRequest {
   target: string;
   /** The engagement this scan is being run under. The engine records it. */
   engagementRef: string;
+  /**
+   * The hosts this engagement authorises.
+   *
+   * Sent because the engine's fallback, given none, is the target's own host
+   * -- which makes its scope check unfalsifiable, since the only host it can
+   * refuse is the one it derived the scope from. Athena is the side that
+   * holds the client's site list, so Athena is the side that can make that
+   * check mean something.
+   */
+  scope: string[];
 }
 
 /**
@@ -252,6 +262,7 @@ export async function startScan(request: ScanRequest): Promise<EngineScan> {
     body: JSON.stringify({
       target: request.target,
       engagement_ref: request.engagementRef,
+      scope: request.scope,
     }),
   });
 

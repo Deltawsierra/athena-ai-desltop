@@ -19,6 +19,24 @@ import {
  * request body at all. Taking `data.executedBy ?? session` let the client win,
  * and in an audit product "who ran this test" is evidence.
  */
+/**
+ * The host a recorded site names, or null if it does not name one.
+ *
+ * Sites are stored as URLs typed by a person, so this has to survive a bare
+ * hostname as well as a URL. It does not invent a scheme for anything with a
+ * colon in it: "engine.internal:8099" parses as a scheme, which is the same
+ * trap the settings screen's URL validation fell into.
+ */
+function hostOf(url: string): string | null {
+  const raw = (url ?? "").trim();
+  if (!raw) return null;
+  try {
+    return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 const createTestSchema = insertTestSchema.omit({ executedBy: true, isSample: true });
 
 /**
@@ -663,9 +681,34 @@ export function registerRoutes(app: Express): void {
     // cannot be filed under an engagement nobody opened.
     const engagementRef = site ? `${client.id}:${site.id}` : client.id;
 
+    // The hosts this engagement authorises, taken from the sites somebody
+    // recorded against the client. One site if one was chosen, otherwise all
+    // of the client's.
+    //
+    // This is the half of the scope check the engine cannot do. Given no
+    // scope it falls back to the target's own host, and a check whose only
+    // possible answer is "yes" is not a check -- so the side holding the site
+    // list is the side that has to send it.
+    const engagementSites = site ? [site] : await storage.getSitesByClient(client.id);
+    const scope = engagementSites
+      .map((one) => hostOf(one.url))
+      .filter((host): host is string => host !== null);
+
+    if (scope.length === 0) {
+      // No recorded site means nothing on record authorises any host, and
+      // scanning on the strength of the target the caller just typed is the
+      // unfalsifiable check again, one layer up. Refuse and say what is
+      // missing.
+      return void res.status(400).json({
+        error:
+          `no site is recorded for ${client.name}, so nothing on record ` +
+          `authorises scanning ${data.target}. Add the site to the client first.`,
+      });
+    }
+
     let started;
     try {
-      started = await engine.startScan({ target: data.target, engagementRef });
+      started = await engine.startScan({ target: data.target, engagementRef, scope });
     } catch (cause) {
       if (cause instanceof engine.EngineUnavailable) {
         // 503, not 500. Nothing is broken: the engine is not there, or not
