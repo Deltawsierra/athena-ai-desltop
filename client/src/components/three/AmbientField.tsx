@@ -11,7 +11,7 @@
  * numbers are what somebody is buying.
  */
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -123,7 +123,40 @@ export interface AmbientFieldProps {
   alert?: boolean;
 }
 
+/**
+ * Whether the dark palette is in force, kept current as the toggle is used.
+ *
+ * The class is the source of truth rather than a stored preference, because
+ * the toggle sets the class directly and a component reading localStorage
+ * would be a frame behind it.
+ */
+function useIsDark(): boolean {
+  const [dark, setDark] = useState(() =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
+  );
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() =>
+      setDark(root.classList.contains("dark")),
+    );
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  return dark;
+}
+
 export default function AmbientField({ alert = false }: AmbientFieldProps) {
+  // Not drawn in light mode, and this is the reason light mode looked broken:
+  // the canvas is `alpha: false`, so it paints an opaque near-black field over
+  // the whole viewport at z-index -1. Every token could be light and the page
+  // still came out dark, because the body's background was behind this.
+  //
+  // It is not made translucent instead, because the effect is a dark-ground
+  // idea -- a soft glow needs something to glow against. On paper the same
+  // shader is a grey smear over the data, which is the opposite of what an
+  // instrument wants.
+  if (!useIsDark()) return null;
+
   return (
     <div
       aria-hidden="true"

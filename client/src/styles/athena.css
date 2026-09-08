@@ -11,7 +11,92 @@
  * components already built keep working while looking entirely different.
  */
 
-.dark {
+/* ---------------------------------------------------------------------- */
+/* Light                                                                   */
+/*                                                                         */
+/* The palette above is defined under `.dark` alone, so a machine set to    */
+/* light rendered the shadcn defaults: white inputs on the horizon grid,    */
+/* an invisible gold, and severity colours mixed for a near-black ground    */
+/* sitting on paper. The theme toggle was offering a mode the product had   */
+/* not been drawn for.                                                     */
+/*                                                                         */
+/* This is not the dark palette inverted. Two things change deliberately:   */
+/* the hues are held and the lightness is re-picked against white, because  */
+/* a cyan that reads as "live" at 52% on near-black is a highlighter pen at */
+/* the same value on paper; and depth stops being carried by glow, which    */
+/* needs a dark ground to exist at all, and is carried by borders instead.  */
+/*                                                                         */
+/* Severity keeps its meaning and loses its brightness. A critical red has  */
+/* to be legible as text on white, which the dark palette's 60% lightness   */
+/* is not, so each of the five is darkened until it passes as body text     */
+/* while staying the same hue -- the colour still means the same thing.     */
+/* ---------------------------------------------------------------------- */
+
+/*
+ * A note on the selectors below.
+ *
+ * index.css @imports this file, so this file's rules come first and index.css's
+ * own `:root` and `.dark` -- the stock shadcn tokens -- overrode the house
+ * palette at equal specificity. Dark mostly survived because the two agree on
+ * most names; light did not survive at all, and `--background` resolved to
+ * shadcn's `210 40% 98%` rather than the value written here.
+ *
+ * `:root:not(.dark)` and `:root.dark` are one class heavier, so this file wins
+ * wherever the two disagree, whatever the import order becomes later. The two
+ * selectors are mutually exclusive, so nothing has to be reasoned about twice.
+ */
+
+:root:not(.dark) {
+  --background: 210 30% 98%;
+  --surface-0: 210 28% 96%;
+  --surface-1: 210 26% 93%;
+  --surface-2: 210 22% 89%;
+
+  --card: 0 0% 100%;
+  --card-border: 200 40% 78%;
+  --border: 214 20% 84%;
+
+  --foreground: 222 40% 12%;
+  --muted-foreground: 215 16% 40%;
+
+  /* Cyan at dark-palette brightness is unreadable on white, so the primary
+     drops into the teal it becomes when you turn the lights on. Same hue,
+     same meaning. */
+  --primary: 190 84% 30%;
+  --primary-foreground: 0 0% 100%;
+
+  --accent-violet: 268 60% 45%;
+  --accent-amber: 34 88% 38%;
+
+  --sev-critical: 348 78% 42%;
+  --sev-high: 14 82% 40%;
+  --sev-medium: 34 88% 34%;
+  --sev-low: 195 78% 32%;
+  --sev-info: 215 18% 42%;
+
+  --chart-1: 190 84% 34%;
+  --chart-2: 268 60% 50%;
+  --chart-3: 34 88% 40%;
+  --chart-4: 348 78% 46%;
+  --chart-5: 158 62% 32%;
+
+  --ring: 190 84% 30%;
+
+  /* Glow needs a dark ground to be anything but a smudge. On paper the same
+     job -- "this surface is raised" -- is done by an edge and a shadow. */
+  --glow-primary: 0 0 0 1px hsl(190 84% 30% / 0.28);
+  --glow-critical: 0 0 0 1px hsl(348 78% 42% / 0.32);
+  --edge: inset 0 1px 0 hsl(0 0% 100% / 0.9);
+
+  /* Gold on white is a pale smear, so judgement becomes bronze. It is the
+     same reservation: an approval, a verified chain, a signature that
+     checked out, and never severity. */
+  --gold: 38 72% 34%;
+  --gold-dim: 38 45% 46%;
+  --glow-gold: 0 0 0 1px hsl(38 72% 34% / 0.3);
+}
+
+:root.dark {
   /* Ground. Not pure black: a slight blue cast reads as depth on an OLED
      panel and stops large fills looking like a dead pixel field. */
   --background: 224 47% 4%;
@@ -198,7 +283,7 @@
 /* built from the same straight lines as the HUD.                          */
 /* ---------------------------------------------------------------------- */
 
-.dark {
+:root.dark {
   /* The second accent, from the logo's right wing. Reserved for judgement:
      an approval, a verified chain, a signature that checked out. Never for
      decoration, and never for severity -- amber already means medium. */

@@ -11,15 +11,16 @@ export function getStoredTheme(): Theme {
   }
   // Dark, unless somebody has chosen otherwise on this machine.
   //
-  // Not the system preference, which is the usual answer and is the wrong one
-  // here: the house palette in client/src/styles/athena.css is defined under
-  // `.dark` only -- the severity ramp, the gold, the surfaces -- so a first
-  // run on a machine set to light rendered the login screen with white inputs
-  // on the dark horizon and a heading nobody could read. Offering a theme the
-  // product has not been drawn for is worse than not offering it.
+  // This used to be because there was no light palette at all -- the tokens
+  // were defined under `.dark` only, so a machine set to light rendered white
+  // inputs on the dark horizon and an unreadable heading. There is one now,
+  // and the toggle leads somewhere.
   //
-  // The toggle still works and its choice is still remembered. What changed
-  // is the default for somebody who has never expressed one.
+  // It stays dark rather than following the system preference for a smaller
+  // reason: this is an instrument, the severity ramp was picked against a
+  // near-black ground, and a red that means "critical" is louder there. The
+  // light palette exists so that somebody who wants it is not punished for
+  // asking, not because it is the better way to read this data.
   return "dark";
 }
 
