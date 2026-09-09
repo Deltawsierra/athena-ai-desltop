@@ -44,7 +44,7 @@ export function Divider({
       <img
         src={DIVIDERS[variant]}
         alt=""
-        className="h-auto w-full max-w-3xl select-none opacity-90"
+        className="h-12 w-auto max-w-full select-none opacity-90"
       />
     </div>
   );

@@ -1,356 +1,264 @@
 /**
- * The evidence pack, which this product has advertised and never produced.
+ * Evidence: the record a deployment decision is actually made on. Packs, proofs,
+ * unknowns, decisions -- each artifact with its system, its state, and who owns
+ * it -- plus the release recommendation and the human approvals that gate it.
  *
- * The engine has built them all along: an Ed25519 signature over a manifest
- * committing to a Merkle root, with a per-source status so a reduced pack can
- * still be verified. Nothing in this app had ever asked for one, which is why
- * "Evidence Pack" was a line on a website rather than a button.
- *
- * Two things this screen exists to prevent, both measured against a running
- * engine before it was written.
- *
- * An unsigned pack must not look like a signed one. With no ENGINE_EVIDENCE_KEY
- * set the engine returns the pack anyway, with `signed: false` and the reason
- * -- deliberately, so nobody hands over an unsigned document believing it was
- * checked. That distinction is the loudest thing on this page.
- *
- * And an incomplete pack must not read as complete. An unscoped pack reports
- * `scans: excluded`, because the scan record has no tenant column; the pack
- * still returns 201 with six other sources and a valid root. Every source is
- * listed here with its status and, where it was left out, the engine's reason.
+ * Fixture data throughout, shaped like the API so the swap is the source only.
  */
-
-import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
 import {
-  BadgeCheck, FileArchive, ShieldAlert, ShieldOff, Download, Link2,
+  Files,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  FileText,
+  ListChecks,
+  Database,
+  Share2,
+  BarChart3,
+  Download,
+  MoreHorizontal,
+  ChevronRight,
+  SlidersHorizontal,
+  Search,
+  Landmark,
 } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import PageHero from "@/components/mythos/PageHero";
+import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
-import PageHeader from "@/components/PageHeader";
-import { apiRequest } from "@/lib/queryClient";
-import type { Client, Site } from "@shared/schema";
+import { Divider } from "@/components/mythos/Ornament";
+import { StatusPill, Avatar, Meter, type StatusTone } from "@/components/mythos/atoms";
+import { cn } from "@/lib/utils";
 
-interface EvidenceSource {
-  source: string;
-  status: string;
-  reason: string | null;
-  records: number;
-  chainOk: boolean;
-  chainDetail: string;
-  chainPartial: boolean;
-  chainHeadAuthentic: boolean;
+interface Artifact {
+  id: string;
+  name: string;
+  blurb: string;
+  icon: typeof FileText;
+  system: string;
+  version: string;
+  status: { label: string; tone: StatusTone };
+  owner: string;
+  dept: string;
+  updated: string;
 }
 
-interface EvidenceSignature {
-  algorithm: string;
-  keyId: string | null;
-  publicKey: string | null;
-  signature: string;
-}
+const ARTIFACTS: Artifact[] = [
+  { id: "e1", name: "Evidence Pack", blurb: "Complete security and risk assessment", icon: FileText, system: "Customer Support Agent", version: "v2.4.1", status: { label: "Complete", tone: "complete" }, owner: "Sarah Mitchell", dept: "Security", updated: "Today, 10:24 AM" },
+  { id: "e2", name: "Unknowns Register", blurb: "Identified gaps and open questions", icon: ListChecks, system: "Marketing Copilot", version: "v1.3.0", status: { label: "In Progress", tone: "progress" }, owner: "Daniel Kim", dept: "Security", updated: "Today, 9:12 AM" },
+  { id: "e3", name: "Deployment Decision Record", blurb: "Go/no-go decision and rationale", icon: FileText, system: "Financial Analyst", version: "v1.1.0", status: { label: "Approved", tone: "approved" }, owner: "Carmen Lopez", dept: "Risk", updated: "Apr 22, 2025" },
+  { id: "e4", name: "Remediation Approval", blurb: "Risk treatment validation", icon: CheckCircle2, system: "HR Assistant", version: "v1.0.2", status: { label: "Approved", tone: "approved" }, owner: "Robert Chen", dept: "Engineering", updated: "Apr 21, 2025" },
+  { id: "e5", name: "Retest Summary", blurb: "Post-remediation validation results", icon: BarChart3, system: "Code Assistant", version: "v2.0.0", status: { label: "Passed", tone: "passed" }, owner: "Maya Patel", dept: "Security", updated: "Apr 20, 2025" },
+  { id: "e6", name: "Provider Assurance Profile", blurb: "Vendor security and compliance", icon: ShieldCheck, system: "OpenAI", version: "GPT-4o", status: { label: "Complete", tone: "complete" }, owner: "James Turner", dept: "Vendor Risk", updated: "Apr 19, 2025" },
+  { id: "e7", name: "Data Lifecycle Review", blurb: "Data handling and retention analysis", icon: Database, system: "Customer Support Agent", version: "v2.4.1", status: { label: "In Progress", tone: "progress" }, owner: "Alex Carter", dept: "Data Governance", updated: "Apr 18, 2025" },
+  { id: "e8", name: "System Capability Map", blurb: "Capabilities, integrations, data flows", icon: Share2, system: "Marketing Copilot", version: "v1.3.0", status: { label: "Complete", tone: "complete" }, owner: "Sophia Park", dept: "Architecture", updated: "Apr 17, 2025" },
+];
 
-interface EvidencePack {
-  format: string;
-  generatedAt: string | null;
-  tenant: string | null;
-  reason: string | null;
-  merkleRoot: string | null;
-  leafCount: number;
-  signed: boolean;
-  signature: EvidenceSignature | null;
-  unsignedReason: string | null;
-  sources: EvidenceSource[];
-  document: unknown;
-}
+const TABS = ["All Evidence", "Evidence Packs", "Unknowns", "Decisions", "Remediations", "Retests", "Provider Info", "Data & Systems"];
 
-/** Included, excluded, truncated — coloured so the exceptions stand out. */
-function statusColour(status: string): string {
-  if (status === "included") return "hsl(var(--primary))";
-  if (status === "excluded") return "hsl(var(--sev-high))";
-  return "hsl(var(--gold))";
-}
+const APPROVALS = [
+  { role: "Security Approval", who: "Sarah Mitchell", when: "Apr 21" },
+  { role: "Risk Approval", who: "Carmen Lopez", when: "Apr 21" },
+  { role: "Legal Approval", who: "Priya Shah", when: "Apr 22" },
+];
+
+const COMPLETENESS = [
+  { system: "Customer Support Agent", pct: 92 },
+  { system: "Marketing Copilot", pct: 68 },
+  { system: "Financial Analyst", pct: 100 },
+  { system: "HR Assistant", pct: 85 },
+  { system: "Code Assistant", pct: 78 },
+];
+
+const DOC_ACTIVITY = [
+  { tone: "emerald", title: "Remediation approval added", note: "Customer Support Agent", when: "2h ago" },
+  { tone: "emerald", title: "Retest summary uploaded", note: "Code Assistant", when: "5h ago" },
+  { tone: "amber", title: "Unknowns register updated", note: "Marketing Copilot", when: "1d ago" },
+  { tone: "emerald", title: "Decision record approved", note: "Financial Analyst", when: "1d ago" },
+  { tone: "sky", title: "Provider profile updated", note: "OpenAI", when: "2d ago" },
+];
 
 export default function Evidence() {
-  const [clientId, setClientId] = useState("");
-  const [siteId, setSiteId] = useState("");
-  const [reason, setReason] = useState("");
-
-  const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
-  const { data: sites = [] } = useQuery<Site[]>({ queryKey: ["/api/sites"] });
-
-  const sitesForClient = useMemo(
-    () => sites.filter((site) => site.clientId === clientId),
-    [sites, clientId],
-  );
-
-  const build = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/evidence-pack", {
-        clientId, siteId: siteId || undefined, reason,
-      });
-      return (await response.json()) as EvidencePack;
-    },
-  });
-
-  const pack = build.data;
-
-  const save = () => {
-    if (!pack) return;
-    const blob = new Blob([JSON.stringify(pack.document, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    // Named for what it is and when, because a file called download.json in
-    // somebody's folder in six months is not evidence of anything.
-    link.download = `evidence-pack-${pack.tenant ?? "tenant"}-${
-      (pack.generatedAt ?? new Date().toISOString()).replace(/[:.]/g, "-")
-    }.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
-    <div className="min-h-screen">
-      <div className="container mx-auto space-y-6 p-6 max-w-5xl">
-        <PageHeader
-          title="Evidence"
-          icon={<FileArchive className="h-8 w-8 text-primary" />}
-          description="A signed, verifiable record of what this deployment did, assembled by the engine and checkable by somebody who does not trust it."
-        />
+    <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8">
+      <PageHero
+        title="Evidence"
+        subtitle="Document the truth. Enable confident decisions."
+        background="library"
+        verbs={["Evidence", "Proof", "Trust", "Deploys"]}
+      />
+      <Divider variant="laurel" className="mt-5" />
 
-        <GlassCard className="athena-fluted">
-          <form
-            className="space-y-5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (clientId && reason.trim()) build.mutate();
-            }}
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="client">Engagement</Label>
-                <Select value={clientId} onValueChange={(value) => { setClientId(value); setSiteId(""); }}>
-                  <SelectTrigger id="client" data-testid="select-evidence-client">
-                    <SelectValue placeholder="Whose records go in the pack" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Always sent. Without an engagement the engine leaves the scan
-                  record out of the pack entirely, and says so.
-                </p>
-              </div>
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 space-y-5">
+          {/* stats */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <StatCard label="Evidence Packs" value={28} icon={Files} delta={{ value: "+4", direction: "up", good: true, note: "this week" }} sublabel="Complete documentation sets" />
+            <StatCard label="Retest Proofs" value={14} icon={ShieldCheck} delta={{ value: "+3", direction: "up", good: true, note: "this week" }} sublabel="Validation & verification" />
+            <StatCard label="Open Unknowns" value={6} icon={AlertTriangle} delta={{ value: "-4", direction: "down", good: true, note: "since last week" }} sublabel="Items requiring resolution" accent="var(--sev-medium)" />
+            <StatCard label="Approved Remediations" value={19} icon={CheckCircle2} delta={{ value: "+7", direction: "up", good: true, note: "this month" }} sublabel="Risk items addressed" />
+            <StatCard label="Recent Decisions" value={11} icon={FileText} delta={{ value: "+2", direction: "up", good: true, note: "this week" }} sublabel="Go / No-go recorded" />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="site">Site</Label>
-                <Select
-                  value={siteId}
-                  onValueChange={setSiteId}
-                  disabled={clientId === "" || sitesForClient.length === 0}
+          {/* tabs + table */}
+          <GlassCard hover={false} bodyClassName="p-0">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border/50 px-4 py-3">
+              {TABS.map((t, i) => (
+                <button
+                  key={t}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-[12px] font-medium transition-colors",
+                    i === 0 ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
+                  )}
                 >
-                  <SelectTrigger id="site" data-testid="select-evidence-site">
-                    <SelectValue placeholder={clientId === "" ? "Choose an engagement first" : "Optional — narrows it"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sitesForClient.map((site) => (
-                      <SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>
+                  {t}
+                </button>
+              ))}
+              <div className="ml-auto flex items-center gap-2">
+                <span className="hidden items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-muted-foreground sm:flex">
+                  <Search className="h-3.5 w-3.5" /> Search evidence…
+                </span>
+                <button className="flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-[12px] text-muted-foreground">
+                  <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-left">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
+                    {["Evidence Artifact", "System", "Status", "Owner", "Last Updated", "Actions"].map((h) => (
+                      <th key={h} className="px-4 py-2 font-medium">{h}</th>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="reason">What this pack is for</Label>
-              <Input
-                id="reason"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="Customer security review, Q3 audit, incident 2026-114…"
-                data-testid="input-evidence-reason"
-              />
-              <p className="text-xs text-muted-foreground">
-                Recorded in the signed manifest and in this deployment's audit
-                log. Issuing a pack assembles somebody's records into a document
-                that leaves this machine; why is part of the record.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Button
-                type="submit"
-                disabled={!clientId || !reason.trim() || build.isPending}
-                data-testid="button-build-pack"
-              >
-                <FileArchive className="mr-2 h-4 w-4" />
-                {build.isPending ? "Asking the engine…" : "Build the pack"}
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                The engine assembles and signs it. This app does not author evidence.
-              </span>
-            </div>
-          </form>
-        </GlassCard>
-
-        {build.isError && (
-          <GlassCard ruling>
-            <div className="flex items-start gap-3">
-              <ShieldAlert className="athena-gold mt-0.5 h-5 w-5 shrink-0" />
-              <div>
-                <div className="athena-label">No pack was built</div>
-                <p className="mt-1 text-sm text-muted-foreground" data-testid="text-evidence-error">
-                  {(build.error as Error).message}
-                </p>
-              </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ARTIFACTS.map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <tr key={a.id} className="border-t border-border/40 hover:bg-surface-1/40">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gold-dim/40 bg-gold/5 text-gold">
+                              <Icon className="h-4 w-4" />
+                            </span>
+                            <span className="leading-tight">
+                              <span className="block text-[13px] font-medium text-foreground">{a.name}</span>
+                              <span className="block text-[11px] text-muted-foreground">{a.blurb}</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-[12px] text-foreground">{a.system}</span>
+                          <span className="block text-[11px] text-muted-foreground">{a.version}</span>
+                        </td>
+                        <td className="px-4 py-3"><StatusPill tone={a.status.tone}>{a.status.label}</StatusPill></td>
+                        <td className="px-4 py-3"><Avatar name={a.owner} sub={a.dept} size={30} /></td>
+                        <td className="px-4 py-3 text-[12px] text-muted-foreground">{a.updated}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <button className="rounded-md border border-border/60 px-2.5 py-1 text-[12px] text-foreground hover:border-primary/50">View</button>
+                            <button className="rounded-md border border-border/60 p-1.5 text-muted-foreground hover:text-foreground"><Download className="h-3.5 w-3.5" /></button>
+                            <button className="p-1 text-muted-foreground"><MoreHorizontal className="h-4 w-4" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </GlassCard>
-        )}
 
-        {pack && (
-          <>
-            {/* The signature, first and loudest. An unsigned pack is a record,
-                not proof, and the difference is the whole product. */}
-            <GlassCard
-              ruling={!pack.signed}
-              className={pack.signed ? undefined : "athena-panel--critical"}
-            >
-              <div className="flex items-start gap-3">
-                {pack.signed ? (
-                  <BadgeCheck className="mt-0.5 h-5 w-5 shrink-0" style={{ color: "hsl(var(--primary))" }} />
-                ) : (
-                  <ShieldOff className="mt-0.5 h-5 w-5 shrink-0" style={{ color: "hsl(var(--sev-critical))" }} />
-                )}
-                <div className="min-w-0 space-y-1">
-                  <div
-                    className="athena-label"
-                    style={{ color: pack.signed ? "hsl(var(--primary))" : "hsl(var(--sev-critical))" }}
-                    data-testid="text-signed-status"
-                  >
-                    {pack.signed ? "Signed" : "Not signed"}
+          {/* footer banner */}
+          <GlassCard hover={false} ruling bodyClassName="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full border border-gold-dim/40 text-gold"><Landmark className="h-5 w-5" /></span>
+              <div>
+                <p className="font-serif text-[18px] text-foreground">From evidence to confidence.</p>
+                <p className="text-[13px] text-muted-foreground">Clear documentation. Measurable progress. Safer AI for what's next.</p>
+              </div>
+            </div>
+            <button className="flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-gold">Turn evidence into opportunity <ChevronRight className="h-4 w-4" /></button>
+          </GlassCard>
+        </div>
+
+        {/* right rail */}
+        <div className="space-y-5">
+          <GlassCard hover={false} ruling>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="athena-label">Release Recommendation</p>
+              <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Beta Ready</span>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_16px_hsl(150_60%_45%/0.3)]">
+                <CheckCircle2 className="h-6 w-6" />
+              </span>
+              <div>
+                <p className="text-[14px] font-semibold text-foreground">Customer Support Agent <span className="text-muted-foreground">v2.4.1</span></p>
+                <p className="mt-1 text-[12px] text-muted-foreground">Based on current evidence, this deployment is ready for controlled release.</p>
+              </div>
+            </div>
+            <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-border/60 py-2 text-[12px] font-medium text-foreground hover:border-primary/50">
+              View Full Decision Record <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </GlassCard>
+
+          <GlassCard hover={false}>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="athena-label">Human Approvals</p>
+              <StatusPill tone="complete">Complete</StatusPill>
+            </div>
+            <p className="flex items-baseline gap-2">
+              <span className="athena-figure text-[30px] font-semibold text-foreground">3 / 3</span>
+            </p>
+            <p className="text-[11px] text-muted-foreground">Required approvals obtained</p>
+            <ul className="mt-3 space-y-2.5 border-t border-border/40 pt-3">
+              {APPROVALS.map((a) => (
+                <li key={a.role} className="flex items-center gap-2.5">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  <span className="min-w-0 flex-1 text-[12px] text-foreground">{a.role}</span>
+                  <span className="text-[11px] text-muted-foreground">{a.who}</span>
+                  <span className="w-10 text-right text-[11px] text-muted-foreground/70">{a.when}</span>
+                </li>
+              ))}
+            </ul>
+          </GlassCard>
+
+          <GlassCard hover={false}>
+            <p className="athena-label mb-3">Evidence Completeness by System</p>
+            <ul className="space-y-2.5">
+              {COMPLETENESS.map((c) => (
+                <li key={c.system}>
+                  <div className="mb-1 flex items-center justify-between text-[12px]">
+                    <span className="text-foreground">{c.system}</span>
+                    <span className="text-muted-foreground">{c.pct}%</span>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {pack.signed ? (
-                      <>
-                        {pack.signature?.algorithm ?? "ed25519"} over the
-                        manifest, which commits to the Merkle root below.
-                        Somebody who does not trust this deployment can check
-                        it -- against the published key named here, not against
-                        the copy inside the pack. A forger who re-signs a
-                        doctored pack replaces that copy too.
-                      </>
-                    ) : (
-                      <>
-                        {pack.unsignedReason ?? "the engine did not sign this pack"}.
-                        {" "}This is a record of what happened, not proof of it:
-                        nothing here can be checked by somebody who does not
-                        already trust this deployment. Do not hand it over as
-                        evidence.
-                      </>
-                    )}
-                  </p>
-                  {pack.signature && (
-                    <div className="pt-1">
-                      <div className="athena-label">Verify against key</div>
-                      <div
-                        className="athena-mono truncate text-xs text-muted-foreground"
-                        data-testid="text-signing-key-id"
-                      >
-                        {pack.signature.keyId ?? "the engine did not name the key"}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </GlassCard>
+                  <Meter percent={c.pct} tone="gold" />
+                </li>
+              ))}
+            </ul>
+            <button className="mt-3 flex w-full items-center justify-end gap-1 text-[11px] text-gold">View all systems <ChevronRight className="h-3 w-3" /></button>
+          </GlassCard>
 
-            <GlassCard>
-              <div className="flex flex-wrap items-baseline gap-x-10 gap-y-3">
-                <div>
-                  <div className="athena-label">Records</div>
-                  <div className="athena-figure text-2xl" data-testid="text-leaf-count">
-                    {pack.leafCount}
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="athena-label">Merkle root</div>
-                  <div className="athena-mono truncate text-xs text-muted-foreground" data-testid="text-merkle-root">
-                    {pack.merkleRoot ?? "none"}
-                  </div>
-                </div>
-                <div>
-                  <div className="athena-label">Format</div>
-                  <div className="athena-mono text-xs text-muted-foreground">{pack.format}</div>
-                </div>
-              </div>
-
-              <div className="mt-5 flex items-center gap-3">
-                <Button type="button" variant="secondary" onClick={save} data-testid="button-save-pack">
-                  <Download className="mr-2 h-4 w-4" />
-                  Save the pack
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  The engine's document, unchanged, so it still verifies.
-                </span>
-              </div>
-            </GlassCard>
-
-            <GlassCard>
-              <div className="athena-label mb-4 flex items-center gap-2">
-                <Link2 className="h-3.5 w-3.5" />
-                What went in, and what did not
-              </div>
-              <ul className="space-y-3" data-testid="list-evidence-sources">
-                {pack.sources.map((source) => (
-                  <li
-                    key={source.source}
-                    className="rounded-lg border p-3"
-                    style={{ borderColor: `${statusColour(source.status)} / 0.3` }}
-                    data-testid={`source-${source.source}`}
-                  >
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span className="athena-mono text-sm">{source.source}</span>
-                      <span className="athena-label" style={{ color: statusColour(source.status) }}>
-                        {source.status}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {source.records} {source.records === 1 ? "record" : "records"}
-                      </span>
-                      {!source.chainOk && (
-                        <span className="athena-label" style={{ color: "hsl(var(--sev-critical))" }}>
-                          chain failed
-                        </span>
-                      )}
-                      {source.chainPartial && (
-                        <span className="athena-label athena-gold">chain partial</span>
-                      )}
-                    </div>
-                    {source.reason && (
-                      // The engine's own explanation for leaving a source out.
-                      // Without it a pack missing every scan reads as a pack
-                      // with nothing to report.
-                      <p className="mt-2 text-sm text-muted-foreground">{source.reason}</p>
-                    )}
-                    {source.chainDetail && (
-                      <p className="mt-1 text-xs text-muted-foreground">{source.chainDetail}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </GlassCard>
-          </>
-        )}
+          <GlassCard hover={false}>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="athena-label">Recent Document Activity</p>
+              <span className="flex items-center gap-1 text-[11px] text-gold">View all activity <ChevronRight className="h-3 w-3" /></span>
+            </div>
+            <ul className="space-y-3">
+              {DOC_ACTIVITY.map((d) => (
+                <li key={d.title} className="flex items-start gap-2.5">
+                  <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", d.tone === "emerald" ? "bg-emerald-400" : d.tone === "amber" ? "bg-amber-400" : "bg-sky-400")} />
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="block text-[12px] text-foreground">{d.title}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">{d.note}</span>
+                  </span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground/70">{d.when}</span>
+                </li>
+              ))}
+            </ul>
+          </GlassCard>
+        </div>
       </div>
     </div>
   );

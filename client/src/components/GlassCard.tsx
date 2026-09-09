@@ -21,6 +21,9 @@ import { cn } from "@/lib/utils";
 interface GlassCardProps {
   children: ReactNode;
   className?: string;
+  /** Layout classes for the padded content wrapper (the card body), e.g.
+   *  "flex items-center gap-4". Outer `className` styles the card shell. */
+  bodyClassName?: string;
   hover?: boolean;
   glow?: boolean;
   /**
@@ -41,6 +44,7 @@ interface GlassCardProps {
 export default function GlassCard({
   children,
   className = "",
+  bodyClassName = "",
   hover = true,
   glow = true,
   ruling = false,
@@ -113,7 +117,7 @@ export default function GlassCard({
         />
       )}
 
-      <div className="relative z-10 p-6">{children}</div>
+      <div className={cn("relative z-10 p-6", bodyClassName)}>{children}</div>
     </motion.div>
   );
 }

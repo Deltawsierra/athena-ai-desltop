@@ -54,7 +54,7 @@ export default function StatCard({
 }: StatCardProps) {
   if (layout === "tile") {
     return (
-      <GlassCard hover={false} className={cn("flex items-center gap-4", className)}>
+      <GlassCard hover={false} bodyClassName="flex items-center gap-4" className={className}>
         <Ring icon={icon} accent={accent} />
         <div className="min-w-0">
           <p className="athena-label">{label}</p>
