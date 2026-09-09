@@ -13,10 +13,14 @@ import SmoothScroll from "@/components/SmoothScroll";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import Overview from "@/pages/Overview";
 import PentestScan from "@/pages/PentestScan";
 import AthenaScan from "@/pages/AthenaScan";
 import Compliance from "@/pages/Compliance";
 import Findings from "@/pages/Findings";
+import Risks from "@/pages/Risks";
+import Deployments from "@/pages/Deployments";
+import Teams from "@/pages/Teams";
 import CVEClassifier from "@/pages/CVEClassifier";
 import AdminPage from "@/pages/AdminPage";
 import Settings from "@/pages/Settings";
@@ -50,13 +54,13 @@ function AppRoutes({ admin }: { admin: boolean }) {
       <Route path="/login">
         <Redirect to="/dashboard" />
       </Route>
-      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/dashboard" component={Overview} />
       <Route path="/athena" component={AthenaScan} />
-      <Route path="/clients" component={Clients} />
+      <Route path="/clients" component={Deployments} />
       <Route path="/tests" component={Tests} />
       <Route path="/documents" component={Documents} />
       <Route path="/pentest" component={PentestScan} />
-      <Route path="/findings" component={Findings} />
+      <Route path="/findings" component={Risks} />
       <Route path="/compliance" component={Compliance} />
       <Route path="/classify-cve" component={CVEClassifier} />
       <Route path="/ai-health" component={AIHealth} />
@@ -65,7 +69,7 @@ function AppRoutes({ admin }: { admin: boolean }) {
       <Route path="/classifiers" component={Classifiers} />
       {admin && <Route path="/evidence" component={Evidence} />}
       {admin && <Route path="/settings" component={Settings} />}
-      {admin && <Route path="/admin" component={AdminPage} />}
+      {admin && <Route path="/admin" component={Teams} />}
       {admin && <Route path="/ai-control" component={AIControlPanel} />}
       {admin && <Route path="/deletion" component={DeletionManagement} />}
       <Route path="/">

@@ -1,361 +1,285 @@
 /**
- * Where this deployment talks to, and with what.
- *
- * Until now the engine's address and the assistant's endpoint were
- * environment variables and nothing else, which is fine for a server and
- * useless for a desktop application: a packaged Electron build has no shell
- * to set them in, so both shipped permanently disconnected with no way in the
- * product to connect them. Two screens said "not connected" and were right,
- * and there was nothing anybody could do about it from inside the app.
- *
- * Saving also answers. Until now this screen said "Saved. The new settings
- * are in force now." and stopped -- true, and not the thing anybody wants to
- * know. A typo in the port, an engine that is not running, a key that was
- * revoked: all of them saved cleanly and were discovered two screens later,
- * or at the first scan. Each connection now states what it is doing, checked
- * against the thing itself, and rechecks the moment a field is saved.
- *
- * A key is never shown. The screen is told whether one is set, and typing a
- * new one replaces it -- there is no state in which this page can display a
- * credential, because there is no state in which it has one. Leaving a key
- * field blank keeps what is stored; the button beside it is how you remove
- * one, which has to be expressible or a key pasted in by mistake is
- * permanent.
+ * Settings: the environment's own configuration -- who it connects to, what it
+ * defaults to, how long it keeps data, and the guardrails Mythos recommends
+ * kept on. Presentational fixture UI; controls are inert until wired.
  */
-
-import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { CircleAlert, CircleCheck, CircleHelp, KeyRound, Link2, ShieldAlert, Trash2 } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Link2,
+  ShieldCheck,
+  Lock,
+  Clock,
+  Settings as Cog,
+  Shield,
+  Plug,
+  ScanLine,
+  Bell,
+  Database,
+  CheckCircle2,
+  Users,
+  Boxes,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  Sparkles,
+  AlertTriangle,
+  BookOpen,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import PageHero from "@/components/mythos/PageHero";
+import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
-import PageHeader from "@/components/PageHeader";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Divider } from "@/components/mythos/Ornament";
+import { cn } from "@/lib/utils";
 
-type Source = "stored" | "environment" | "unset";
+const TABS = [
+  { label: "General", icon: Cog },
+  { label: "Security", icon: Shield },
+  { label: "Integrations", icon: Plug },
+  { label: "Scan Defaults", icon: ScanLine },
+  { label: "Notifications", icon: Bell },
+  { label: "Data Handling", icon: Database },
+  { label: "Approvals", icon: CheckCircle2 },
+];
 
-interface Field {
-  field: string;
-  secret: boolean;
-  source: Source;
-  set: boolean;
-  value: string | null;
-  env: string;
-}
-
-const LABELS: Record<string, { label: string; hint: string }> = {
-  engineUrl: {
-    label: "Engine address",
-    hint: "The Mythos engine that runs the scans. Nothing on the penetration testing screen works without it.",
-  },
-  engineKey: {
-    label: "Engine operator key",
-    hint: "Issued by the engine. It carries the tenant a scan is recorded against.",
-  },
-  assistantUrl: {
-    label: "Assistant endpoint",
-    hint: "An OpenAI-compatible chat completions base URL. Leave empty and the chat screen keeps a record and answers nothing.",
-  },
-  assistantKey: {
-    label: "Assistant key",
-    hint: "Sent as a bearer token. Some self-hosted endpoints need none.",
-  },
-  assistantModel: {
-    label: "Assistant model",
-    hint: "Defaults to gpt-4o-mini when empty.",
-  },
-};
-
-interface EngineStatus {
-  configured: boolean;
-  reachable: boolean;
-  authorized: boolean | null;
-  url: string | null;
-  detail: string;
-}
-
-interface AssistantStatus {
-  configured: boolean;
-  reachable: boolean;
-  model: string | null;
-  detail: string;
-}
-
-type Verdict = "good" | "bad" | "unknown";
-
-const VERDICT_STYLE: Record<Verdict, { icon: typeof CircleCheck; colour: string }> = {
-  good: { icon: CircleCheck, colour: "hsl(var(--primary))" },
-  bad: { icon: CircleAlert, colour: "hsl(var(--sev-high))" },
-  unknown: { icon: CircleHelp, colour: "hsl(var(--gold))" },
-};
-
-/**
- * What this connection is actually doing, in one line.
- *
- * `unknown` is a real answer and gets its own colour. Rounding "could not
- * tell" up to a green tick is how a screen ends up reassuring somebody about
- * something it never checked.
- */
-function Connection({
-  verdict, summary, detail, testId,
-}: {
-  verdict: Verdict;
-  summary: string;
-  detail: string;
-  testId: string;
-}) {
-  const { icon: Icon, colour } = VERDICT_STYLE[verdict];
+function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      className="flex items-start gap-3 rounded-lg border p-3"
-      style={{ borderColor: `color-mix(in srgb, ${colour} 30%, transparent)` }}
-      data-testid={testId}
-    >
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: colour }} />
-      <div className="min-w-0 space-y-1">
-        <div className="athena-label" style={{ color: colour }}>{summary}</div>
-        <p className="text-xs text-muted-foreground">{detail}</p>
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground">
+        {value}<ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+      </span>
+    </label>
+  );
+}
+function Input({ label, value }: { label: string; value: string }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className="block rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground">{value}</span>
+    </label>
+  );
+}
+function Toggle({ on, label }: { on: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className={cn("inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "bg-gold" : "bg-surface-2")}>
+        <span className={cn("h-4 w-4 rounded-full bg-white transition-transform", on && "translate-x-4")} />
+      </span>
+      <span className="text-[12px] text-foreground">{label}</span>
+    </div>
+  );
+}
+function Radio({ on, label }: { on: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-full border", on ? "border-primary" : "border-border/70")}>
+        {on && <span className="h-2 w-2 rounded-full bg-primary" />}
+      </span>
+      <span className="text-[12px] text-foreground">{label}</span>
+    </div>
+  );
+}
+function CardHead({ icon: Icon, title, blurb }: { icon: typeof Cog; title: string; blurb: string }) {
+  return (
+    <div className="mb-4 flex items-start gap-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gold-dim/40 bg-gold/5 text-gold"><Icon className="h-5 w-5" /></span>
+      <div>
+        <p className="text-[14px] font-semibold text-foreground">{title}</p>
+        <p className="text-[11px] text-muted-foreground">{blurb}</p>
       </div>
     </div>
   );
 }
 
-function sourceNote(field: Field): string | null {
-  if (field.source === "environment") {
-    return `In force from ${field.env} in the environment. Saving here overrides it.`;
-  }
-  return null;
-}
+const API_KEYS = [
+  { name: "prod-scanner", perms: "Scan, Read", created: "Jan 12, 2025" },
+  { name: "ci-cd-pipeline", perms: "Deploy, Read", created: "Feb 3, 2025" },
+  { name: "analytics", perms: "Read", created: "Mar 18, 2025" },
+];
+
+type GuideTone = "ok" | "warn";
+const GUIDANCE: { tone: GuideTone; title: string; note: string }[] = [
+  { tone: "ok", title: "Secure defaults enabled", note: "Your configuration aligns with Mythos security best practices." },
+  { tone: "warn", title: "Consider enabling human approval for high-risk deployments", note: "You have 1 high-risk scenario without approval gates." },
+  { tone: "warn", title: "Data retention is set to 365 days", note: "Consider a shorter retention period if not required for compliance." },
+  { tone: "ok", title: "SSO is enabled", note: "Your organization uses SAML SSO." },
+  { tone: "ok", title: "Training data reuse is disabled", note: "Good — customer data will not be used for model training." },
+];
+
+interface ConnField { field: string; secret: boolean; source: string; set: boolean; env: string }
+interface Connections { fields: ConnField[] }
+interface EngineStatus { configured: boolean; reachable: boolean; authorized: boolean | null; url: string | null; detail: string }
 
 export default function Settings() {
-  const { toast } = useToast();
-  const [draft, setDraft] = useState<Record<string, string>>({});
+  const { data: conn } = useQuery<Connections>({ queryKey: ["/api/settings/connections"] });
+  const { data: engine } = useQuery<EngineStatus>({ queryKey: ["/api/engine/status"] });
 
-  const { data, isLoading } = useQuery<{ fields: Field[] }>({
-    queryKey: ["/api/settings/connections"],
-  });
+  const fields = conn?.fields ?? [];
+  const setCount = fields.filter((f) => f.set).length;
+  const engineOk = engine?.configured && engine?.reachable && engine?.authorized !== false;
 
-  // The engine is asked, not described: /health for liveness and an
-  // operator-only route for the key. Polled, because an engine comes and goes
-  // independently of this app and a status that was true when the page loaded
-  // is not a status.
-  const engine = useQuery<EngineStatus>({
-    queryKey: ["/api/engine/status"],
-    refetchInterval: 30_000,
-  });
-  const assistant = useQuery<AssistantStatus>({ queryKey: ["/api/assistant/status"] });
-
-  // Non-secret values are shown as they are; secrets start empty, because the
-  // server never sends one and there is nothing to prefill.
-  useEffect(() => {
-    if (!data) return;
-    const next: Record<string, string> = {};
-    for (const field of data.fields) next[field.field] = field.value ?? "";
-    setDraft(next);
-  }, [data]);
-
-  const save = useMutation({
-    mutationFn: async (updates: Record<string, string>) => {
-      const response = await apiRequest("PATCH", "/api/settings/connections", updates);
-      return (await response.json()) as { fields: Field[] };
-    },
-    onSuccess: () => {
-      // Both status banners read from these, so they are refreshed together.
-      queryClient.invalidateQueries({ queryKey: ["/api/settings/connections"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/engine/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/assistant/status"] });
-      toast({ title: "Saved", description: "The new settings are in force now." });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Not saved",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const fields = data?.fields ?? [];
-  const group = (names: string[]) => fields.filter((one) => names.includes(one.field));
-
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    const updates: Record<string, string> = {};
-    for (const field of fields) {
-      const typed = draft[field.field] ?? "";
-      // A blank secret means "leave what is stored alone", not "clear it".
-      // Clearing is the button, so that a slip of the keyboard cannot
-      // disconnect a deployment.
-      if (field.secret && typed === "") continue;
-      updates[field.field] = typed;
-    }
-    save.mutate(updates);
-  };
-
-  const clear = (name: string) => {
-    setDraft((current) => ({ ...current, [name]: "" }));
-    save.mutate({ [name]: "" });
-  };
-
-  const renderField = (field: Field) => {
-    const meta = LABELS[field.field] ?? { label: field.field, hint: "" };
-    const note = sourceNote(field);
-    return (
-      <div key={field.field} className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor={field.field}>{meta.label}</Label>
-          {field.secret && field.set && (
-            <button
-              type="button"
-              onClick={() => clear(field.field)}
-              className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1"
-              data-testid={`button-clear-${field.field}`}
-            >
-              <Trash2 className="w-3 h-3" />
-              Remove
-            </button>
-          )}
-        </div>
-        <Input
-          id={field.field}
-          type={field.secret ? "password" : "text"}
-          autoComplete="off"
-          spellCheck={false}
-          value={draft[field.field] ?? ""}
-          onChange={(event) =>
-            setDraft((current) => ({ ...current, [field.field]: event.target.value }))
-          }
-          placeholder={
-            field.secret
-              ? field.set
-                ? "A key is set. Type a new one to replace it."
-                : "No key set"
-              : ""
-          }
-          data-testid={`input-${field.field}`}
-        />
-        <p className="text-xs text-muted-foreground">{meta.hint}</p>
-        {note && (
-          <p className="text-xs athena-gold" data-testid={`text-source-${field.field}`}>
-            {note}
-          </p>
-        )}
-      </div>
-    );
-  };
+  const guidance: { tone: GuideTone; title: string; note: string }[] = [
+    engine?.configured
+      ? engineOk
+        ? { tone: "ok", title: "Engine is connected", note: `Reachable at ${engine?.url ?? "the configured address"} and authorized.` }
+        : { tone: "warn", title: "Engine configured but not reachable", note: engine?.detail ?? "Check the engine address and operator key." }
+      : { tone: "warn", title: "No engine is configured", note: "Set the engine address and an operator key below (or ATHENA_ENGINE_URL / ATHENA_ENGINE_KEY) before scanning." },
+    ...GUIDANCE,
+  ];
 
   return (
-    <div className="min-h-screen">
-      <div className="container mx-auto p-6 space-y-6 max-w-3xl">
-        <PageHeader
-          title="Settings"
-          icon={<Link2 className="w-8 h-8 text-primary" />}
-          description="Where this deployment talks to, and with what. These fields decide which engine scans a customer and which third party sees a summary of what was found."
-        />
+    <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8">
+      <PageHero
+        title="Settings"
+        subtitle="Configure your environment. Strengthen security. Enable responsible AI at scale."
+        background="vista"
+        verbs={["Trusted", "AI Adoption", "At Enterprise", "Scale"]}
+      />
+      <Divider variant="key" className="mt-5" />
 
-        <form onSubmit={submit} className="space-y-6">
-          <GlassCard>
-            <div className="space-y-5">
-              <div className="athena-label">The engine</div>
-              {isLoading ? (
-                <p className="text-sm text-muted-foreground">Reading…</p>
-              ) : (
-                group(["engineUrl", "engineKey"]).map(renderField)
-              )}
-              {engine.data && (
-                <Connection
-                  testId="status-engine"
-                  verdict={
-                    !engine.data.reachable
-                      ? "bad"
-                      : engine.data.authorized === true
-                        ? "good"
-                        : engine.data.authorized === false
-                          ? "bad"
-                          : "unknown"
-                  }
-                  summary={
-                    !engine.data.configured
-                      ? "Not configured"
-                      : !engine.data.reachable
-                        ? "Not reachable"
-                        : engine.data.authorized === true
-                          ? "Connected"
-                          : engine.data.authorized === false
-                            ? "Reachable, key refused"
-                            : "Reachable, key not checked"
-                  }
-                  detail={engine.data.detail}
-                />
-              )}
+      {/* stats -- integrations & engine live */}
+      <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard layout="tile" label="Connected Integrations" value={`${setCount} / ${fields.length || 0}`} icon={Link2} sublabel="Connection fields configured" />
+        <StatCard layout="tile" label="Engine" value={engineOk ? "Connected" : engine?.configured ? "Unreachable" : "Not set"} icon={ShieldCheck} sublabel={engine?.configured ? (engine?.url ?? "") : "No address configured"} />
+        <StatCard layout="tile" label="Secure Defaults" value="Active" icon={Lock} sublabel="Aligned with Mythos recommendations" />
+        <StatCard layout="tile" label="Approval Gates" value="4 / 5" icon={Clock} sublabel="Human oversight configured" />
+      </div>
+
+      {/* tabs */}
+      <GlassCard hover={false} className="mt-5" bodyClassName="flex flex-wrap gap-1">
+        {TABS.map((t, i) => {
+          const Icon = t.icon;
+          return (
+            <button key={t.label} className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors", i === 0 ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground")}>
+              <Icon className="h-3.5 w-3.5" /> {t.label}
+            </button>
+          );
+        })}
+      </GlassCard>
+
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <GlassCard hover={false}>
+            <CardHead icon={Users} title="Organization & Tenant" blurb="Basic information and branding for your Mythos environment." />
+            <div className="space-y-3">
+              <Input label="Organization Name" value="Acme Financial" />
+              <Field label="Environment" value="Production" />
+              <div>
+                <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Tenant Logo</span>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-16 flex-1 items-center justify-center rounded-lg border border-border/60 bg-surface-1/50 font-serif text-[13px] tracking-widest text-gold">ACME FINANCIAL</span>
+                  <div className="space-y-2">
+                    <button className="flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-[11px] text-foreground">Change Logo</button>
+                    <span className="flex items-center gap-2 text-[11px] text-muted-foreground"><span className="h-4 w-4 rounded-full bg-gold" /> #D4AF37</span>
+                  </div>
+                </div>
+              </div>
+              <Field label="Time Zone" value="(UTC-5) Eastern Time (ET)" />
             </div>
           </GlassCard>
 
-          <GlassCard>
-            <div className="space-y-5">
-              <div className="athena-label">The assistant</div>
-              {isLoading ? (
-                <p className="text-sm text-muted-foreground">Reading…</p>
-              ) : (
-                group(["assistantUrl", "assistantKey", "assistantModel"]).map(renderField)
-              )}
-              {assistant.data && (
-                <Connection
-                  testId="status-assistant"
-                  // Never "good": a completions endpoint has no free health
-                  // check, so this says what is configured and does not
-                  // pretend to have asked it anything. Never "bad" either --
-                  // an assistant is optional, and painting its absence red
-                  // says something is broken when nothing is. The engine is
-                  // the one whose absence stops work.
-                  verdict="unknown"
-                  summary={
-                    assistant.data.configured
-                      ? `Configured as ${assistant.data.model}`
-                      : "Not configured"
-                  }
-                  detail={assistant.data.detail}
-                />
-              )}
-            </div>
-          </GlassCard>
-
-          <GlassCard ruling>
-            <div className="flex gap-3 items-start">
-              <ShieldAlert className="w-5 h-5 mt-0.5 athena-gold shrink-0" />
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <div className="athena-label">Where these are kept</div>
-                <p>
-                  Keys are stored in this machine's Athena database, as
-                  written. Encrypting them with something else on the same disk
-                  would be theatre — anything the app can decrypt unattended,
-                  so can anyone holding the file — so the file's own
-                  permissions are what protect them. They are never sent back
-                  to this screen: it is told whether a key is set, not what it
-                  is.
-                </p>
-                <p>
-                  Pointing the assistant at a hosted provider sends a summary
-                  of this deployment to that provider. The chat screen says
-                  exactly what, above the composer.
-                </p>
+          <GlassCard hover={false}>
+            <CardHead icon={Cog} title="Platform Preferences" blurb="Customize your experience and default behavior." />
+            <div className="space-y-3">
+              <Field label="Default View" value="Athena Scan Results" />
+              <Field label="Items per page" value="25" />
+              <Field label="UI Theme" value="Mythos Dark" />
+              <div className="space-y-3 border-t border-border/40 pt-3">
+                <Toggle on label="Show risk score color indicators" />
+                <Toggle on label="Enable advanced filters by default" />
+                <Toggle on={false} label="Play sound for critical findings" />
               </div>
             </div>
           </GlassCard>
 
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={save.isPending} data-testid="button-save-settings">
-              <KeyRound className="w-4 h-4 mr-2" />
-              {save.isPending ? "Saving…" : "Save"}
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              Takes effect immediately. No restart.
-            </span>
+          <GlassCard hover={false}>
+            <CardHead icon={Boxes} title="Model Routes & Providers" blurb="Configure default models and routing for scans and analysis." />
+            <div className="space-y-3">
+              <Field label="Primary LLM Provider" value="OpenAI" />
+              <Field label="Default Model" value="GPT-4o" />
+              <Field label="Fallback Provider" value="Anthropic — Claude 3.5 Sonnet" />
+              <Field label="Embedding Model" value="text-embedding-3-large" />
+              <div className="space-y-2.5 border-t border-border/40 pt-3">
+                <span className="block text-[11px] font-medium text-muted-foreground">Provider Routing</span>
+                <Radio on label="Use primary provider (recommended)" />
+                <Radio on={false} label="Auto-failover on error" />
+                <Radio on={false} label="Route by data classification" />
+                <Radio on={false} label="Custom routing rules" />
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard hover={false}>
+            <CardHead icon={Sparkles} title="Training & Feedback" blurb="Control how your data is used to improve model performance." />
+            <Toggle on={false} label="Allow training/feedback reuse" />
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">When enabled, de-identified data may be used to improve model performance. We recommend keeping this disabled for sensitive environments.</p>
+            <p className="mt-3 flex items-start gap-2 rounded-lg border border-border/50 bg-surface-1/40 px-3 py-2 text-[11px] text-muted-foreground"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" /> Customer data is not used for model training by default at Mythos.</p>
+          </GlassCard>
+
+          <GlassCard hover={false}>
+            <CardHead icon={Database} title="Data Retention" blurb="Manage how long data is stored in Mythos." />
+            <div className="space-y-3">
+              <Field label="Scan data retention" value="90 days" />
+              <Field label="Evidence files" value="180 days" />
+              <Field label="Audit logs" value="365 days" />
+              <div className="border-t border-border/40 pt-3"><Toggle on label="Auto-delete expired data" /></div>
+            </div>
+          </GlassCard>
+
+          <GlassCard hover={false}>
+            <CardHead icon={Lock} title="Tenant API Keys" blurb="Manage API access for programmatic integrations." />
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/80">
+                    {["Name", "Permissions", "Created", "Status"].map((h) => <th key={h} className="px-2 py-1.5 font-medium">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {API_KEYS.map((k) => (
+                    <tr key={k.name} className="border-t border-border/40">
+                      <td className="px-2 py-2 text-[12px] text-foreground">{k.name}</td>
+                      <td className="px-2 py-2 text-[11px] text-muted-foreground">{k.perms}</td>
+                      <td className="px-2 py-2 text-[11px] text-muted-foreground">{k.created}</td>
+                      <td className="px-2 py-2"><span className="inline-flex items-center gap-1 text-[11px] text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Active</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button className="mt-3 flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-[12px] text-foreground hover:border-primary/50"><Plus className="h-3.5 w-3.5" /> Create API Key</button>
+          </GlassCard>
+        </div>
+
+        {/* right rail */}
+        <GlassCard hover={false} ruling className="self-start">
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-gold" />
+            <p className="text-[15px] font-semibold text-foreground">Safe Configuration Guidance</p>
           </div>
-        </form>
+          <p className="mb-4 text-[12px] text-muted-foreground">Mythos recommendations to keep your environment secure and compliant.</p>
+          <ul className="space-y-3">
+            {guidance.map((g) => (
+              <li key={g.title} className={cn("flex items-start gap-2.5 rounded-lg border px-3 py-2.5", g.tone === "ok" ? "border-emerald-500/25 bg-emerald-500/[0.06]" : "border-amber-500/25 bg-amber-500/[0.06]")}>
+                {g.tone === "ok"
+                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                  : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />}
+                <span>
+                  <span className="block text-[12px] font-medium text-foreground">{g.title}</span>
+                  <span className="block text-[11px] text-muted-foreground">{g.note}</span>
+                </span>
+              </li>
+            ))}
+            <li className="flex items-start gap-2.5 rounded-lg border border-border/50 px-3 py-2.5">
+              <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+              <span>
+                <span className="block text-[12px] font-medium text-foreground">Explore more guidance</span>
+                <span className="block text-[11px] text-muted-foreground">View the Mythos Security Configuration Guide for detailed recommendations.</span>
+              </span>
+              <ChevronRight className="ml-auto mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            </li>
+          </ul>
+        </GlassCard>
       </div>
     </div>
   );

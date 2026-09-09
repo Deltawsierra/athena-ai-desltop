@@ -1,0 +1,208 @@
+/**
+ * The small shared parts every Mythos page is assembled from. Kept in one file
+ * so a pill or a bar means the same thing on Risks as it does on Compliance.
+ */
+import { ArrowDown, ArrowUp, type LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/* --- labels ------------------------------------------------------------- */
+export function Label({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <p className={cn("athena-label", className)}>{children}</p>;
+}
+
+/* --- delta (up/down vs a period) --------------------------------------- */
+export function Delta({
+  value,
+  direction,
+  good,
+  note,
+}: {
+  value: string;
+  direction: "up" | "down";
+  /** Whether this direction is good news (green) or bad (red). */
+  good?: boolean;
+  note?: string;
+}) {
+  const Icon = direction === "up" ? ArrowUp : ArrowDown;
+  const color = good ? "text-emerald-400" : "text-sev-high";
+  return (
+    <span className="inline-flex items-baseline gap-1.5 text-[12px]">
+      <span className={cn("inline-flex items-center gap-0.5 font-medium", color)}>
+        <Icon className="h-3 w-3" />
+        {value}
+      </span>
+      {note && <span className="text-muted-foreground">{note}</span>}
+    </span>
+  );
+}
+
+/* --- severity pill (reserved colours only) ----------------------------- */
+export type Severity = "critical" | "high" | "medium" | "low" | "info";
+const SEV_LABEL: Record<Severity, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+  info: "Info",
+};
+export function SeverityPill({ severity }: { severity: Severity }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold"
+      style={{
+        color: `hsl(var(--sev-${severity}))`,
+        borderColor: `hsl(var(--sev-${severity}) / 0.4)`,
+        background: `hsl(var(--sev-${severity}) / 0.1)`,
+      }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: `hsl(var(--sev-${severity}))` }} />
+      {SEV_LABEL[severity]}
+    </span>
+  );
+}
+
+/* --- status pill (semantic tones) -------------------------------------- */
+export type StatusTone = "complete" | "progress" | "approved" | "passed" | "review" | "neutral";
+const STATUS_TONE: Record<StatusTone, string> = {
+  complete: "emerald",
+  approved: "emerald",
+  passed: "emerald",
+  progress: "amber",
+  review: "sky",
+  neutral: "zinc",
+};
+export function StatusPill({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {
+  const map: Record<string, string> = {
+    emerald: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+    amber: "text-amber-400 border-amber-500/30 bg-amber-500/10",
+    sky: "text-sky-400 border-sky-500/30 bg-sky-500/10",
+    zinc: "text-muted-foreground border-border/60 bg-surface-1/50",
+  };
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-medium", map[STATUS_TONE[tone]])}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {children}
+    </span>
+  );
+}
+
+/* --- coverage / meter bar ---------------------------------------------- */
+export function Meter({ percent, tone = "gold" }: { percent: number; tone?: "gold" | "emerald" | "sev" }) {
+  const bar =
+    tone === "emerald"
+      ? "bg-emerald-500"
+      : tone === "sev"
+        ? percent >= 80
+          ? "bg-emerald-500"
+          : percent >= 50
+            ? "bg-amber-500"
+            : "bg-sev-high"
+        : "bg-gradient-to-r from-gold-dim to-gold";
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+      <div className={cn("h-full rounded-full", bar)} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
+    </div>
+  );
+}
+
+/* --- initials avatar ---------------------------------------------------- */
+export function Avatar({ name, sub, size = 32 }: { name: string; sub?: string; size?: number }) {
+  const initials = name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  return (
+    <div className="flex items-center gap-2.5">
+      <span
+        className="flex shrink-0 items-center justify-center rounded-full border border-gold-dim/40 bg-gradient-to-br from-primary/25 to-surface-2 text-[11px] font-semibold text-foreground"
+        style={{ width: size, height: size }}
+      >
+        {initials}
+      </span>
+      {(sub || name) && (
+        <span className="min-w-0 leading-tight">
+          <span className="block truncate text-[13px] text-foreground">{name}</span>
+          {sub && <span className="block truncate text-[11px] text-muted-foreground">{sub}</span>}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* --- numbered / checked timeline --------------------------------------- */
+export interface TimelineStep {
+  title: string;
+  detail?: string;
+  state: "done" | "active" | "todo";
+}
+export function Timeline({ steps }: { steps: TimelineStep[] }) {
+  return (
+    <ol className="space-y-4">
+      {steps.map((s, i) => (
+        <li key={s.title} className="flex gap-3">
+          <div className="flex flex-col items-center">
+            <span
+              className={cn(
+                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold",
+                s.state === "done"
+                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-400"
+                  : s.state === "active"
+                    ? "border-primary bg-primary/15 text-primary shadow-[var(--glow-primary)]"
+                    : "border-border/60 bg-surface-1/50 text-muted-foreground",
+              )}
+            >
+              {s.state === "done" ? "✓" : i + 1}
+            </span>
+            {i < steps.length - 1 && <span className="mt-1 w-px flex-1 bg-border/50" />}
+          </div>
+          <div className="pb-1">
+            <p className={cn("text-[13px] font-medium", s.state === "todo" ? "text-muted-foreground" : "text-foreground")}>
+              {s.title}
+            </p>
+            {s.detail && <p className="mt-0.5 text-[12px] text-muted-foreground">{s.detail}</p>}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/* --- framework badge tile ---------------------------------------------- */
+export function FrameworkBadge({
+  abbr,
+  name,
+  state,
+  active,
+  icon: Icon,
+}: {
+  abbr: string;
+  name: string;
+  state: string;
+  active?: boolean;
+  icon?: LucideIcon;
+}) {
+  return (
+    <button
+      className={cn(
+        "flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-center transition-colors",
+        active
+          ? "border-primary/60 bg-primary/[0.06] shadow-[var(--glow-primary)]"
+          : "border-border/60 bg-surface-0/50 hover:border-primary/40",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-11 w-11 items-center justify-center rounded-full border text-[12px] font-bold",
+          active ? "border-primary/50 text-primary" : "border-border/60 text-muted-foreground",
+        )}
+      >
+        {Icon ? <Icon className="h-5 w-5" /> : abbr}
+      </span>
+      <span className="text-[13px] font-medium text-foreground">{name}</span>
+      <span className={cn("text-[11px]", active ? "text-primary" : "text-muted-foreground")}>{state}</span>
+    </button>
+  );
+}

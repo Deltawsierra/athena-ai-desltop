@@ -22,8 +22,8 @@ export default function RiskDial({
   band: string;
 }) {
   const still = useReducedMotion();
-  const size = 132;
-  const stroke = 9;
+  const size = 116;
+  const stroke = 8;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const sweep = 0.75; // three-quarter dial
@@ -32,7 +32,7 @@ export default function RiskDial({
   const color = bandColor(score);
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg
         viewBox={`0 0 ${size} ${size}`}
         className="h-full w-full"
@@ -64,10 +64,10 @@ export default function RiskDial({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="athena-figure text-3xl font-semibold text-foreground">
+        <span className="athena-figure text-[26px] font-semibold leading-none text-foreground">
           {score}
         </span>
-        <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+        <span className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
           Risk Score
         </span>
       </div>

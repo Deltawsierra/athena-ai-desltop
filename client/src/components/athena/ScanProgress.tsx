@@ -6,41 +6,38 @@
  * list beside a circle.
  */
 import { motion, useReducedMotion } from "framer-motion";
-import { Check, Loader2, Clock, Circle } from "lucide-react";
-import MythosMark from "../MythosMark";
+import mythosGlyph from "@assets/mythos/mark-glyph.webp";
+import modDataBoundary from "@assets/mythos/modules/data-boundary.webp";
+import modCapabilityMap from "@assets/mythos/modules/capability-map.webp";
+import modPersonalContext from "@assets/mythos/modules/personal-context.webp";
+import modDataLifecycle from "@assets/mythos/modules/data-lifecycle.webp";
+import modTrainingReuse from "@assets/mythos/modules/training-reuse.webp";
+import modProviderAssurance from "@assets/mythos/modules/provider-assurance.webp";
+import modEffectiveAccess from "@assets/mythos/modules/effective-access.webp";
+import modAdversarial from "@assets/mythos/modules/adversarial.webp";
 import { cn } from "@/lib/utils";
 import {
   MODULE_STATE_META,
   type ScanModule,
-  type ModuleState,
 } from "@/lib/athenaScan";
 
-function StateGlyph({ state }: { state: ModuleState }) {
-  const tone = MODULE_STATE_META[state].tone;
-  if (state === "complete")
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-primary">
-        <Check className="h-3 w-3" strokeWidth={3} />
-      </span>
-    );
-  if (state === "scanning")
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      </span>
-    );
-  if (state === "pending")
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-2 text-muted-foreground">
-        <Clock className="h-3 w-3" />
-      </span>
-    );
-  return (
-    <span className="flex h-5 w-5 items-center justify-center text-muted-foreground/60">
-      <Circle className="h-2 w-2 fill-current" />
-    </span>
-  );
-}
+/** The struck-brass emblem for each scan module, keyed by module id. */
+const MODULE_ICON: Record<string, string> = {
+  "data-boundary": modDataBoundary,
+  "capability-map": modCapabilityMap,
+  "personal-context": modPersonalContext,
+  "data-lifecycle": modDataLifecycle,
+  "training-reuse": modTrainingReuse,
+  "provider-assurance": modProviderAssurance,
+  "effective-access": modEffectiveAccess,
+  adversarial: modAdversarial,
+};
+
+const STATE_DOT: Record<string, string> = {
+  done: "bg-primary",
+  live: "bg-primary athena-live",
+  idle: "bg-muted-foreground/40",
+};
 
 function ModuleChip({
   module,
@@ -52,11 +49,12 @@ function ModuleChip({
   const meta = MODULE_STATE_META[module.state];
   const live = meta.tone === "live";
   const done = meta.tone === "done";
+  const icon = MODULE_ICON[module.id];
   return (
     <div
       data-testid={`module-${module.id}`}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-colors",
+        "flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors",
         align === "left" && "flex-row-reverse text-right",
         live
           ? "border-primary/50 bg-primary/[0.06] shadow-[var(--glow-primary)]"
@@ -65,7 +63,17 @@ function ModuleChip({
             : "border-border/40 bg-surface-0/40",
       )}
     >
-      <StateGlyph state={module.state} />
+      {icon && (
+        <img
+          src={icon}
+          alt=""
+          aria-hidden="true"
+          className={cn(
+            "h-9 w-9 shrink-0 select-none object-contain transition-opacity",
+            done || live ? "opacity-100" : "opacity-55",
+          )}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <p
           className={cn(
@@ -77,10 +85,12 @@ function ModuleChip({
         </p>
         <p
           className={cn(
-            "text-[11px] leading-tight",
+            "mt-0.5 flex items-center gap-1.5 text-[11px] leading-tight",
+            align === "left" && "flex-row-reverse",
             live ? "text-primary" : "text-muted-foreground/70",
           )}
         >
+          <span className={cn("h-1.5 w-1.5 rounded-full", STATE_DOT[meta.tone])} />
           {meta.label}
         </p>
       </div>
@@ -90,9 +100,9 @@ function ModuleChip({
 
 function Ring({ percent }: { percent: number }) {
   const still = useReducedMotion();
-  const size = 232;
-  const stroke = 6;
-  const r = (size - stroke) / 2 - 20;
+  const size = 272;
+  const stroke = 7;
+  const r = (size - stroke) / 2 - 22;
   const c = 2 * Math.PI * r;
   const dash = (percent / 100) * c;
 
@@ -100,8 +110,8 @@ function Ring({ percent }: { percent: number }) {
   const ticks = Array.from({ length: 72 }, (_, i) => {
     const swept = i / 72 <= percent / 100;
     const angle = (i / 72) * 2 * Math.PI - Math.PI / 2;
-    const inner = r + 9;
-    const outer = r + (swept ? 17 : 13);
+    const inner = r + 10;
+    const outer = r + (swept ? 20 : 15);
     return {
       x1: size / 2 + Math.cos(angle) * inner,
       y1: size / 2 + Math.sin(angle) * inner,
@@ -112,7 +122,7 @@ function Ring({ percent }: { percent: number }) {
   });
 
   return (
-    <div className="relative mx-auto aspect-square w-[232px] max-w-full">
+    <div className="relative mx-auto aspect-square w-[272px] max-w-full">
       <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full -rotate-90">
         <defs>
           <linearGradient id="ring-gold" x1="0" y1="0" x2="1" y2="1">
@@ -153,14 +163,14 @@ function Ring({ percent }: { percent: number }) {
           initial={{ strokeDashoffset: still ? c - dash : c }}
           animate={{ strokeDashoffset: c - dash }}
           transition={{ duration: still ? 0 : 1.6, ease: "easeOut" }}
-          style={{ filter: "drop-shadow(0 0 6px hsl(44 85% 60% / 0.6))" }}
+          style={{ filter: "drop-shadow(0 0 8px hsl(44 88% 62% / 0.75))" }}
         />
       </svg>
 
       {/* center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-        <MythosMark className="h-7 w-7 opacity-90" />
-        <span className="athena-figure text-3xl font-semibold text-foreground">
+        <img src={mythosGlyph} alt="" aria-hidden="true" className="h-8 w-8 select-none object-contain opacity-90" />
+        <span className="athena-figure text-4xl font-semibold text-foreground">
           {percent}%
         </span>
         <span className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
@@ -192,8 +202,8 @@ export default function ScanProgress({
         </p>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 items-center gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-        <div className="order-2 space-y-2.5 lg:order-1">
+      <div className="mt-8 grid grid-cols-1 items-center gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+        <div className="order-2 space-y-3.5 lg:order-1">
           {left.map((m) => (
             <ModuleChip key={m.id} module={m} align="left" />
           ))}
@@ -203,14 +213,14 @@ export default function ScanProgress({
           <Ring percent={percent} />
         </div>
 
-        <div className="order-3 space-y-2.5">
+        <div className="order-3 space-y-3.5">
           {right.map((m) => (
             <ModuleChip key={m.id} module={m} align="right" />
           ))}
         </div>
       </div>
 
-      <p className="mt-6 text-center text-[10px] uppercase tracking-[0.28em] text-muted-foreground/60">
+      <p className="mt-8 text-center text-[10px] uppercase tracking-[0.28em] text-muted-foreground/60">
         Probing deeper. A safer tomorrow.
       </p>
     </div>

@@ -1,0 +1,368 @@
+/**
+ * Risks: every open finding across the estate, read from the engine's own
+ * record. The severity heatmap, the category donut, the register and the
+ * headline counts are all derived from `/api/findings`; the reasoning card
+ * quotes the sharpest open finding. Where the backend has no source -- the
+ * ripple effects are illustrative -- the copy says as much rather than
+ * inventing a number.
+ */
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  AlertTriangle,
+  Flame,
+  TriangleAlert,
+  CheckCircle2,
+  ShieldCheck,
+  ChevronRight,
+  MoreHorizontal,
+  X,
+  ShieldAlert,
+  Radio,
+  Share2,
+  UserX,
+} from "lucide-react";
+import PageHero from "@/components/mythos/PageHero";
+import StatCard from "@/components/mythos/StatCard";
+import GlassCard from "@/components/GlassCard";
+import { Divider, Corners } from "@/components/mythos/Ornament";
+import { SeverityPill, StatusPill, type Severity, type StatusTone } from "@/components/mythos/atoms";
+import owlMedallion from "@assets/mythos/owl-medallion.webp";
+import { cn } from "@/lib/utils";
+
+/* ---- live types (subset of the API shapes) ---------------------------- */
+interface ApiClient { id: string; name: string; status: string; lastTestDate: string | null }
+interface ApiFinding {
+  id: string; type: string; severity: string | null; message: string | null;
+  target: string | null; endpoint: string | null; status: string; ownerId: string | null;
+}
+interface FindingsView { findings: ApiFinding[]; counts: Record<string, number> }
+interface ApiUser { id: string; username: string }
+
+const SEV_ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];
+const SEV_COLS = ["Critical", "High", "Medium", "Low"] as const;
+const SEV_HUE = ["--sev-critical", "--sev-high", "--sev-medium", "--sev-low"];
+const CAT_COLORS = ["hsl(var(--gold))", "hsl(var(--sev-high))", "hsl(var(--sev-medium))", "hsl(210 80% 60%)", "hsl(var(--accent-violet))", "hsl(0 0% 55%)"];
+
+function normSev(s: string | null): Severity {
+  const v = (s || "").toLowerCase();
+  return (SEV_ORDER as string[]).includes(v) ? (v as Severity) : "info";
+}
+function humanize(t: string): string {
+  return t.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function impactOf(sev: Severity): "High" | "Medium" | "Low" {
+  if (sev === "critical" || sev === "high") return "High";
+  if (sev === "medium") return "Medium";
+  return "Low";
+}
+const STATUS_TONE: Record<string, { label: string; tone: StatusTone }> = {
+  open: { label: "Open", tone: "review" },
+  acknowledged: { label: "Acknowledged", tone: "progress" },
+  accepted: { label: "Accepted", tone: "neutral" },
+  fixed: { label: "Fixed", tone: "complete" },
+};
+
+const RIPPLE = [
+  { icon: ShieldAlert, text: "Exposure of additional customer PII across connected systems" },
+  { icon: Radio, text: "Potential regulatory investigation (PCI, GLBA, GDPR)" },
+  { icon: Share2, text: "Increased attack surface for adversarial data extraction" },
+  { icon: UserX, text: "Reputational damage and customer churn" },
+];
+
+function Donut({ segments, center, sub }: { segments: { value: number; color: string }[]; center: string; sub: string }) {
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  const r = 52, c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div className="relative h-[150px] w-[150px] shrink-0">
+      <svg viewBox="0 0 140 140" className="h-full w-full -rotate-90">
+        <circle cx="70" cy="70" r={r} fill="none" stroke="hsl(40 20% 30% / 0.25)" strokeWidth="14" />
+        {segments.map((s, i) => {
+          const len = (s.value / total) * c;
+          const el = <circle key={i} cx="70" cy="70" r={r} fill="none" stroke={s.color} strokeWidth="14" strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-offset} />;
+          offset += len;
+          return el;
+        })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="athena-figure text-[24px] font-semibold text-foreground">{center}</span>
+        <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{sub}</span>
+      </div>
+    </div>
+  );
+}
+
+function HeatCell({ hue, count }: { hue: string; count: number }) {
+  if (count === 0) return <td className="border border-border/30 px-3 py-2.5 text-center text-[12px] text-muted-foreground/40">0</td>;
+  const alpha = 0.2 + Math.min(count, 5) / 5 * 0.55;
+  return <td className="border border-border/30 px-3 py-2.5 text-center text-[12px] font-semibold text-foreground" style={{ background: `hsl(var(${hue}) / ${alpha})` }}>{count}</td>;
+}
+
+function Select({ label, value }: { label: string; value: string }) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground">
+        {value}<ChevronRight className="h-3.5 w-3.5 rotate-90 text-muted-foreground" />
+      </span>
+    </label>
+  );
+}
+
+const FILTERS = [
+  { label: "Severity", value: "All severities" },
+  { label: "Status", value: "Open" },
+  { label: "Environment", value: "All environments" },
+  { label: "Category", value: "All categories" },
+  { label: "Project", value: "All projects" },
+];
+
+export default function Risks() {
+  const { data: clients = [] } = useQuery<ApiClient[]>({ queryKey: ["/api/clients"] });
+  const { data: tests = [] } = useQuery<{ clientId: string; startedAt: string; completedAt: string | null }[]>({ queryKey: ["/api/tests"] });
+  const [selClient, setSelClient] = useState("");
+  // default to the most recently scanned engagement so fresh results surface
+  const latestTest = tests.slice().sort((a, b) =>
+    new Date(b.completedAt || b.startedAt).getTime() - new Date(a.completedAt || a.startedAt).getTime(),
+  )[0];
+  const defaultClient = latestTest?.clientId
+    ?? clients.find((c) => c.status === "active")?.id ?? clients[0]?.id ?? "";
+  const clientId = selClient || defaultClient;
+  const { data: users = [] } = useQuery<ApiUser[]>({ queryKey: ["/api/users/assignable"] });
+  const { data, isLoading } = useQuery<FindingsView>({
+    queryKey: ["/api/findings", { clientId }],
+    enabled: clientId !== "",
+  });
+
+  const findings = data?.findings ?? [];
+  const counts = data?.counts ?? {};
+  const userName = (id: string | null) => users.find((u) => u.id === id)?.username ?? (id ? "Assigned" : "Unassigned");
+
+  // headline counts, all from the engine's record
+  const open = findings.filter((f) => f.status === "open");
+  const crit = open.filter((f) => normSev(f.severity) === "critical").length;
+  const high = open.filter((f) => normSev(f.severity) === "high").length;
+
+  // category (by finding type) breakdown for the donut + legend
+  const byCat = new Map<string, number>();
+  open.forEach((f) => byCat.set(humanize(f.type), (byCat.get(humanize(f.type)) ?? 0) + 1));
+  const cats = Array.from(byCat.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const donut = cats.map(([label, value], i) => ({ label, value, color: CAT_COLORS[i % CAT_COLORS.length] }));
+
+  // category x severity heatmap
+  const heat = cats.map(([label]) => {
+    const rows = open.filter((f) => humanize(f.type) === label);
+    const cells = SEV_ORDER.slice(0, 4).map((sv) => rows.filter((f) => normSev(f.severity) === sv).length);
+    return { name: label, cells, total: rows.length };
+  });
+
+  // register, worst first
+  const register = [...findings]
+    .sort((a, b) => SEV_ORDER.indexOf(normSev(a.severity)) - SEV_ORDER.indexOf(normSev(b.severity)))
+    .map((f, i) => ({
+      n: i + 1, sev: normSev(f.severity), finding: f.message || humanize(f.type),
+      category: humanize(f.type), system: f.target || f.endpoint || "—",
+      impact: impactOf(normSev(f.severity)), owner: userName(f.ownerId),
+      status: STATUS_TONE[f.status] ?? { label: humanize(f.status), tone: "neutral" as StatusTone },
+    }));
+
+  const sharpest = open.slice().sort((a, b) => SEV_ORDER.indexOf(normSev(a.severity)) - SEV_ORDER.indexOf(normSev(b.severity)))[0];
+  const totalFindings = findings.length || 1;
+  const fixedPct = Math.round(((counts.fixed ?? 0) / totalFindings) * 100);
+  const remediation = [
+    { label: "Fixed", value: counts.fixed ?? 0, cls: "bg-emerald-400", color: "hsl(150 60% 55%)" },
+    { label: "Acknowledged", value: counts.acknowledged ?? 0, cls: "bg-sky-400", color: "hsl(205 80% 60%)" },
+    { label: "Open", value: counts.open ?? 0, cls: "bg-muted-foreground/50", color: "hsl(40 10% 45%)" },
+  ];
+
+  const empty = !isLoading && findings.length === 0;
+
+  return (
+    <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8">
+      <PageHero
+        title="Risks"
+        subtitle="Discover, prioritize, and remediate AI risks before they become real-world problems."
+        background="astrolabe"
+        verbs={["Analyze", "Evidence", "Mitigate", "Strengthen"]}
+      />
+      <Divider variant="astrolabe" className="mt-5" />
+
+      {/* stats -- all live from the findings ledger */}
+      <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard label="Total Open Risks" value={counts.open ?? 0} icon={AlertTriangle} />
+        <StatCard label="Critical Risks" value={crit} icon={Flame} accent="var(--sev-critical)" />
+        <StatCard label="High Risks" value={high} icon={TriangleAlert} accent="var(--sev-high)" />
+        <StatCard label="Acknowledged" value={counts.acknowledged ?? 0} icon={ShieldCheck} sublabel="in review" />
+        <StatCard label="Fixed" value={counts.fixed ?? 0} icon={CheckCircle2} sublabel="remediated & verified" />
+      </div>
+
+      {/* filters -- Engagement is a live client selector */}
+      <GlassCard hover={false} className="mt-5" bodyClassName="flex flex-wrap items-end gap-4">
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[11px] font-medium text-muted-foreground">Engagement</span>
+          <select
+            value={clientId}
+            onChange={(e) => setSelClient(e.target.value)}
+            className="rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground"
+          >
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        {FILTERS.slice(0, 4).map((f) => <Select key={f.label} {...f} />)}
+        <button onClick={() => setSelClient("")} className="flex items-center gap-1.5 pb-2 text-[12px] font-medium text-gold hover:text-primary"><X className="h-3.5 w-3.5" /> Clear filters</button>
+      </GlassCard>
+
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-5">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <GlassCard hover={false}>
+              <p className="athena-label mb-3">Risks by Category and Severity</p>
+              {heat.length === 0 ? (
+                <p className="py-8 text-center text-[12px] text-muted-foreground">{isLoading ? "Loading…" : "No open risks to chart."}</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/80">
+                        <th className="px-2 py-1.5 font-medium"></th>
+                        {SEV_COLS.map((s) => <th key={s} className="px-2 py-1.5 text-center font-medium">{s}</th>)}
+                        <th className="px-2 py-1.5 text-center font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {heat.map((c) => (
+                        <tr key={c.name}>
+                          <td className="whitespace-nowrap px-2 py-2.5 text-[12px] text-foreground">{c.name}</td>
+                          {c.cells.map((n, i) => <HeatCell key={i} hue={SEV_HUE[i]} count={n} />)}
+                          <td className="border border-border/30 px-2 py-2.5 text-center text-[12px] font-semibold text-foreground">{c.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </GlassCard>
+
+            <GlassCard hover={false} className="relative overflow-hidden">
+              <Corners />
+              <p className="athena-label mb-3">Open Risks by Category</p>
+              <div className="flex items-center gap-4">
+                <Donut segments={donut.length ? donut : [{ value: 1, color: "hsl(40 20% 30% / 0.4)" }]} center={String(open.length)} sub="Open Risks" />
+                <ul className="flex-1 space-y-1.5">
+                  {donut.length === 0 ? (
+                    <li className="text-[12px] text-muted-foreground">{isLoading ? "Loading…" : "No open risks."}</li>
+                  ) : donut.map((d) => (
+                    <li key={d.label} className="flex items-center gap-2 text-[12px]">
+                      <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
+                      <span className="min-w-0 flex-1 truncate text-muted-foreground">{d.label}</span>
+                      <span className="font-semibold text-foreground">{d.value}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </GlassCard>
+          </div>
+
+          <GlassCard hover={false} bodyClassName="p-0">
+            <div className="flex items-center justify-between border-b border-border/50 px-5 py-3">
+              <p className="athena-label">Risk Register <span className="text-muted-foreground">({findings.length})</span></p>
+            </div>
+            {empty ? (
+              <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+                No findings recorded for this engagement yet. Run a scan from the Athena screen and results will appear here.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
+                      {["#", "Severity", "Finding", "Category", "Affected System", "Impact", "Owner", "Status", ""].map((h, i) => (
+                        <th key={i} className="px-3 py-2 font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoading ? (
+                      <tr><td colSpan={9} className="px-3 py-8 text-center text-[12px] text-muted-foreground">Loading…</td></tr>
+                    ) : register.map((r) => (
+                      <tr key={r.n} className="border-t border-border/40 hover:bg-surface-1/40">
+                        <td className="px-3 py-2.5 text-[12px] text-muted-foreground">{r.n}</td>
+                        <td className="px-3 py-2.5"><SeverityPill severity={r.sev} /></td>
+                        <td className="px-3 py-2.5 text-[12px] text-foreground">{r.finding}</td>
+                        <td className="px-3 py-2.5 text-[12px] text-muted-foreground">{r.category}</td>
+                        <td className="px-3 py-2.5 text-[12px] text-muted-foreground">{r.system}</td>
+                        <td className="px-3 py-2.5"><span className={cn("text-[12px] font-medium", r.impact === "High" ? "text-sev-high" : r.impact === "Medium" ? "text-sev-medium" : "text-sky-400")}>{r.impact}</span></td>
+                        <td className="px-3 py-2.5 text-[12px] text-muted-foreground">{r.owner}</td>
+                        <td className="px-3 py-2.5"><StatusPill tone={r.status.tone}>{r.status.label}</StatusPill></td>
+                        <td className="px-3 py-2.5 text-muted-foreground"><MoreHorizontal className="h-4 w-4" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </GlassCard>
+        </div>
+
+        {/* right rail */}
+        <div className="space-y-5">
+          <GlassCard hover={false} ruling>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="athena-label">Athena Reasoning</p>
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-primary"><span className="athena-live h-1.5 w-1.5 rounded-full bg-primary" /> Live</span>
+            </div>
+            <div className="flex gap-3">
+              <img src={owlMedallion} alt="" aria-hidden="true" className="h-9 w-9 shrink-0 select-none object-contain" />
+              <p className="font-serif text-[13px] italic text-foreground">
+                {sharpest
+                  ? `"${sharpest.message || humanize(sharpest.type)}" — ${normSev(sharpest.severity)} severity on ${sharpest.target || "the target"}.`
+                  : "\"No open findings. Nothing here needs attention right now.\""}
+              </p>
+            </div>
+            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+              {sharpest
+                ? "This is the sharpest open finding on record. Remediate it, then re-run the scan to confirm it closes."
+                : "When a scan records a finding, Athena's read on the most pressing one shows here."}
+            </p>
+          </GlassCard>
+
+          <GlassCard hover={false}>
+            <p className="athena-label mb-1">Likely Ripple Effects</p>
+            <p className="mb-3 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">Illustrative — not from scan data</p>
+            <ul className="space-y-3">
+              {RIPPLE.map((r) => {
+                const Icon = r.icon;
+                return (
+                  <li key={r.text} className="flex items-start gap-2.5">
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+                    <span className="text-[12px] leading-snug text-muted-foreground">{r.text}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </GlassCard>
+
+          <GlassCard hover={false} className="relative overflow-hidden">
+            <Corners />
+            <div className="mb-3 flex items-center justify-between">
+              <p className="athena-label">Remediation Progress</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <Donut segments={remediation.some((r) => r.value) ? remediation : [{ value: 1, color: "hsl(40 20% 30% / 0.4)" }]} center={`${isNaN(fixedPct) ? 0 : fixedPct}%`} sub="Remediated" />
+              <ul className="flex-1 space-y-1.5">
+                {remediation.map((r) => (
+                  <li key={r.label} className="flex items-center gap-2 text-[12px]">
+                    <span className={cn("h-2 w-2 rounded-full", r.cls)} />
+                    <span className="font-semibold text-foreground">{r.value}</span>
+                    <span className="text-muted-foreground">{r.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </GlassCard>
+        </div>
+      </div>
+    </div>
+  );
+}

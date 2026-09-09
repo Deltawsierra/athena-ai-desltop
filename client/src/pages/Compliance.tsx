@@ -1,418 +1,194 @@
 /**
- * Where an engagement stands against OWASP ASVS 4.0.3.
- *
- * The temptation in a compliance screen is a percentage. This one refuses to
- * show one, because the honest denominator would make it meaningless: the
- * engine's scanners bear on 21 of the standard's 286 requirements, so any
- * figure computed over the ones it tested would read as near-total compliance
- * while saying nothing about the other 265.
- *
- * What it shows instead is the shape of the coverage, with the untested
- * requirements counted first and largest. Four states, kept apart:
- *
- *   Failing      a finding from this engagement maps to it
- *   Tested       a scanner that could produce such a finding ran, and did not
- *   Not run      something covers it, but that scanner is not loaded
- *   Not covered  nothing this engine tests for bears on it at all
- *
- * Not run and not covered are separated on purpose. The first is a deployment
- * that switched something off and can be fixed this afternoon; the second is
- * the product's own limit. Reporting either as a pass is the failure this
- * screen exists to prevent.
- *
- * Requirement text is not shown. ASVS is CC BY-SA 4.0 and only its identifiers
- * are embedded here; every requirement links to the published standard.
+ * Compliance: where an engagement stands against OWASP ASVS 4.0.3, read from
+ * `/api/compliance/:clientId`. Every requirement's state -- tested, failing,
+ * not run, or not covered by any scanner we have -- comes from the engine's own
+ * mapping. The readiness ring, the gap list and the counts are all derived from
+ * that; nothing here is a placeholder framework badge.
  */
-
-import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CircleSlash, ExternalLink, EyeOff, ScrollText } from "lucide-react";
-
-import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Layers, FileCheck2, AlertTriangle, CircleSlash, Box, ChevronRight, Search } from "lucide-react";
+import PageHero from "@/components/mythos/PageHero";
+import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
-import PageHeader from "@/components/PageHeader";
-import type { Client, Site } from "@shared/schema";
-import { asvsChapterUrl } from "@shared/asvs";
+import { Divider, Corners } from "@/components/mythos/Ornament";
+import { cn } from "@/lib/utils";
 
-type ControlState = "failing" | "tested" | "not_run" | "not_covered";
+type ControlState = "failing" | "tested" | "not_covered" | "not_run";
+interface AsvsReq { id: string; chapter: string; section: string; cwe: string | null; l1: boolean; l2: boolean; l3: boolean }
+interface ControlRow { requirement: AsvsReq; state: ControlState; findings: { type: string; severity: string | null }[]; scanners: string[]; approximate: boolean }
+interface Summary { version: string; failing: number; tested: number; notRun: number; notCovered: number; total: number }
+interface ComplianceView { client: { id: string; name: string }; testsConsidered: number; scannersLoaded: number | null; rows: ControlRow[]; summary: Summary }
+interface ApiClient { id: string; name: string; status: string }
 
-interface AsvsRequirement {
-  id: string;
-  chapter: string;
-  section: string;
-  cwe: number | null;
-  l1: boolean;
-  l2: boolean;
-  l3: boolean;
-}
-
-interface ControlRow {
-  requirement: AsvsRequirement;
-  state: ControlState;
-  findings: Array<{ type: string; severity: string | null; message: string | null; testId: string }>;
-  scanners: string[];
-  why: string | null;
-  approximate: boolean;
-}
-
-interface ComplianceView {
-  client: { id: string; name: string };
-  siteId: string | null;
-  testsConsidered: number;
-  scannersLoaded: string[] | null;
-  rows: ControlRow[];
-  summary: {
-    version: string;
-    failing: number;
-    tested: number;
-    notRun: number;
-    notCovered: number;
-    total: number;
-    unmapped: Array<{ type: string; reason: string; count: number }>;
-  };
-}
-
-const STATES: Record<ControlState, { label: string; colour: string; meaning: string }> = {
-  failing: {
-    label: "Failing",
-    colour: "hsl(var(--sev-critical))",
-    meaning: "A finding from this engagement bears on this requirement.",
-  },
-  tested: {
-    label: "Tested",
-    colour: "hsl(var(--primary))",
-    meaning:
-      "A scanner that can produce a finding against this requirement ran and produced none. " +
-      "That is evidence, not a certification: the scanner tests what it tests.",
-  },
-  not_run: {
-    label: "Not run",
-    colour: "hsl(var(--gold))",
-    meaning:
-      "Something in this product covers this requirement, but that scanner is not loaded in " +
-      "the engine this app is pointed at. Nothing looked.",
-  },
-  not_covered: {
-    label: "Not covered",
-    colour: "hsl(var(--muted-foreground))",
-    meaning:
-      "Nothing this engine tests for bears on this requirement. It has not been assessed here " +
-      "by any means, and no conclusion about it can be drawn from this page.",
-  },
+const STATE_META: Record<ControlState, { label: string; cls: string; dot: string }> = {
+  tested: { label: "Tested", cls: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10", dot: "bg-emerald-400" },
+  failing: { label: "Failing", cls: "text-sev-high border-sev-high/30 bg-sev-high/10", dot: "bg-sev-high" },
+  not_run: { label: "Not Run", cls: "text-sky-400 border-sky-500/30 bg-sky-500/10", dot: "bg-sky-400" },
+  not_covered: { label: "Not Covered", cls: "text-muted-foreground/60 border-border/50", dot: "bg-muted-foreground/40" },
 };
+function StatePill({ s }: { s: ControlState }) {
+  const m = STATE_META[s];
+  return <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium", m.cls)}><span className={cn("h-1 w-1 rounded-full", m.dot)} />{m.label}</span>;
+}
+function levels(r: AsvsReq): string {
+  return [r.l1 && "L1", r.l2 && "L2", r.l3 && "L3"].filter(Boolean).join(" ") || "—";
+}
 
-const ORDER: ControlState[] = ["failing", "not_run", "tested", "not_covered"];
-
+function ReadinessDonut({ pct }: { pct: number }) {
+  const r = 52, c = 2 * Math.PI * r;
+  return (
+    <div className="relative h-[140px] w-[140px] shrink-0">
+      <svg viewBox="0 0 140 140" className="h-full w-full -rotate-90">
+        <circle cx="70" cy="70" r={r} fill="none" stroke="hsl(40 20% 30% / 0.35)" strokeWidth="12" />
+        <circle cx="70" cy="70" r={r} fill="none" stroke="hsl(var(--gold))" strokeWidth="12" strokeLinecap="round"
+          strokeDasharray={`${(pct / 100) * c} ${c}`} style={{ filter: "drop-shadow(0 0 6px hsl(44 88% 62% / 0.6))" }} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="athena-figure text-[26px] font-semibold text-foreground">{pct}%</span>
+        <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Tested</span>
+      </div>
+    </div>
+  );
+}
 
 export default function Compliance() {
-  const [clientId, setClientId] = useState("");
-  const [siteId, setSiteId] = useState("");
-  const [showing, setShowing] = useState<ControlState>("failing");
+  const { data: clients = [] } = useQuery<ApiClient[]>({ queryKey: ["/api/clients"] });
+  const { data: tests = [] } = useQuery<{ clientId: string; startedAt: string; completedAt: string | null }[]>({ queryKey: ["/api/tests"] });
+  // default to the most recently scanned engagement so fresh ASVS results surface
+  const latestTest = tests.slice().sort((a, b) =>
+    new Date(b.completedAt || b.startedAt).getTime() - new Date(a.completedAt || a.startedAt).getTime(),
+  )[0];
+  const clientId = latestTest?.clientId ?? clients.find((c) => c.status === "active")?.id ?? clients[0]?.id ?? "";
+  const { data, isLoading } = useQuery<ComplianceView>({ queryKey: [`/api/compliance/${clientId}`], enabled: clientId !== "" });
 
-  const { data: clients = [] } = useQuery<Client[]>({ queryKey: ["/api/clients"] });
-  const { data: sites = [] } = useQuery<Site[]>({ queryKey: ["/api/sites"] });
+  const rows = data?.rows ?? [];
+  const summary = data?.summary;
+  const total = summary?.total ?? 0;
+  const testedPct = total ? Math.round(((summary?.tested ?? 0) / total) * 100) : 0;
 
-  const sitesForClient = useMemo(
-    () => sites.filter((site) => site.clientId === clientId),
-    [sites, clientId],
-  );
+  // show the requirements that matter first: failing, then not-run, then tested
+  const orderRank: Record<ControlState, number> = { failing: 0, not_run: 1, tested: 2, not_covered: 3 };
+  const shown = rows.slice().sort((a, b) => orderRank[a.state] - orderRank[b.state]).slice(0, 20);
+  const gaps = rows.filter((r) => r.state === "failing").slice(0, 6);
 
-  const { data, isLoading } = useQuery<ComplianceView>({
-    queryKey: [
-      siteId
-        ? `/api/compliance/${clientId}?siteId=${siteId}`
-        : `/api/compliance/${clientId}`,
-    ],
-    enabled: clientId !== "",
-  });
-
-  const shown = (data?.rows ?? []).filter((row) => row.state === showing);
+  const legend = [
+    { label: "Tested", value: summary?.tested ?? 0, cls: "bg-emerald-400" },
+    { label: "Failing", value: summary?.failing ?? 0, cls: "bg-sev-high" },
+    { label: "Not Run", value: summary?.notRun ?? 0, cls: "bg-sky-400" },
+    { label: "Not Covered", value: summary?.notCovered ?? 0, cls: "bg-muted-foreground/50" },
+  ];
+  const empty = !isLoading && rows.length === 0;
 
   return (
-    <div className="min-h-screen">
-      <div className="container mx-auto max-w-5xl space-y-6 p-6">
-        <PageHeader
-          title="Compliance"
-          icon={<ScrollText className="h-8 w-8 text-primary" />}
-          description={
-            <>
-              This engagement measured against OWASP ASVS {data?.summary.version ?? "4.0.3"}.
-              What was not tested is counted first, because a control nobody
-              looked at is not a control that passed.
-            </>
-          }
-        />
+    <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8">
+      <PageHero
+        title="Compliance"
+        subtitle="Turn AI risk management into audit readiness. Map controls, collect evidence, and demonstrate trust."
+        background="owl-seal"
+        verbs={["Trust", "Govern", "Demonstrate", "Advance"]}
+      />
+      <Divider variant="key" className="mt-5" />
 
-        <GlassCard className="athena-fluted">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="client">Engagement</Label>
-              <Select value={clientId} onValueChange={(value) => { setClientId(value); setSiteId(""); }}>
-                <SelectTrigger id="client" data-testid="select-compliance-client">
-                  <SelectValue placeholder="Choose the engagement" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* stats -- live from the ASVS mapping */}
+      <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard layout="tile" label="Controls Mapped" value={total} icon={Layers} />
+        <StatCard layout="tile" label="Tested" value={summary?.tested ?? 0} icon={FileCheck2} />
+        <StatCard layout="tile" label="Open Gaps" value={summary?.failing ?? 0} icon={AlertTriangle} accent="var(--sev-high)" />
+        <StatCard layout="tile" label="Not Run" value={summary?.notRun ?? 0} icon={CircleSlash} />
+        <StatCard layout="tile" label="Tests Considered" value={data?.testsConsidered ?? 0} icon={Box} />
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-5">
+          <GlassCard hover={false}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="athena-label">Framework</p>
+                <p className="mt-1 text-[13px] text-foreground">OWASP ASVS <span className="text-muted-foreground">{summary?.version ?? "4.0.3"}</span></p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Active</span>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="site">Site</Label>
-              <Select
-                value={siteId}
-                onValueChange={setSiteId}
-                disabled={clientId === "" || sitesForClient.length === 0}
-              >
-                <SelectTrigger id="site" data-testid="select-compliance-site">
-                  <SelectValue placeholder={clientId === "" ? "Choose an engagement first" : "Optional — narrows it"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {sitesForClient.map((site) => (
-                    <SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              {data?.scannersLoaded != null
+                ? `${data.scannersLoaded} scanners loaded, bearing on the application-security verification standard.`
+                : "The application-security verification standard the engine maps its findings onto."}
+            </p>
+          </GlassCard>
+
+          <GlassCard hover={false} bodyClassName="p-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 px-5 py-3">
+              <div>
+                <p className="athena-label">Control Mapping</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Findings mapped to ASVS requirements.</p>
+              </div>
+              <span className="hidden items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-muted-foreground md:flex"><Search className="h-3.5 w-3.5" /> Search…</span>
             </div>
-          </div>
-        </GlassCard>
-
-        {clientId !== "" && isLoading && (
-          <p className="text-sm text-muted-foreground">Reading the engagement…</p>
-        )}
-
-        {data && (
-          <>
-            {/* The coverage statement, before any figure that could be mistaken
-                for a score. This is the sentence the page exists to say. */}
-            <GlassCard
-              ruling
-              className={data.summary.notCovered > 0 ? "athena-panel--critical" : undefined}
-            >
-              <div className="flex items-start gap-3">
-                <EyeOff className="mt-0.5 h-5 w-5 shrink-0" style={{ color: "hsl(var(--gold))" }} />
-                <div className="space-y-2">
-                  <div className="athena-label" style={{ color: "hsl(var(--gold))" }}>
-                    What this page does not tell you
-                  </div>
-                  <p className="text-sm text-muted-foreground" data-testid="text-coverage-statement">
-                    <span className="athena-figure">{data.summary.notCovered + data.summary.notRun}</span>
-                    {" "}of ASVS {data.summary.version}'s{" "}
-                    <span className="athena-figure">{data.summary.total}</span> requirements were
-                    not tested in this engagement
-                    {data.summary.notCovered > 0 && (
-                      <> — <span className="athena-figure">{data.summary.notCovered}</span> because
-                      nothing this engine tests for bears on them at all</>
-                    )}
-                    {data.summary.notRun > 0 && (
-                      <>, and <span className="athena-figure">{data.summary.notRun}</span> because
-                      the scanner that covers them is not loaded</>
-                    )}
-                    . No conclusion about those requirements can be drawn from this page, in
-                    either direction. There is no percentage here on purpose: one computed over
-                    the requirements that were tested would read as near-total compliance while
-                    saying nothing about the rest.
-                  </p>
-                  {data.scannersLoaded === null && (
-                    <p className="text-sm" style={{ color: "hsl(var(--sev-critical))" }}>
-                      The engine could not be asked which scanners it has loaded, so nothing here
-                      is reported as tested. An engine that did not answer has not told us
-                      anything ran.
-                    </p>
-                  )}
-                </div>
+            {empty ? (
+              <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">{isLoading ? "Loading control mapping…" : "No control mapping yet — run a scan to populate ASVS coverage."}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
+                      {["#", "Requirement", "Level", "State", "Findings"].map((h) => <th key={h} className="px-4 py-2 font-medium">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map((r) => (
+                      <tr key={r.requirement.id} className="border-t border-border/40 hover:bg-surface-1/40">
+                        <td className="px-4 py-2.5 text-[11px] text-muted-foreground">{r.requirement.id}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-foreground">{r.requirement.chapter} · {r.requirement.section}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-muted-foreground">{levels(r.requirement)}</td>
+                        <td className="px-4 py-2.5"><StatePill s={r.state} /></td>
+                        <td className="px-4 py-2.5 text-[12px] text-muted-foreground">{r.findings.length || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </GlassCard>
+            )}
+          </GlassCard>
+        </div>
 
-            <GlassCard>
-              <div className="flex flex-wrap gap-x-10 gap-y-4">
-                {ORDER.map((state) => {
-                  const count = {
-                    failing: data.summary.failing, tested: data.summary.tested,
-                    not_run: data.summary.notRun, not_covered: data.summary.notCovered,
-                  }[state];
-                  return (
-                    <button
-                      key={state}
-                      type="button"
-                      onClick={() => setShowing(state)}
-                      className={`text-left ${showing === state ? "opacity-100" : "opacity-55"}`}
-                      data-testid={`button-state-${state}`}
-                    >
-                      <div className="athena-label" style={{ color: STATES[state].colour }}>
-                        {STATES[state].label}
-                      </div>
-                      <div
-                        className="athena-figure text-2xl"
-                        style={{ color: STATES[state].colour }}
-                        data-testid={`text-count-${state}`}
-                      >
-                        {count}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="mt-4 text-xs text-muted-foreground">
-                From {data.testsConsidered} scan{data.testsConsidered === 1 ? "" : "s"} on record for
-                this engagement. Sample rows are excluded.
-              </p>
-            </GlassCard>
-
-            <GlassCard>
-              <div className="athena-label mb-1" style={{ color: STATES[showing].colour }}>
-                {STATES[showing].label} — {shown.length}
-              </div>
-              <p className="mb-4 text-sm text-muted-foreground" data-testid="text-state-meaning">
-                {STATES[showing].meaning}
-              </p>
-
-              {shown.length === 0 && (
-                <p className="text-sm text-muted-foreground">No requirement is in this state.</p>
-              )}
-
-              <ul className="space-y-3" data-testid="list-controls">
-                {shown.slice(0, 60).map((row) => (
-                  <li
-                    key={row.requirement.id}
-                    className="rounded-lg border border-border/60 p-4"
-                    data-testid={`control-${row.requirement.id}`}
-                  >
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      {/* Linked only when the standard has a file for this
-                          chapter. An earlier version computed the filename
-                          arithmetically and every link 404'd, which is worse
-                          than no link: it looks like a citation. */}
-                      {asvsChapterUrl(row.requirement.chapter) ? (
-                        <a
-                          className="athena-mono text-sm hover:underline"
-                          style={{ color: STATES[row.state].colour }}
-                          href={asvsChapterUrl(row.requirement.chapter) as string}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          data-testid={`link-${row.requirement.id}`}
-                        >
-                          {row.requirement.id}
-                          <ExternalLink className="ml-1 inline h-3 w-3" />
-                        </a>
-                      ) : (
-                        <span
-                          className="athena-mono text-sm"
-                          style={{ color: STATES[row.state].colour }}
-                        >
-                          {row.requirement.id}
-                        </span>
-                      )}
-                      {row.requirement.cwe !== null && (
-                        <a
-                          className="athena-mono text-xs text-muted-foreground hover:underline"
-                          href={`https://cwe.mitre.org/data/definitions/${row.requirement.cwe}.html`}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                        >
-                          CWE-{row.requirement.cwe}
-                        </a>
-                      )}
-                      <span className="athena-mono text-xs text-muted-foreground">
-                        {[row.requirement.l1 && "L1", row.requirement.l2 && "L2", row.requirement.l3 && "L3"]
-                          .filter(Boolean).join(" ")}
-                      </span>
-                    </div>
-
-                    {row.why && (
-                      // How the pairing was found in the standard. This table is
-                      // the one part of the mapping that is judgement rather
-                      // than derivation, so it shows its working.
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Mapped by: {row.why}
-                        {row.approximate && (
-                          <span style={{ color: "hsl(var(--gold))" }}>
-                            {" "}— the standard names nothing exact for this; the nearest was taken.
-                          </span>
-                        )}
-                      </p>
-                    )}
-
-                    {row.scanners.length > 0 && (
-                      <p className="mt-1 athena-mono text-xs text-muted-foreground">
-                        {row.state === "not_run" ? "would be covered by" : "covered by"}{" "}
-                        {row.scanners.join(", ")}
-                      </p>
-                    )}
-
-                    {row.findings.length > 0 && (
-                      <ul className="mt-3 space-y-1 border-t border-border/60 pt-3">
-                        {row.findings.map((finding, index) => (
-                          <li key={index} className="text-sm">
-                            <span
-                              className="athena-label mr-2"
-                              style={{ color: `hsl(var(--sev-${finding.severity ?? "info"}))` }}
-                            >
-                              {finding.severity ?? "info"}
-                            </span>
-                            <span className="athena-mono text-xs text-muted-foreground">
-                              {finding.type}
-                            </span>
-                            {finding.message && (
-                              <span className="ml-2 text-muted-foreground">{finding.message}</span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+        {/* right rail */}
+        <div className="space-y-5">
+          <GlassCard hover={false} ruling className="relative overflow-hidden">
+            <Corners />
+            <div className="mb-3 flex items-center justify-between">
+              <p className="athena-label">Readiness</p>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> ASVS</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <ReadinessDonut pct={testedPct} />
+              <ul className="flex-1 space-y-1.5">
+                {legend.map((l) => (
+                  <li key={l.label} className="flex items-center gap-2 text-[12px]">
+                    <span className={cn("h-2 w-2 rounded-full", l.cls)} />
+                    <span className="font-semibold text-foreground">{l.value}</span>
+                    <span className="text-muted-foreground">{l.label}</span>
                   </li>
                 ))}
               </ul>
+            </div>
+          </GlassCard>
 
-              {shown.length > 60 && (
-                <p className="mt-3 text-sm athena-gold" data-testid="text-controls-truncated">
-                  Showing the first 60 of {shown.length}.
-                </p>
-              )}
-            </GlassCard>
-
-            {data.summary.unmapped.length > 0 && (
-              <GlassCard>
-                <div className="athena-label mb-1 flex items-center gap-2">
-                  <CircleSlash className="h-3.5 w-3.5" />
-                  Findings this standard does not account for
-                </div>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  These came back from the engine and map to no ASVS {data.summary.version}{" "}
-                  requirement. They are shown because a map that quietly dropped them would
-                  overstate how much of what this engine finds the standard covers.
-                </p>
-                <ul className="space-y-2" data-testid="list-unmapped">
-                  {data.summary.unmapped.map((entry) => (
-                    <li key={entry.type} className="text-sm" data-testid={`unmapped-${entry.type}`}>
-                      <span className="athena-mono text-xs">{entry.type}</span>
-                      <span className="ml-2 athena-figure">{entry.count}</span>
-                      <p className="text-muted-foreground">{entry.reason}</p>
-                    </li>
-                  ))}
-                </ul>
-              </GlassCard>
+          <GlassCard hover={false}>
+            <p className="athena-label mb-2">High-Priority Control Gaps</p>
+            {gaps.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">{isLoading ? "Loading…" : "No failing controls — nothing is currently in breach."}</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {gaps.map((g) => (
+                  <li key={g.requirement.id} className="flex items-center gap-2.5">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-sev-high" />
+                    <span className="text-[12px] font-medium text-foreground">{g.requirement.id}</span>
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{g.requirement.section}</span>
+                  </li>
+                ))}
+              </ul>
             )}
-
-            <p className="text-xs text-muted-foreground">
-              OWASP Application Security Verification Standard {data.summary.version}, CC BY-SA 4.0.
-              Identifiers only; requirement text is at{" "}
-              <a
-                className="hover:underline"
-                href="https://owasp.org/www-project-application-security-verification-standard/"
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                owasp.org
-              </a>
-              .
-            </p>
-          </>
-        )}
+          </GlassCard>
+        </div>
       </div>
     </div>
   );

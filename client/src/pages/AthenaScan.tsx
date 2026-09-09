@@ -11,13 +11,15 @@
  * Every figure comes from one fixture (`SAMPLE_SCAN`) shaped like a live scan,
  * so wiring this to the engine is a swap of the source, not a redraw.
  */
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Lock, Landmark, FileText, KeyRound } from "lucide-react";
 import { motion } from "framer-motion";
 import GlassCard from "@/components/GlassCard";
 import ScanProgress from "@/components/athena/ScanProgress";
 import AthenaReasoning from "@/components/athena/AthenaReasoning";
 import RiskDial from "@/components/athena/RiskDial";
 import { cn } from "@/lib/utils";
+import templeStorm from "@assets/mythos/temple-storm.webp";
+import { Divider } from "@/components/mythos/Ornament";
 import {
   SAMPLE_SCAN,
   SCAN_STAGES,
@@ -53,6 +55,13 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   );
 }
 
+const EXPOSURE_ICON = {
+  pii: Lock,
+  financial: Landmark,
+  internal: FileText,
+  credential: KeyRound,
+} as const;
+
 function ImpactText({ impact }: { impact: Finding["impact"] }) {
   const tone =
     impact === "High"
@@ -69,31 +78,45 @@ export default function AthenaScan() {
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8 md:py-8">
       {/* ---- Hero -------------------------------------------------------- */}
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div>
-          <h1 className="font-serif text-5xl font-semibold tracking-tight text-foreground">
-            Athena
-          </h1>
-          <p className="mt-2 text-[15px] text-muted-foreground">
-            See the system. Understand the risks. Deploy with confidence.
-          </p>
-        </div>
-        <div className="flex items-start gap-10 pt-2">
-          <ul className="space-y-1 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
-            {SCAN_STAGES.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ul>
-          <div className="space-y-1 border-l border-border/50 pl-10 text-[10px] uppercase tracking-[0.24em]">
-            <p className="text-gold">Greater</p>
-            <p className="text-gold">Clarity</p>
-            <p className="mt-2 text-muted-foreground/70">Safer AI</p>
+      <div className="relative overflow-hidden rounded-2xl border border-border/50">
+        <img
+          src={templeStorm}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-right"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-background/40" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/30" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/70 to-transparent" />
+
+        <div className="relative flex flex-wrap items-start justify-between gap-6 px-6 py-7 md:px-8">
+          <div>
+            <h1 className="font-serif text-5xl font-semibold tracking-tight text-foreground [text-shadow:0_2px_18px_hsl(var(--background)/0.8)]">
+              Athena
+            </h1>
+            <p className="mt-2 text-[15px] text-muted-foreground">
+              See the system. Understand the risks. Deploy with confidence.
+            </p>
+          </div>
+          <div className="flex items-start gap-10 pt-2">
+            <ul className="hidden space-y-1 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70 sm:block">
+              {SCAN_STAGES.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+            <div className="space-y-1 border-l border-border/50 pl-10 text-[10px] uppercase tracking-[0.24em]">
+              <p className="text-gold">Greater</p>
+              <p className="text-gold">Clarity</p>
+              <p className="mt-2 text-muted-foreground/70">Safer AI</p>
+            </div>
           </div>
         </div>
       </div>
 
+      <Divider variant="astrolabe" className="mt-5" />
+
       {/* ---- Top row ----------------------------------------------------- */}
-      <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+      <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[330px_minmax(0,1fr)_360px]">
         {/* Scan target */}
         <GlassCard hover={false} className="flex flex-col">
           <div className="flex items-center justify-between">
@@ -125,7 +148,7 @@ export default function AthenaScan() {
             ))}
           </div>
 
-          <div className="mt-auto grid grid-cols-3 gap-2 border-t border-border/40 pt-4">
+          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border/40 pt-4">
             {[
               { k: "Started", v: scan.target.startedLabel },
               { k: "Elapsed", v: scan.target.elapsedLabel },
@@ -155,44 +178,46 @@ export default function AthenaScan() {
       {/* ---- Metric row -------------------------------------------------- */}
       <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         {/* Risk overview */}
-        <GlassCard className="flex items-center gap-4">
-          <RiskDial score={scan.risk.score} band={scan.risk.band} />
-          <div className="min-w-0">
-            <p className="athena-label">Risk Overview</p>
-            <p className="mt-1 text-lg font-semibold text-gold">
-              {scan.risk.band} Risk
-            </p>
-            <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-              {scan.risk.summary}
-            </p>
+        <GlassCard className="flex flex-col">
+          <p className="athena-label">Risk Overview</p>
+          <div className="mt-3 flex items-center gap-4">
+            <RiskDial score={scan.risk.score} band={scan.risk.band} />
+            <div className="min-w-0">
+              <p className="whitespace-nowrap text-base font-semibold text-gold">{scan.risk.band} Risk</p>
+              <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
+                {scan.risk.summary}
+              </p>
+            </div>
           </div>
         </GlassCard>
 
         {/* Findings */}
-        <GlassCard>
+        <GlassCard className="flex flex-col">
           <p className="athena-label">Findings</p>
-          <div className="mt-2 flex items-end gap-4">
-            <span className="athena-figure text-4xl font-semibold text-foreground">
-              {scan.findings.total}
-            </span>
-            <ul className="mb-1 flex-1 space-y-1">
-              {SEVERITY_ORDER.map((s) => (
-                <li key={s} className="flex items-center justify-between text-[12px]">
+          <div className="mt-2 flex items-center gap-5">
+            <div className="shrink-0">
+              <span className="athena-figure text-[44px] font-semibold leading-none text-foreground">
+                {scan.findings.total}
+              </span>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">Total findings</p>
+            </div>
+            <ul className="flex-1 space-y-1.5">
+              {SEVERITY_ORDER.map((sev) => (
+                <li key={sev} className="flex items-center justify-between text-[12px]">
                   <span className="flex items-center gap-2 text-muted-foreground">
                     <span
                       className="h-2 w-2 rounded-full"
-                      style={{ background: `hsl(var(--sev-${s}))` }}
+                      style={{ background: `hsl(var(--sev-${sev}))` }}
                     />
-                    {SEVERITY_LABEL[s]}
+                    {SEVERITY_LABEL[sev]}
                   </span>
                   <span className="font-medium text-foreground">
-                    {scan.findings.bySeverity[s]}
+                    {scan.findings.bySeverity[sev]}
                   </span>
                 </li>
               ))}
             </ul>
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">Total findings</p>
         </GlassCard>
 
         {/* Coverage */}
@@ -229,15 +254,19 @@ export default function AthenaScan() {
             </span>
             <span className="text-[12px] text-muted-foreground">Sensitive data types</span>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {scan.dataExposure.map((d) => (
-              <span
-                key={d.label}
-                className="inline-flex items-center gap-1.5 rounded-md border border-gold-dim/40 bg-gold/[0.06] px-2.5 py-1 text-[12px] font-medium text-gold"
-              >
-                {d.label}
-              </span>
-            ))}
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {scan.dataExposure.map((d) => {
+              const Icon = EXPOSURE_ICON[d.kind] ?? Lock;
+              return (
+                <span
+                  key={d.label}
+                  className="inline-flex items-center gap-1 rounded-md border border-gold-dim/40 bg-gold/[0.06] px-2 py-1 text-[11px] font-medium text-gold"
+                >
+                  <Icon className="h-3 w-3" />
+                  {d.label}
+                </span>
+              );
+            })}
           </div>
         </GlassCard>
       </div>
