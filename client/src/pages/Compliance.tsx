@@ -6,7 +6,8 @@
  * that; nothing here is a placeholder framework badge.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Layers, FileCheck2, AlertTriangle, CircleSlash, Box, ChevronRight, Search } from "lucide-react";
+import { useState } from "react";
+import { Layers, FileCheck2, AlertTriangle, CircleSlash, Box, Search, ChevronDown } from "lucide-react";
 import PageHero from "@/components/mythos/PageHero";
 import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
@@ -58,7 +59,10 @@ export default function Compliance() {
   const latestTest = tests.slice().sort((a, b) =>
     new Date(b.completedAt || b.startedAt).getTime() - new Date(a.completedAt || a.startedAt).getTime(),
   )[0];
-  const clientId = latestTest?.clientId ?? clients.find((c) => c.status === "active")?.id ?? clients[0]?.id ?? "";
+  const defaultClientId = latestTest?.clientId ?? clients.find((c) => c.status === "active")?.id ?? clients[0]?.id ?? "";
+  const [picked, setPicked] = useState("");
+  const [search, setSearch] = useState("");
+  const clientId = picked || defaultClientId;
   const { data, isLoading } = useQuery<ComplianceView>({ queryKey: [`/api/compliance/${clientId}`], enabled: clientId !== "" });
 
   const rows = data?.rows ?? [];
@@ -68,7 +72,14 @@ export default function Compliance() {
 
   // show the requirements that matter first: failing, then not-run, then tested
   const orderRank: Record<ControlState, number> = { failing: 0, not_run: 1, tested: 2, not_covered: 3 };
-  const shown = rows.slice().sort((a, b) => orderRank[a.state] - orderRank[b.state]).slice(0, 20);
+  const q = search.trim().toLowerCase();
+  const matched = rows.filter((r) =>
+    q === "" ||
+    r.requirement.id.toLowerCase().includes(q) ||
+    r.requirement.chapter.toLowerCase().includes(q) ||
+    r.requirement.section.toLowerCase().includes(q),
+  );
+  const shown = matched.slice().sort((a, b) => orderRank[a.state] - orderRank[b.state]).slice(0, 20);
   const gaps = rows.filter((r) => r.state === "failing").slice(0, 6);
 
   const legend = [
@@ -101,12 +112,22 @@ export default function Compliance() {
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-5">
           <GlassCard hover={false}>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="athena-label">Framework</p>
                 <p className="mt-1 text-[13px] text-foreground">OWASP ASVS <span className="text-muted-foreground">{summary?.version ?? "4.0.3"}</span></p>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Active</span>
+              <div className="flex items-center gap-2">
+                {clients.length > 0 && (
+                  <span className="relative inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-foreground">
+                    <select value={clientId} onChange={(e) => setPicked(e.target.value)} className="cursor-pointer appearance-none bg-transparent pr-4 focus:outline-none">
+                      {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Active</span>
+              </div>
             </div>
             <p className="mt-2 text-[12px] text-muted-foreground">
               {data?.scannersLoaded != null
@@ -121,7 +142,10 @@ export default function Compliance() {
                 <p className="athena-label">Control Mapping</p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">Findings mapped to ASVS requirements.</p>
               </div>
-              <span className="hidden items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-muted-foreground md:flex"><Search className="h-3.5 w-3.5" /> Search…</span>
+              <label className="hidden items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-muted-foreground md:flex">
+                <Search className="h-3.5 w-3.5" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search requirements…" className="w-36 bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none" />
+              </label>
             </div>
             {empty ? (
               <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">{isLoading ? "Loading control mapping…" : "No control mapping yet — run a scan to populate ASVS coverage."}</p>
@@ -134,6 +158,9 @@ export default function Compliance() {
                     </tr>
                   </thead>
                   <tbody>
+                    {shown.length === 0 && (
+                      <tr><td colSpan={5} className="px-4 py-8 text-center text-[12px] text-muted-foreground">No requirements match “{search}”.</td></tr>
+                    )}
                     {shown.map((r) => (
                       <tr key={r.requirement.id} className="border-t border-border/40 hover:bg-surface-1/40">
                         <td className="px-4 py-2.5 text-[11px] text-muted-foreground">{r.requirement.id}</td>
