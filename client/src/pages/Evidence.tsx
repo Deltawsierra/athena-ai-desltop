@@ -6,6 +6,7 @@
  * rather than dressed up as real approvals.
  */
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   Files,
   FileText,
@@ -15,7 +16,6 @@ import {
   Download,
   MoreHorizontal,
   ChevronRight,
-  SlidersHorizontal,
   Search,
   Landmark,
   CheckCircle2,
@@ -37,6 +37,9 @@ const TYPE_ICON: Record<string, typeof FileText> = {
 };
 function typeIcon(t: string) { return TYPE_ICON[t] ?? FileText; }
 
+const tabOn = "rounded-full bg-primary/15 px-3 py-1 text-[12px] font-medium text-primary";
+const tabOff = "rounded-full px-3 py-1 text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors";
+
 export default function Evidence() {
   const { data: docs = [], isLoading } = useQuery<ApiDoc[]>({ queryKey: ["/api/documents"] });
   const { data: users = [] } = useQuery<ApiUser[]>({ queryKey: ["/api/users/assignable"] });
@@ -48,6 +51,15 @@ export default function Evidence() {
   const byType = new Map<string, number>();
   docs.forEach((d) => byType.set(d.documentType, (byType.get(d.documentType) ?? 0) + 1));
   const reports = byType.get("Report") ?? 0;
+
+  const [typeF, setTypeF] = useState("all");
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const view = docs.filter((d) =>
+    (typeF === "all" || d.documentType === typeF) &&
+    (q === "" || d.title.toLowerCase().includes(q) || (d.description ?? "").toLowerCase().includes(q)),
+  );
+  const openDoc = (url: string | null) => { if (url) window.open(url, "_blank", "noopener,noreferrer"); };
 
   // latest test → a plain-language release read
   const latestTest = tests.slice().sort((a, b) => new Date(b.completedAt || b.startedAt).getTime() - new Date(a.completedAt || a.startedAt).getTime())[0];
@@ -80,11 +92,16 @@ export default function Evidence() {
           {/* table */}
           <GlassCard hover={false} bodyClassName="p-0">
             <div className="flex flex-wrap items-center gap-2 border-b border-border/50 px-4 py-3">
-              <p className="athena-label">Evidence Artifacts</p>
-              <div className="ml-auto flex items-center gap-2">
-                <span className="hidden items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-muted-foreground sm:flex"><Search className="h-3.5 w-3.5" /> Search evidence…</span>
-                <button className="flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-[12px] text-muted-foreground"><SlidersHorizontal className="h-3.5 w-3.5" /> Filters</button>
+              <div className="flex flex-wrap gap-1">
+                <button onClick={() => setTypeF("all")} className={typeF === "all" ? tabOn : tabOff}>All</button>
+                {Array.from(byType.keys()).map((t) => (
+                  <button key={t} onClick={() => setTypeF(t)} className={typeF === t ? tabOn : tabOff}>{t}</button>
+                ))}
               </div>
+              <label className="ml-auto flex items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-muted-foreground">
+                <Search className="h-3.5 w-3.5" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search evidence…" className="w-32 bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none" />
+              </label>
             </div>
             {empty ? (
               <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">No documents on record yet.</p>
@@ -101,7 +118,9 @@ export default function Evidence() {
                   <tbody>
                     {isLoading ? (
                       <tr><td colSpan={5} className="px-4 py-8 text-center text-[12px] text-muted-foreground">Loading…</td></tr>
-                    ) : docs.map((d) => {
+                    ) : view.length === 0 ? (
+                      <tr><td colSpan={5} className="px-4 py-8 text-center text-[12px] text-muted-foreground">No documents match the current filter.</td></tr>
+                    ) : view.map((d) => {
                       const Icon = typeIcon(d.documentType);
                       return (
                         <tr key={d.id} className="border-t border-border/40 hover:bg-surface-1/40">
@@ -119,8 +138,8 @@ export default function Evidence() {
                           <td className="px-4 py-3 text-[12px] text-muted-foreground">{new Date(d.createdAt).toLocaleDateString()}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5">
-                              <button className="rounded-md border border-border/60 px-2.5 py-1 text-[12px] text-foreground hover:border-primary/50">View</button>
-                              <button className="rounded-md border border-border/60 p-1.5 text-muted-foreground hover:text-foreground"><Download className="h-3.5 w-3.5" /></button>
+                              <button onClick={() => openDoc(d.fileUrl)} disabled={!d.fileUrl} className="rounded-md border border-border/60 px-2.5 py-1 text-[12px] text-foreground hover:border-primary/50 disabled:opacity-40">View</button>
+                              <button onClick={() => openDoc(d.fileUrl)} disabled={!d.fileUrl} title="Download" className="rounded-md border border-border/60 p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-40"><Download className="h-3.5 w-3.5" /></button>
                               <button className="p-1 text-muted-foreground"><MoreHorizontal className="h-4 w-4" /></button>
                             </div>
                           </td>

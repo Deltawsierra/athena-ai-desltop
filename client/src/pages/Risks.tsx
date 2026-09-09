@@ -99,24 +99,22 @@ function HeatCell({ hue, count }: { hue: string; count: number }) {
   return <td className="border border-border/30 px-3 py-2.5 text-center text-[12px] font-semibold text-foreground" style={{ background: `hsl(var(${hue}) / ${alpha})` }}>{count}</td>;
 }
 
-function Select({ label, value }: { label: string; value: string }) {
+function FilterSelect({
+  label, value, onChange, options,
+}: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
     <label className="flex min-w-0 flex-1 flex-col gap-1">
       <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
-      <span className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground">
-        {value}<ChevronRight className="h-3.5 w-3.5 rotate-90 text-muted-foreground" />
-      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground"
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
     </label>
   );
 }
-
-const FILTERS = [
-  { label: "Severity", value: "All severities" },
-  { label: "Status", value: "Open" },
-  { label: "Environment", value: "All environments" },
-  { label: "Category", value: "All categories" },
-  { label: "Project", value: "All projects" },
-];
 
 export default function Risks() {
   const { data: clients = [] } = useQuery<ApiClient[]>({ queryKey: ["/api/clients"] });
@@ -139,10 +137,28 @@ export default function Risks() {
   const counts = data?.counts ?? {};
   const userName = (id: string | null) => users.find((u) => u.id === id)?.username ?? (id ? "Assigned" : "Unassigned");
 
-  // headline counts, all from the engine's record
-  const open = findings.filter((f) => f.status === "open");
-  const crit = open.filter((f) => normSev(f.severity) === "critical").length;
-  const high = open.filter((f) => normSev(f.severity) === "high").length;
+  // headline counts, from the full engagement record (unaffected by the filters)
+  const allOpen = findings.filter((f) => f.status === "open");
+  const crit = allOpen.filter((f) => normSev(f.severity) === "critical").length;
+  const high = allOpen.filter((f) => normSev(f.severity) === "high").length;
+  const sharpest = allOpen.slice().sort((a, b) => SEV_ORDER.indexOf(normSev(a.severity)) - SEV_ORDER.indexOf(normSev(b.severity)))[0];
+
+  // filters -- narrow the register and the charts, live over the findings
+  const [sevF, setSevF] = useState("all");
+  const [statusF, setStatusF] = useState("all");
+  const [catF, setCatF] = useState("all");
+  const [search, setSearch] = useState("");
+  const catOptions = Array.from(new Set(findings.map((f) => humanize(f.type)))).sort();
+  const q = search.trim().toLowerCase();
+  const view = findings.filter((f) =>
+    (sevF === "all" || normSev(f.severity) === sevF) &&
+    (statusF === "all" || f.status === statusF) &&
+    (catF === "all" || humanize(f.type) === catF) &&
+    (q === "" || (f.message ?? "").toLowerCase().includes(q) || (f.target ?? "").toLowerCase().includes(q) || f.type.toLowerCase().includes(q)),
+  );
+  const filtersActive = sevF !== "all" || statusF !== "all" || catF !== "all" || q !== "";
+  const clearFilters = () => { setSevF("all"); setStatusF("all"); setCatF("all"); setSearch(""); };
+  const open = view.filter((f) => f.status === "open");
 
   // category (by finding type) breakdown for the donut + legend
   const byCat = new Map<string, number>();
@@ -157,8 +173,8 @@ export default function Risks() {
     return { name: label, cells, total: rows.length };
   });
 
-  // register, worst first
-  const register = [...findings]
+  // register, worst first (filtered)
+  const register = [...view]
     .sort((a, b) => SEV_ORDER.indexOf(normSev(a.severity)) - SEV_ORDER.indexOf(normSev(b.severity)))
     .map((f, i) => ({
       n: i + 1, sev: normSev(f.severity), finding: f.message || humanize(f.type),
@@ -167,7 +183,6 @@ export default function Risks() {
       status: STATUS_TONE[f.status] ?? { label: humanize(f.status), tone: "neutral" as StatusTone },
     }));
 
-  const sharpest = open.slice().sort((a, b) => SEV_ORDER.indexOf(normSev(a.severity)) - SEV_ORDER.indexOf(normSev(b.severity)))[0];
   const totalFindings = findings.length || 1;
   const fixedPct = Math.round(((counts.fixed ?? 0) / totalFindings) * 100);
   const remediation = [
@@ -176,7 +191,10 @@ export default function Risks() {
     { label: "Open", value: counts.open ?? 0, cls: "bg-muted-foreground/50", color: "hsl(40 10% 45%)" },
   ];
 
-  const empty = !isLoading && findings.length === 0;
+  const empty = !isLoading && view.length === 0;
+  const emptyReason = findings.length === 0
+    ? "No findings recorded for this engagement yet. Run a scan from the Athena screen and results will appear here."
+    : "No findings match the current filters.";
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8">
@@ -197,20 +215,28 @@ export default function Risks() {
         <StatCard label="Fixed" value={counts.fixed ?? 0} icon={CheckCircle2} sublabel="remediated & verified" />
       </div>
 
-      {/* filters -- Engagement is a live client selector */}
+      {/* filters -- all live: engagement switches the query, the rest filter the view */}
       <GlassCard hover={false} className="mt-5" bodyClassName="flex flex-wrap items-end gap-4">
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-medium text-muted-foreground">Engagement</span>
-          <select
-            value={clientId}
-            onChange={(e) => setSelClient(e.target.value)}
-            className="rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground"
-          >
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+        <FilterSelect label="Engagement" value={clientId} onChange={setSelClient}
+          options={clients.map((c) => ({ value: c.id, label: c.name }))} />
+        <FilterSelect label="Severity" value={sevF} onChange={setSevF}
+          options={[{ value: "all", label: "All severities" }, ...SEV_ORDER.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }))]} />
+        <FilterSelect label="Status" value={statusF} onChange={setStatusF}
+          options={[{ value: "all", label: "All statuses" }, { value: "open", label: "Open" }, { value: "acknowledged", label: "Acknowledged" }, { value: "accepted", label: "Accepted" }, { value: "fixed", label: "Fixed" }]} />
+        <FilterSelect label="Category" value={catF} onChange={setCatF}
+          options={[{ value: "all", label: "All categories" }, ...catOptions.map((c) => ({ value: c, label: c }))]} />
+        <label className="flex min-w-[180px] flex-1 flex-col gap-1">
+          <span className="text-[11px] font-medium text-muted-foreground">Search</span>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search findings…"
+            className="rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/70"
+          />
         </label>
-        {FILTERS.slice(0, 4).map((f) => <Select key={f.label} {...f} />)}
-        <button onClick={() => setSelClient("")} className="flex items-center gap-1.5 pb-2 text-[12px] font-medium text-gold hover:text-primary"><X className="h-3.5 w-3.5" /> Clear filters</button>
+        {filtersActive && (
+          <button onClick={clearFilters} className="flex items-center gap-1.5 pb-2 text-[12px] font-medium text-gold hover:text-primary"><X className="h-3.5 w-3.5" /> Clear filters</button>
+        )}
       </GlassCard>
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -266,12 +292,10 @@ export default function Risks() {
 
           <GlassCard hover={false} bodyClassName="p-0">
             <div className="flex items-center justify-between border-b border-border/50 px-5 py-3">
-              <p className="athena-label">Risk Register <span className="text-muted-foreground">({findings.length})</span></p>
+              <p className="athena-label">Risk Register <span className="text-muted-foreground">({view.length}{filtersActive ? ` of ${findings.length}` : ""})</span></p>
             </div>
             {empty ? (
-              <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">
-                No findings recorded for this engagement yet. Run a scan from the Athena screen and results will appear here.
-              </p>
+              <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">{emptyReason}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[900px] text-left">

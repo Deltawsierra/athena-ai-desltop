@@ -17,6 +17,8 @@ import {
   Search,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import PageHero from "@/components/mythos/PageHero";
 import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
@@ -61,18 +63,6 @@ const READINESS_STEPS: TimelineStep[] = [
   { title: "Deploy", detail: "Release with monitoring and guardrails.", state: "todo" },
 ];
 
-const FILTERS = ["All environments", "All owners", "All statuses"];
-
-function Select({ label, value }: { label: string; value: string }) {
-  return (
-    <label className="flex min-w-0 flex-1 flex-col gap-1">
-      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
-      <span className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground">
-        {value}<ChevronRight className="h-3.5 w-3.5 rotate-90 text-muted-foreground" />
-      </span>
-    </label>
-  );
-}
 
 export default function Deployments() {
   const { data: clients = [], isLoading: cLoading } = useQuery<ApiClient[]>({ queryKey: ["/api/clients"] });
@@ -106,6 +96,19 @@ export default function Deployments() {
   const scored = rows.filter((r) => r.band !== "none");
   const avgScore = scored.length ? Math.round(scored.reduce((s, r) => s + r.score, 0) / scored.length) : 0;
 
+  // filters
+  const [, navigate] = useLocation();
+  const [statusF, setStatusF] = useState("all");
+  const [search, setSearch] = useState("");
+  const statuses = Array.from(new Set(clients.map((c) => c.status)));
+  const q = search.trim().toLowerCase();
+  const viewRows = rows.filter((r) =>
+    (statusF === "all" || r.status === statusF) &&
+    (q === "" || r.system.toLowerCase().includes(q) || r.company.toLowerCase().includes(q)),
+  );
+  const filtersActive = statusF !== "all" || q !== "";
+  const clearFilters = () => { setStatusF("all"); setSearch(""); };
+
   const highestRisk = rows.slice().filter((r) => r.band !== "none").sort((a, b) => b.score - a.score).slice(0, 3);
   const recent = tests.slice()
     .sort((a, b) => new Date(b.completedAt || b.startedAt).getTime() - new Date(a.completedAt || a.startedAt).getTime())
@@ -136,25 +139,30 @@ export default function Deployments() {
         <StatCard label="Average Risk Score" value={avgScore} icon={Gauge} sublabel="out of 100" />
       </div>
 
-      {/* filters */}
+      {/* filters -- live */}
       <GlassCard hover={false} className="mt-5" bodyClassName="flex flex-wrap items-end gap-4">
-        {FILTERS.map((f, i) => (
-          <Select key={f} label={["Environment", "Owner", "Status"][i]} value={f} />
-        ))}
-        <label className="flex min-w-[200px] flex-1 flex-col gap-1">
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[11px] font-medium text-muted-foreground">Status</span>
+          <select value={statusF} onChange={(e) => setStatusF(e.target.value)} className="rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] capitalize text-foreground">
+            <option value="all">All statuses</option>
+            {statuses.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
+          </select>
+        </label>
+        <label className="flex min-w-[220px] flex-[2] flex-col gap-1">
           <span className="text-[11px] font-medium text-muted-foreground">Search</span>
           <span className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-muted-foreground">
-            <Search className="h-3.5 w-3.5" /> Search deployments…
+            <Search className="h-3.5 w-3.5" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search deployments…" className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none" />
           </span>
         </label>
-        <button className="pb-2 text-[12px] font-medium text-gold hover:text-primary">Clear filters</button>
+        {filtersActive && <button onClick={clearFilters} className="pb-2 text-[12px] font-medium text-gold hover:text-primary">Clear filters</button>}
       </GlassCard>
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <GlassCard hover={false} className="overflow-hidden" bodyClassName="p-0">
           <div className="flex items-center justify-between border-b border-border/50 px-5 py-3">
             <p className="athena-label">AI Deployments</p>
-            <span className="text-[11px] text-muted-foreground">{clients.length} system{clients.length === 1 ? "" : "s"}</span>
+            <span className="text-[11px] text-muted-foreground">{viewRows.length}{filtersActive ? ` of ${clients.length}` : ""} system{viewRows.length === 1 ? "" : "s"}</span>
           </div>
           {empty ? (
             <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">No systems on record yet. Add a client and run a scan to populate this list.</p>
@@ -171,7 +179,9 @@ export default function Deployments() {
                 <tbody>
                   {cLoading ? (
                     <tr><td colSpan={7} className="px-4 py-8 text-center text-[12px] text-muted-foreground">Loading…</td></tr>
-                  ) : rows.map((d) => (
+                  ) : viewRows.length === 0 ? (
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-[12px] text-muted-foreground">No systems match the current filters.</td></tr>
+                  ) : viewRows.map((d) => (
                     <tr key={d.id} className="border-t border-border/40 hover:bg-surface-1/40">
                       <td className="px-4 py-4">
                         <span className="block text-[13px] font-medium text-foreground">{d.system}</span>
@@ -269,7 +279,7 @@ export default function Deployments() {
             <p className="mt-1 text-[13px] text-muted-foreground">Deploy AI with confidence, backed by evidence, governed by people.</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-gold-dim to-gold px-4 py-2 text-[13px] font-semibold text-background">
+        <button onClick={() => navigate("/athena")} className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-gold-dim to-gold px-4 py-2 text-[13px] font-semibold text-background hover:brightness-110">
           <Plus className="h-4 w-4" /> New Deployment
         </button>
       </GlassCard>

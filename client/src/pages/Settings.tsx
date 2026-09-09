@@ -25,6 +25,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import PageHero from "@/components/mythos/PageHero";
 import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
@@ -60,23 +61,24 @@ function Input({ label, value }: { label: string; value: string }) {
   );
 }
 function Toggle({ on, label }: { on: boolean; label: string }) {
+  const [v, setV] = useState(on);
   return (
-    <div className="flex items-center gap-2.5">
-      <span className={cn("inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "bg-gold" : "bg-surface-2")}>
-        <span className={cn("h-4 w-4 rounded-full bg-white transition-transform", on && "translate-x-4")} />
+    <button type="button" role="switch" aria-checked={v} onClick={() => setV((x) => !x)} className="flex items-center gap-2.5 text-left">
+      <span className={cn("inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors", v ? "bg-gold" : "bg-surface-2")}>
+        <span className={cn("h-4 w-4 rounded-full bg-white transition-transform", v && "translate-x-4")} />
       </span>
       <span className="text-[12px] text-foreground">{label}</span>
-    </div>
+    </button>
   );
 }
-function Radio({ on, label }: { on: boolean; label: string }) {
+function Radio({ on, label, onSelect }: { on: boolean; label: string; onSelect?: () => void }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-full border", on ? "border-primary" : "border-border/70")}>
+    <button type="button" role="radio" aria-checked={on} onClick={onSelect} className="flex w-full items-center gap-2.5 text-left">
+      <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors", on ? "border-primary" : "border-border/70")}>
         {on && <span className="h-2 w-2 rounded-full bg-primary" />}
       </span>
       <span className="text-[12px] text-foreground">{label}</span>
-    </div>
+    </button>
   );
 }
 function CardHead({ icon: Icon, title, blurb }: { icon: typeof Cog; title: string; blurb: string }) {
@@ -90,6 +92,13 @@ function CardHead({ icon: Icon, title, blurb }: { icon: typeof Cog; title: strin
     </div>
   );
 }
+
+const ROUTING = [
+  "Use primary provider (recommended)",
+  "Auto-failover on error",
+  "Route by data classification",
+  "Custom routing rules",
+];
 
 const API_KEYS = [
   { name: "prod-scanner", perms: "Scan, Read", created: "Jan 12, 2025" },
@@ -113,6 +122,8 @@ interface EngineStatus { configured: boolean; reachable: boolean; authorized: bo
 export default function Settings() {
   const { data: conn } = useQuery<Connections>({ queryKey: ["/api/settings/connections"] });
   const { data: engine } = useQuery<EngineStatus>({ queryKey: ["/api/engine/status"] });
+  const [tab, setTab] = useState("General");
+  const [routing, setRouting] = useState(ROUTING[0]);
 
   const fields = conn?.fields ?? [];
   const setCount = fields.filter((f) => f.set).length;
@@ -145,12 +156,13 @@ export default function Settings() {
         <StatCard layout="tile" label="Approval Gates" value="4 / 5" icon={Clock} sublabel="Human oversight configured" />
       </div>
 
-      {/* tabs */}
+      {/* tabs -- switch which settings sections show */}
       <GlassCard hover={false} className="mt-5" bodyClassName="flex flex-wrap gap-1">
-        {TABS.map((t, i) => {
+        {TABS.map((t) => {
           const Icon = t.icon;
+          const active = tab === t.label;
           return (
-            <button key={t.label} className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors", i === 0 ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground")}>
+            <button key={t.label} onClick={() => setTab(t.label)} className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors", active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground")}>
               <Icon className="h-3.5 w-3.5" /> {t.label}
             </button>
           );
@@ -159,6 +171,12 @@ export default function Settings() {
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 grid grid-cols-1 gap-5 lg:grid-cols-3">
+          {!["General", "Integrations", "Data Handling"].includes(tab) && (
+            <GlassCard hover={false} className="lg:col-span-3">
+              <p className="text-[13px] text-muted-foreground">The <span className="text-foreground">{tab}</span> section has no configurable settings in this build yet. General, Integrations, and Data Handling are wired.</p>
+            </GlassCard>
+          )}
+          {tab === "General" && (
           <GlassCard hover={false}>
             <CardHead icon={Users} title="Organization & Tenant" blurb="Basic information and branding for your Mythos environment." />
             <div className="space-y-3">
@@ -177,7 +195,9 @@ export default function Settings() {
               <Field label="Time Zone" value="(UTC-5) Eastern Time (ET)" />
             </div>
           </GlassCard>
+          )}
 
+          {tab === "General" && (
           <GlassCard hover={false}>
             <CardHead icon={Cog} title="Platform Preferences" blurb="Customize your experience and default behavior." />
             <div className="space-y-3">
@@ -191,7 +211,9 @@ export default function Settings() {
               </div>
             </div>
           </GlassCard>
+          )}
 
+          {tab === "Integrations" && (
           <GlassCard hover={false}>
             <CardHead icon={Boxes} title="Model Routes & Providers" blurb="Configure default models and routing for scans and analysis." />
             <div className="space-y-3">
@@ -199,23 +221,26 @@ export default function Settings() {
               <Field label="Default Model" value="GPT-4o" />
               <Field label="Fallback Provider" value="Anthropic — Claude 3.5 Sonnet" />
               <Field label="Embedding Model" value="text-embedding-3-large" />
-              <div className="space-y-2.5 border-t border-border/40 pt-3">
+              <div className="space-y-2.5 border-t border-border/40 pt-3" role="radiogroup" aria-label="Provider Routing">
                 <span className="block text-[11px] font-medium text-muted-foreground">Provider Routing</span>
-                <Radio on label="Use primary provider (recommended)" />
-                <Radio on={false} label="Auto-failover on error" />
-                <Radio on={false} label="Route by data classification" />
-                <Radio on={false} label="Custom routing rules" />
+                {ROUTING.map((label) => (
+                  <Radio key={label} label={label} on={routing === label} onSelect={() => setRouting(label)} />
+                ))}
               </div>
             </div>
           </GlassCard>
+          )}
 
+          {tab === "Data Handling" && (
           <GlassCard hover={false}>
             <CardHead icon={Sparkles} title="Training & Feedback" blurb="Control how your data is used to improve model performance." />
             <Toggle on={false} label="Allow training/feedback reuse" />
             <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">When enabled, de-identified data may be used to improve model performance. We recommend keeping this disabled for sensitive environments.</p>
             <p className="mt-3 flex items-start gap-2 rounded-lg border border-border/50 bg-surface-1/40 px-3 py-2 text-[11px] text-muted-foreground"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" /> Customer data is not used for model training by default at Mythos.</p>
           </GlassCard>
+          )}
 
+          {tab === "Data Handling" && (
           <GlassCard hover={false}>
             <CardHead icon={Database} title="Data Retention" blurb="Manage how long data is stored in Mythos." />
             <div className="space-y-3">
@@ -225,7 +250,9 @@ export default function Settings() {
               <div className="border-t border-border/40 pt-3"><Toggle on label="Auto-delete expired data" /></div>
             </div>
           </GlassCard>
+          )}
 
+          {tab === "Integrations" && (
           <GlassCard hover={false}>
             <CardHead icon={Lock} title="Tenant API Keys" blurb="Manage API access for programmatic integrations." />
             <div className="overflow-x-auto">
@@ -247,8 +274,9 @@ export default function Settings() {
                 </tbody>
               </table>
             </div>
-            <button className="mt-3 flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-[12px] text-foreground hover:border-primary/50"><Plus className="h-3.5 w-3.5" /> Create API Key</button>
+            <button onClick={() => alert("Create API Key — key provisioning is coming soon.")} className="mt-3 flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-[12px] text-foreground hover:border-primary/50"><Plus className="h-3.5 w-3.5" /> Create API Key</button>
           </GlassCard>
+          )}
         </div>
 
         {/* right rail */}

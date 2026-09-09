@@ -17,7 +17,7 @@ import {
   ChevronRight,
   CheckCircle2,
 } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import PageHero from "@/components/mythos/PageHero";
 import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
@@ -46,6 +46,10 @@ const WORKFLOW: TimelineStep[] = [
 export default function Teams() {
   const { data: users = [], isLoading } = useQuery<ApiUser[]>({ queryKey: ["/api/users"] });
 
+  const [tab, setTab] = useState(TABS[0]);
+  const [search, setSearch] = useState("");
+  const [roleF, setRoleF] = useState("all");
+
   const active = users.filter((u) => u.isActive).length;
   const admins = users.filter((u) => u.role === "admin").length;
 
@@ -54,13 +58,19 @@ export default function Teams() {
   const roles = Array.from(new Set(users.map((u) => u.role))).sort(
     (a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99),
   );
-  const groups = roles.map((role) => ({
-    role,
-    meta: roleMeta(role),
-    members: users.filter((u) => u.role === role),
-  }));
 
-  const roleMatrix = groups.map((g) => ({ role: g.meta.label, count: g.members.length }));
+  // apply the search + role filter, then group what survives
+  const q = search.trim().toLowerCase();
+  const filtered = users.filter((u) =>
+    (roleF === "all" || u.role === roleF) &&
+    (q === "" || u.username.toLowerCase().includes(q) || (u.email ?? "").toLowerCase().includes(q)),
+  );
+  const filtersActive = roleF !== "all" || q !== "";
+  const groups = roles
+    .map((role) => ({ role, meta: roleMeta(role), members: filtered.filter((u) => u.role === role) }))
+    .filter((g) => g.members.length > 0 || !filtersActive);
+
+  const roleMatrix = roles.map((role) => ({ role: roleMeta(role).label, count: users.filter((u) => u.role === role).length }));
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8">
@@ -85,19 +95,33 @@ export default function Teams() {
           <GlassCard hover={false} bodyClassName="p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-border/50 px-4 py-3">
               <div className="flex gap-1">
-                {TABS.map((t, i) => (
-                  <button key={t} className={cn("border-b-2 px-2 py-1 text-[13px] font-medium transition-colors", i === 0 ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{t}</button>
+                {TABS.map((t) => (
+                  <button key={t} onClick={() => setTab(t)} className={cn("border-b-2 px-2 py-1 text-[13px] font-medium transition-colors", tab === t ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{t}</button>
                 ))}
               </div>
-              <div className="ml-auto flex items-center gap-2">
-                <span className="hidden items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-muted-foreground md:flex"><Search className="h-3.5 w-3.5" /> Search team members…</span>
-                <button className="flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-[12px] text-muted-foreground"><SlidersHorizontal className="h-3.5 w-3.5" /> Filter</button>
-                <button className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-dim to-gold px-3 py-1.5 text-[12px] font-semibold text-background"><Plus className="h-3.5 w-3.5" /> Add Member</button>
-              </div>
+              {tab === "Team Members" && (
+                <div className="ml-auto flex items-center gap-2">
+                  <label className="hidden items-center gap-2 rounded-lg border border-border/60 bg-surface-1/50 px-3 py-1.5 text-[12px] text-muted-foreground md:flex">
+                    <Search className="h-3.5 w-3.5" />
+                    <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search team members…" className="w-40 bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none" />
+                  </label>
+                  <span className="relative inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-[12px] text-muted-foreground">
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    <select value={roleF} onChange={(e) => setRoleF(e.target.value)} className="cursor-pointer appearance-none bg-transparent pr-1 text-foreground focus:outline-none">
+                      <option value="all">All roles</option>
+                      {roles.map((r) => <option key={r} value={r}>{roleMeta(r).label}</option>)}
+                    </select>
+                  </span>
+                  <button onClick={() => alert("Add Member — invite flow coming soon.")} className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-dim to-gold px-3 py-1.5 text-[12px] font-semibold text-background"><Plus className="h-3.5 w-3.5" /> Add Member</button>
+                </div>
+              )}
             </div>
             {users.length === 0 ? (
               <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">{isLoading ? "Loading team…" : "No team members found."}</p>
-            ) : (
+            ) : tab === "Team Members" ? (
+              filtered.length === 0 ? (
+                <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">No members match the current filter.</p>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[820px] text-left">
                   <thead>
@@ -137,6 +161,53 @@ export default function Teams() {
                             </tr>
                           ))}
                         </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              )
+            ) : tab === "Groups" ? (
+              <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+                {roles.map((role) => {
+                  const meta = roleMeta(role);
+                  const Icon = meta.icon;
+                  const members = users.filter((u) => u.role === role);
+                  return (
+                    <div key={role} className="rounded-xl border border-border/50 bg-surface-1/40 p-4">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-gold-dim/40 bg-gold/5 text-gold"><Icon className="h-4 w-4" /></span>
+                        <div>
+                          <p className="text-[13px] font-semibold text-foreground">{meta.label}</p>
+                          <p className="text-[11px] text-muted-foreground">{members.length} member{members.length === 1 ? "" : "s"} · {meta.authority}</p>
+                        </div>
+                      </div>
+                      <p className="mt-2.5 text-[11px] text-muted-foreground/80">{meta.blurb}</p>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {members.slice(0, 8).map((m) => <span key={m.id} title={m.username}><Avatar name={m.username} size={26} /></span>)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
+                      {["Role", "Members", "Approval Authority", "Scope"].map((h) => <th key={h} className="px-4 py-2 font-medium">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roles.map((role) => {
+                      const meta = roleMeta(role);
+                      return (
+                        <tr key={role} className="border-t border-border/40 hover:bg-surface-1/40">
+                          <td className="px-4 py-3 text-[13px] font-medium text-foreground">{meta.label}</td>
+                          <td className="px-4 py-3 text-[12px] text-muted-foreground">{users.filter((u) => u.role === role).length}</td>
+                          <td className="px-4 py-3 text-[12px] text-foreground">{meta.authority}</td>
+                          <td className="px-4 py-3 text-[12px] text-muted-foreground">{meta.blurb}</td>
+                        </tr>
                       );
                     })}
                   </tbody>
