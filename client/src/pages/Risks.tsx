@@ -7,6 +7,7 @@
  * inventing a number.
  */
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   AlertTriangle,
   Flame,
@@ -30,7 +31,7 @@ import owlMedallion from "@assets/mythos/owl-medallion.webp";
 import { cn } from "@/lib/utils";
 
 /* ---- live types (subset of the API shapes) ---------------------------- */
-interface ApiClient { id: string; name: string; status: string }
+interface ApiClient { id: string; name: string; status: string; lastTestDate: string | null }
 interface ApiFinding {
   id: string; type: string; severity: string | null; message: string | null;
   target: string | null; endpoint: string | null; status: string; ownerId: string | null;
@@ -119,7 +120,15 @@ const FILTERS = [
 
 export default function Risks() {
   const { data: clients = [] } = useQuery<ApiClient[]>({ queryKey: ["/api/clients"] });
-  const clientId = clients.find((c) => c.status === "active")?.id ?? clients[0]?.id ?? "";
+  const { data: tests = [] } = useQuery<{ clientId: string; startedAt: string; completedAt: string | null }[]>({ queryKey: ["/api/tests"] });
+  const [selClient, setSelClient] = useState("");
+  // default to the most recently scanned engagement so fresh results surface
+  const latestTest = tests.slice().sort((a, b) =>
+    new Date(b.completedAt || b.startedAt).getTime() - new Date(a.completedAt || a.startedAt).getTime(),
+  )[0];
+  const defaultClient = latestTest?.clientId
+    ?? clients.find((c) => c.status === "active")?.id ?? clients[0]?.id ?? "";
+  const clientId = selClient || defaultClient;
   const { data: users = [] } = useQuery<ApiUser[]>({ queryKey: ["/api/users/assignable"] });
   const { data, isLoading } = useQuery<FindingsView>({
     queryKey: ["/api/findings", { clientId }],
@@ -188,10 +197,20 @@ export default function Risks() {
         <StatCard label="Fixed" value={counts.fixed ?? 0} icon={CheckCircle2} sublabel="remediated & verified" />
       </div>
 
-      {/* filters */}
+      {/* filters -- Engagement is a live client selector */}
       <GlassCard hover={false} className="mt-5" bodyClassName="flex flex-wrap items-end gap-4">
-        {FILTERS.map((f) => <Select key={f.label} {...f} />)}
-        <button className="flex items-center gap-1.5 pb-2 text-[12px] font-medium text-gold hover:text-primary"><X className="h-3.5 w-3.5" /> Clear filters</button>
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[11px] font-medium text-muted-foreground">Engagement</span>
+          <select
+            value={clientId}
+            onChange={(e) => setSelClient(e.target.value)}
+            className="rounded-lg border border-border/60 bg-surface-1/50 px-3 py-2 text-[13px] text-foreground"
+          >
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        {FILTERS.slice(0, 4).map((f) => <Select key={f.label} {...f} />)}
+        <button onClick={() => setSelClient("")} className="flex items-center gap-1.5 pb-2 text-[12px] font-medium text-gold hover:text-primary"><X className="h-3.5 w-3.5" /> Clear filters</button>
       </GlassCard>
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">

@@ -53,7 +53,12 @@ function ReadinessDonut({ pct }: { pct: number }) {
 
 export default function Compliance() {
   const { data: clients = [] } = useQuery<ApiClient[]>({ queryKey: ["/api/clients"] });
-  const clientId = clients.find((c) => c.status === "active")?.id ?? clients[0]?.id ?? "";
+  const { data: tests = [] } = useQuery<{ clientId: string; startedAt: string; completedAt: string | null }[]>({ queryKey: ["/api/tests"] });
+  // default to the most recently scanned engagement so fresh ASVS results surface
+  const latestTest = tests.slice().sort((a, b) =>
+    new Date(b.completedAt || b.startedAt).getTime() - new Date(a.completedAt || a.startedAt).getTime(),
+  )[0];
+  const clientId = latestTest?.clientId ?? clients.find((c) => c.status === "active")?.id ?? clients[0]?.id ?? "";
   const { data, isLoading } = useQuery<ComplianceView>({ queryKey: [`/api/compliance/${clientId}`], enabled: clientId !== "" });
 
   const rows = data?.rows ?? [];
