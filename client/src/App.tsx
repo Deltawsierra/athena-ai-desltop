@@ -13,6 +13,7 @@ import SmoothScroll from "@/components/SmoothScroll";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import Overview from "@/pages/Overview";
 import PentestScan from "@/pages/PentestScan";
 import AthenaScan from "@/pages/AthenaScan";
 import Compliance from "@/pages/Compliance";
@@ -50,7 +51,7 @@ function AppRoutes({ admin }: { admin: boolean }) {
       <Route path="/login">
         <Redirect to="/dashboard" />
       </Route>
-      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/dashboard" component={Overview} />
       <Route path="/athena" component={AthenaScan} />
       <Route path="/clients" component={Clients} />
       <Route path="/tests" component={Tests} />
