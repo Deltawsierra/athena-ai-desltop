@@ -19,6 +19,7 @@ import AthenaReasoning from "@/components/athena/AthenaReasoning";
 import RiskDial from "@/components/athena/RiskDial";
 import { cn } from "@/lib/utils";
 import templeStorm from "@assets/mythos/temple-storm.webp";
+import { Divider } from "@/components/mythos/Ornament";
 import {
   SAMPLE_SCAN,
   SCAN_STAGES,
@@ -111,6 +112,8 @@ export default function AthenaScan() {
           </div>
         </div>
       </div>
+
+      <Divider variant="astrolabe" className="mt-5" />
 
       {/* ---- Top row ----------------------------------------------------- */}
       <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[330px_minmax(0,1fr)_360px]">

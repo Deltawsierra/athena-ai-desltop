@@ -7,7 +7,7 @@
  */
 import { motion, useReducedMotion } from "framer-motion";
 import { Check, Loader2, Clock, Circle } from "lucide-react";
-import MythosMark from "../MythosMark";
+import mythosGlyph from "@assets/mythos/mark-glyph.webp";
 import { cn } from "@/lib/utils";
 import {
   MODULE_STATE_META,
@@ -159,7 +159,7 @@ function Ring({ percent }: { percent: number }) {
 
       {/* center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-        <MythosMark className="h-8 w-8 opacity-90" />
+        <img src={mythosGlyph} alt="" aria-hidden="true" className="h-8 w-8 select-none object-contain opacity-90" />
         <span className="athena-figure text-4xl font-semibold text-foreground">
           {percent}%
         </span>

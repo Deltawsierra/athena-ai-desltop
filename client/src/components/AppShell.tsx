@@ -37,10 +37,18 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ReactNode } from "react";
-import MythosMark from "./MythosMark";
 import ThemeToggle from "./ThemeToggle";
 import { cn } from "@/lib/utils";
 import athenaStatue from "@assets/mythos/athena-statue.webp";
+import mythosGlyph from "@assets/mythos/mark-glyph.webp";
+import navOverview from "@assets/mythos/nav/overview.webp";
+import navAthena from "@assets/mythos/nav/athena.webp";
+import navDeployments from "@assets/mythos/nav/deployments.webp";
+import navEvidence from "@assets/mythos/nav/evidence.webp";
+import navRisks from "@assets/mythos/nav/risks.webp";
+import navCompliance from "@assets/mythos/nav/compliance.webp";
+import navTeams from "@assets/mythos/nav/teams.webp";
+import navSettings from "@assets/mythos/nav/settings.webp";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +62,8 @@ interface NavItem {
   path: string;
   label: string;
   icon: LucideIcon;
+  /** Optional struck-brass icon; falls back to the lucide `icon` when absent. */
+  img?: string;
   admin?: boolean;
 }
 
@@ -61,14 +71,14 @@ interface NavItem {
  *  trace the estate, hold the evidence, weigh the risk, prove compliance,
  *  run the team, tune the machine. */
 const PRIMARY: NavItem[] = [
-  { path: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { path: "/athena", label: "Athena", icon: ShieldHalf },
-  { path: "/clients", label: "Deployments", icon: Boxes },
-  { path: "/evidence", label: "Evidence", icon: FileCheck2, admin: true },
-  { path: "/findings", label: "Risks", icon: AlertTriangle },
-  { path: "/compliance", label: "Compliance", icon: ScrollText },
-  { path: "/admin", label: "Teams", icon: Users, admin: true },
-  { path: "/settings", label: "Settings", icon: SettingsIcon, admin: true },
+  { path: "/dashboard", label: "Overview", icon: LayoutDashboard, img: navOverview },
+  { path: "/athena", label: "Athena", icon: ShieldHalf, img: navAthena },
+  { path: "/clients", label: "Deployments", icon: Boxes, img: navDeployments },
+  { path: "/evidence", label: "Evidence", icon: FileCheck2, img: navEvidence, admin: true },
+  { path: "/findings", label: "Risks", icon: AlertTriangle, img: navRisks },
+  { path: "/compliance", label: "Compliance", icon: ScrollText, img: navCompliance },
+  { path: "/admin", label: "Teams", icon: Users, img: navTeams, admin: true },
+  { path: "/settings", label: "Settings", icon: SettingsIcon, img: navSettings, admin: true },
 ];
 
 /** Everything else the app can do, kept reachable without crowding the pitch. */
@@ -117,12 +127,24 @@ function NavRow({ item, active }: { item: NavItem; active: boolean }) {
               : "bg-transparent group-hover:bg-primary/40",
           )}
         />
-        <Icon
-          className={cn(
-            "h-[18px] w-[18px] shrink-0",
-            active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-          )}
-        />
+        {item.img ? (
+          <img
+            src={item.img}
+            alt=""
+            aria-hidden="true"
+            className={cn(
+              "h-[22px] w-[22px] shrink-0 select-none object-contain transition-opacity",
+              active ? "opacity-100" : "opacity-70 group-hover:opacity-100",
+            )}
+          />
+        ) : (
+          <Icon
+            className={cn(
+              "h-[18px] w-[18px] shrink-0",
+              active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+            )}
+          />
+        )}
         <span className="truncate">{item.label}</span>
       </a>
     </Link>
@@ -149,7 +171,7 @@ export default function AppShell({ children, onLogout, isAdmin, username }: AppS
         {/* Brand */}
         <Link href="/dashboard">
           <a className="flex items-center gap-3 px-5 pb-5 pt-6" data-testid="link-brand">
-            <MythosMark className="h-8 w-8" />
+            <img src={mythosGlyph} alt="" aria-hidden="true" className="h-8 w-8 shrink-0 select-none object-contain" />
             <div className="flex flex-col leading-none">
               <span className="text-[17px] font-semibold tracking-[0.18em] text-foreground">
                 MYTHOS

@@ -30,8 +30,9 @@ import {
   Tooltip,
 } from "recharts";
 import GlassCard from "@/components/GlassCard";
-import MythosMark from "@/components/MythosMark";
+import mythosGlyph from "@assets/mythos/mark-glyph.webp";
 import PageHero from "@/components/mythos/PageHero";
+import { Divider } from "@/components/mythos/Ornament";
 import StatCard from "@/components/mythos/StatCard";
 import { Label, SeverityPill, StatusPill, type Severity } from "@/components/mythos/atoms";
 import { cn } from "@/lib/utils";
@@ -128,7 +129,7 @@ function RiskPosture() {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-        <MythosMark className="h-8 w-8" />
+        <img src={mythosGlyph} alt="" aria-hidden="true" className="h-8 w-8 select-none object-contain" />
         <span className="font-serif text-lg font-semibold text-gold">Moderate Risk</span>
       </div>
     </div>
@@ -144,6 +145,7 @@ export default function Overview() {
         background="vista"
         verbs={["Analyze", "Evidence", "Deploy"]}
       />
+      <Divider variant="astrolabe" className="mt-5" />
 
       {/* headline metrics */}
       <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-5">

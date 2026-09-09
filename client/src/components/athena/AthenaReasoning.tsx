@@ -5,7 +5,7 @@
  * cannot watch is a scan people cannot trust; this is the window.
  */
 import { motion } from "framer-motion";
-import athenaOwl from "@assets/generated_images/athena-mark.png";
+import athenaOwl from "@assets/mythos/owl-medallion.webp";
 import type { ReasoningEntry } from "@/lib/athenaScan";
 
 export default function AthenaReasoning({
@@ -34,7 +34,7 @@ export default function AthenaReasoning({
         <img
           src={athenaOwl}
           alt="Athena"
-          className="h-9 w-9 shrink-0 rounded-full border border-gold-dim/40 bg-surface-1 object-contain p-1"
+          className="h-9 w-9 shrink-0 select-none object-contain"
         />
         <p className="text-sm italic leading-relaxed text-foreground/90">
           “{narration}”
