@@ -56,7 +56,7 @@ function ModuleChip({
     <div
       data-testid={`module-${module.id}`}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-colors",
+        "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors",
         align === "left" && "flex-row-reverse text-right",
         live
           ? "border-primary/50 bg-primary/[0.06] shadow-[var(--glow-primary)]"
@@ -90,9 +90,9 @@ function ModuleChip({
 
 function Ring({ percent }: { percent: number }) {
   const still = useReducedMotion();
-  const size = 232;
-  const stroke = 6;
-  const r = (size - stroke) / 2 - 20;
+  const size = 272;
+  const stroke = 7;
+  const r = (size - stroke) / 2 - 22;
   const c = 2 * Math.PI * r;
   const dash = (percent / 100) * c;
 
@@ -100,8 +100,8 @@ function Ring({ percent }: { percent: number }) {
   const ticks = Array.from({ length: 72 }, (_, i) => {
     const swept = i / 72 <= percent / 100;
     const angle = (i / 72) * 2 * Math.PI - Math.PI / 2;
-    const inner = r + 9;
-    const outer = r + (swept ? 17 : 13);
+    const inner = r + 10;
+    const outer = r + (swept ? 20 : 15);
     return {
       x1: size / 2 + Math.cos(angle) * inner,
       y1: size / 2 + Math.sin(angle) * inner,
@@ -112,7 +112,7 @@ function Ring({ percent }: { percent: number }) {
   });
 
   return (
-    <div className="relative mx-auto aspect-square w-[232px] max-w-full">
+    <div className="relative mx-auto aspect-square w-[272px] max-w-full">
       <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full -rotate-90">
         <defs>
           <linearGradient id="ring-gold" x1="0" y1="0" x2="1" y2="1">
@@ -153,14 +153,14 @@ function Ring({ percent }: { percent: number }) {
           initial={{ strokeDashoffset: still ? c - dash : c }}
           animate={{ strokeDashoffset: c - dash }}
           transition={{ duration: still ? 0 : 1.6, ease: "easeOut" }}
-          style={{ filter: "drop-shadow(0 0 6px hsl(44 85% 60% / 0.6))" }}
+          style={{ filter: "drop-shadow(0 0 8px hsl(44 88% 62% / 0.75))" }}
         />
       </svg>
 
       {/* center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-        <MythosMark className="h-7 w-7 opacity-90" />
-        <span className="athena-figure text-3xl font-semibold text-foreground">
+        <MythosMark className="h-8 w-8 opacity-90" />
+        <span className="athena-figure text-4xl font-semibold text-foreground">
           {percent}%
         </span>
         <span className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
@@ -192,8 +192,8 @@ export default function ScanProgress({
         </p>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 items-center gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-        <div className="order-2 space-y-2.5 lg:order-1">
+      <div className="mt-8 grid grid-cols-1 items-center gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+        <div className="order-2 space-y-3.5 lg:order-1">
           {left.map((m) => (
             <ModuleChip key={m.id} module={m} align="left" />
           ))}
@@ -203,14 +203,14 @@ export default function ScanProgress({
           <Ring percent={percent} />
         </div>
 
-        <div className="order-3 space-y-2.5">
+        <div className="order-3 space-y-3.5">
           {right.map((m) => (
             <ModuleChip key={m.id} module={m} align="right" />
           ))}
         </div>
       </div>
 
-      <p className="mt-6 text-center text-[10px] uppercase tracking-[0.28em] text-muted-foreground/60">
+      <p className="mt-8 text-center text-[10px] uppercase tracking-[0.28em] text-muted-foreground/60">
         Probing deeper. A safer tomorrow.
       </p>
     </div>
