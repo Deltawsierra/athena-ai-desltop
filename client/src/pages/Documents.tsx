@@ -157,7 +157,7 @@ export default function Documents() {
                 transition={{ duration: 1.2, delay: 0.3 }}
               >
                 <FileText className="w-10 h-10 text-primary" />
-                Document <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Management</span>
+                Document <span className="bg-gradient-to-r from-gold via-primary to-gold-dim bg-clip-text text-transparent">Management</span>
               </motion.h1>
               <div className="athena-meander max-w-xs" aria-hidden="true" />
               <motion.p

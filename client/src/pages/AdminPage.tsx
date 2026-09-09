@@ -187,7 +187,7 @@ export default function AdminPage() {
                 transition={{ duration: 1.2, delay: 0.3 }}
               >
                 <Settings className="w-10 h-10 text-primary" />
-                Admin <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Panel</span>
+                Admin <span className="bg-gradient-to-r from-gold via-primary to-gold-dim bg-clip-text text-transparent">Panel</span>
               </motion.h1>
               <div className="athena-meander max-w-xs" aria-hidden="true" />
               <motion.p

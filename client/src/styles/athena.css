@@ -2,10 +2,17 @@
  * Athena's visual system.
  *
  * The palette is built around one idea: this is an instrument, not a game.
- * Deep near-black grounds so the data is the brightest thing on screen, a
- * single cyan primary that means "the system is speaking", and severity
- * colours that are only ever used for severity -- never for decoration, so
- * that a red pixel always means something.
+ * A warm obsidian ground -- lamplight on stone rather than a blue screen --
+ * so the data is the brightest thing present, a single gold primary that
+ * means "the system is speaking", and severity colours that are only ever
+ * used for severity, never for decoration, so a red pixel always means
+ * something.
+ *
+ * Gold carries the voice because Athena is the one doing the looking. It was
+ * cyan here once, with gold held back for judgement alone; the two ended up
+ * competing for the same job, and the brass reads warmer against near-black
+ * without ever being mistaken for a severity. Amber is pushed toward orange
+ * for exactly that reason -- medium severity and the chrome must not rhyme.
  *
  * Everything is defined on top of the existing shadcn token names, so the
  * components already built keep working while looking entirely different.
@@ -22,8 +29,8 @@
 /*                                                                         */
 /* This is not the dark palette inverted. Two things change deliberately:   */
 /* the hues are held and the lightness is re-picked against white, because  */
-/* a cyan that reads as "live" at 52% on near-black is a highlighter pen at */
-/* the same value on paper; and depth stops being carried by glow, which    */
+/* a gold that reads as "live" at 56% on near-black is a wet daub of paint */
+/* at the same value on paper; and depth stops being carried by glow, which */
 /* needs a dark ground to exist at all, and is carried by borders instead.  */
 /*                                                                         */
 /* Severity keeps its meaning and loses its brightness. A critical red has  */
@@ -47,98 +54,100 @@
  */
 
 :root:not(.dark) {
-  --background: 210 30% 98%;
-  --surface-0: 210 28% 96%;
-  --surface-1: 210 26% 93%;
-  --surface-2: 210 22% 89%;
+  --background: 40 30% 97%;
+  --surface-0: 40 26% 95%;
+  --surface-1: 38 22% 92%;
+  --surface-2: 38 18% 88%;
 
-  --card: 0 0% 100%;
-  --card-border: 200 40% 78%;
-  --border: 214 20% 84%;
+  --card: 40 40% 99%;
+  --card-border: 40 28% 80%;
+  --border: 38 18% 84%;
 
-  --foreground: 222 40% 12%;
-  --muted-foreground: 215 16% 40%;
+  --foreground: 33 30% 12%;
+  --muted-foreground: 36 12% 40%;
 
-  /* Cyan at dark-palette brightness is unreadable on white, so the primary
-     drops into the teal it becomes when you turn the lights on. Same hue,
+  /* Gold at dark-palette brightness is a pale smear on paper, so the primary
+     drops into the bronze it becomes when you turn the lights on. Same metal,
      same meaning. */
-  --primary: 190 84% 30%;
+  --primary: 38 72% 34%;
   --primary-foreground: 0 0% 100%;
 
-  --accent-violet: 268 60% 45%;
-  --accent-amber: 34 88% 38%;
+  --accent-violet: 268 55% 45%;
+  --accent-amber: 32 88% 36%;
 
   --sev-critical: 348 78% 42%;
   --sev-high: 14 82% 40%;
-  --sev-medium: 34 88% 34%;
-  --sev-low: 195 78% 32%;
-  --sev-info: 215 18% 42%;
+  --sev-medium: 32 88% 33%;
+  --sev-low: 205 72% 34%;
+  --sev-info: 36 12% 42%;
 
-  --chart-1: 190 84% 34%;
-  --chart-2: 268 60% 50%;
-  --chart-3: 34 88% 40%;
-  --chart-4: 348 78% 46%;
-  --chart-5: 158 62% 32%;
+  --chart-1: 38 72% 36%;
+  --chart-2: 32 88% 40%;
+  --chart-3: 348 78% 46%;
+  --chart-4: 205 72% 38%;
+  --chart-5: 158 50% 32%;
 
-  --ring: 190 84% 30%;
+  --ring: 38 72% 34%;
 
   /* Glow needs a dark ground to be anything but a smudge. On paper the same
      job -- "this surface is raised" -- is done by an edge and a shadow. */
-  --glow-primary: 0 0 0 1px hsl(190 84% 30% / 0.28);
+  --glow-primary: 0 0 0 1px hsl(38 72% 34% / 0.28);
   --glow-critical: 0 0 0 1px hsl(348 78% 42% / 0.32);
   --edge: inset 0 1px 0 hsl(0 0% 100% / 0.9);
 
-  /* Gold on white is a pale smear, so judgement becomes bronze. It is the
-     same reservation: an approval, a verified chain, a signature that
-     checked out, and never severity. */
-  --gold: 38 72% 34%;
-  --gold-dim: 38 45% 46%;
-  --glow-gold: 0 0 0 1px hsl(38 72% 34% / 0.3);
+  --gold: 38 72% 32%;
+  --gold-dim: 38 40% 46%;
+  --glow-gold: 0 0 0 1px hsl(38 72% 32% / 0.3);
 }
-
 :root.dark {
-  /* Ground. Not pure black: a slight blue cast reads as depth on an OLED
-     panel and stops large fills looking like a dead pixel field. */
-  --background: 224 47% 4%;
-  --surface-0: 225 40% 6%;
-  --surface-1: 224 36% 9%;
-  --surface-2: 223 32% 13%;
+  /* Ground. Not pure black and not blue: a warm cast, because the room this
+     is meant to feel like is lit by lamps on stone rather than by a monitor.
+     It also stops large fills reading as a dead pixel field on OLED. */
+  --background: 33 30% 4%;
+  --surface-0: 33 26% 6%;
+  --surface-1: 33 22% 9%;
+  --surface-2: 33 18% 13%;
 
-  --card: 224 36% 8%;
-  --card-border: 200 60% 20%;
-  --border: 220 25% 16%;
+  --card: 33 24% 7%;
+  --card-border: 41 38% 20%;
+  --border: 36 20% 15%;
 
-  --foreground: 190 30% 96%;
-  --muted-foreground: 210 16% 62%;
+  /* Warm white. A neutral white against this ground looks blue by contrast. */
+  --foreground: 40 32% 94%;
+  --muted-foreground: 38 15% 62%;
 
-  /* The one accent that means "live". Used for the active state, the focus
-     ring, and the leading edge of anything animating. */
-  --primary: 184 92% 52%;
-  --primary-foreground: 224 47% 6%;
+  /* The one accent that means "live": the active state, the focus ring, and
+     the leading edge of anything animating. Brass rather than yellow -- it
+     has to sit next to amber without the two being read as the same signal. */
+  --primary: 44 80% 56%;
+  --primary-foreground: 35 45% 7%;
 
-  --accent-violet: 268 88% 68%;
-  --accent-amber: 38 96% 60%;
+  --accent-violet: 268 55% 62%;
+  --accent-amber: 34 92% 58%;
 
   /* Severity. These five are reserved. A component that needs a colour and
-     is not expressing severity takes a surface or the primary. */
-  --sev-critical: 348 90% 60%;
-  --sev-high: 14 92% 58%;
-  --sev-medium: 38 96% 60%;
-  --sev-low: 190 85% 55%;
-  --sev-info: 215 20% 55%;
+     is not expressing severity takes a surface or the primary. Medium is
+     pulled toward orange so that it cannot be confused with the gold chrome
+     around it -- the whole point of a reserved colour is that seeing it
+     tells you something. */
+  --sev-critical: 352 82% 58%;
+  --sev-high: 18 88% 56%;
+  --sev-medium: 34 92% 55%;
+  --sev-low: 205 75% 58%;
+  --sev-info: 38 12% 55%;
 
-  --chart-1: 184 92% 52%;
-  --chart-2: 268 88% 68%;
-  --chart-3: 38 96% 60%;
-  --chart-4: 348 90% 60%;
-  --chart-5: 158 78% 48%;
+  --chart-1: 44 80% 56%;
+  --chart-2: 34 92% 58%;
+  --chart-3: 352 82% 58%;
+  --chart-4: 205 75% 58%;
+  --chart-5: 158 45% 48%;
 
-  --ring: 184 92% 52%;
+  --ring: 44 80% 56%;
 
   /* Depth is carried by light, not by borders. */
-  --glow-primary: 0 0 24px hsl(184 92% 52% / 0.35);
-  --glow-critical: 0 0 24px hsl(348 90% 60% / 0.4);
-  --edge: inset 0 1px 0 hsl(0 0% 100% / 0.06);
+  --glow-primary: 0 0 24px hsl(44 80% 56% / 0.3);
+  --glow-critical: 0 0 24px hsl(352 82% 58% / 0.4);
+  --edge: inset 0 1px 0 hsl(44 60% 85% / 0.07);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -153,7 +162,7 @@
   );
   border: 1px solid hsl(var(--border));
   border-radius: 14px;
-  box-shadow: var(--edge), 0 18px 40px -24px hsl(224 60% 2% / 0.9);
+  box-shadow: var(--edge), 0 18px 40px -24px hsl(33 50% 2% / 0.92);
   backdrop-filter: blur(14px) saturate(1.2);
 }
 
@@ -272,10 +281,11 @@
 /* Olympus                                                                 */
 /*                                                                         */
 /* The brand mark is an owl and a shield drawn as one continuous line, and */
-/* the gradient runs cobalt through indigo into gold. That is the whole    */
-/* idea and it is worth stating: cyan is the machine speaking, gold is     */
-/* the judgement. A temple is instruments and authority in one building,   */
-/* and so is this.                                                        */
+/* the gradient runs bronze through amber into lit gold. That is the whole */
+/* idea and it is worth stating: gold is the machine speaking, and it is    */
+/* also the judgement -- one voice, because Athena is the one who looks and */
+/* the one who decides. A temple is instruments and authority in one        */
+/* building, and so is this.                                               */
 /*                                                                         */
 /* Everything below is geometry -- brackets, a meander, fluting, a plinth. */
 /* No marble, no serifs, no laurel. The Greek reference has to survive     */
@@ -284,13 +294,15 @@
 /* ---------------------------------------------------------------------- */
 
 :root.dark {
-  /* The second accent, from the logo's right wing. Reserved for judgement:
-     an approval, a verified chain, a signature that checked out. Never for
-     decoration, and never for severity -- amber already means medium. */
-  --gold: 43 96% 62%;
-  --gold-dim: 43 60% 44%;
+  /* Gold now carries the primary, so these are not a second accent: they are
+     the same metal one step brighter and one step darker, for the emblem and
+     for the hairline. `--gold` is the lit edge -- a wordmark, a mark, the top
+     of a ring. `--gold-dim` is the unlit one, for rules and borders that need
+     to be gold without asking to be read. */
+  --gold: 44 85% 62%;
+  --gold-dim: 43 45% 40%;
 
-  --glow-gold: 0 0 24px hsl(43 96% 62% / 0.3);
+  --glow-gold: 0 0 28px hsl(44 85% 62% / 0.28);
 }
 
 /* Corner brackets, for a surface that is not a GlassCard.

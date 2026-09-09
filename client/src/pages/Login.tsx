@@ -55,15 +55,15 @@ export default function Login({ onAuthenticated }: LoginProps) {
               className="h-20 w-20"
             />
           </div>
-          {/* The mark's own gradient -- cobalt through indigo into gold --
-              rather than the cyan-to-purple this had, which is in the logo
-              nowhere. */}
+          {/* A warm gold sweep -- lit gold through brass -- to match the
+              Mythos primary. The violet middle stop this had pulled the
+              title purple, which is nowhere in the brand. */}
           <h1
             className="text-3xl font-bold mb-2 bg-clip-text text-transparent"
             style={{
               backgroundImage:
-                "linear-gradient(100deg, hsl(var(--primary)), " +
-                "hsl(var(--accent-violet)) 38%, hsl(var(--gold)) 78%)",
+                "linear-gradient(100deg, hsl(var(--gold)), " +
+                "hsl(var(--primary)) 45%, hsl(var(--gold-dim)) 100%)",
               // Both spellings. Tailwind's bg-clip-text sets the prefixed one
               // and an inline backgroundImage on the same element does not
               // inherit it, so the heading rendered as transparent text over

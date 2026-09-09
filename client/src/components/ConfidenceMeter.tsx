@@ -19,7 +19,7 @@ export default function ConfidenceMeter({ value, label = "Confidence", className
 
   const getColor = (val: number) => {
     if (val >= 80) return "from-green-500 to-emerald-500";
-    if (val >= 60) return "from-blue-500 to-cyan-500";
+    if (val >= 60) return "from-amber to-gold";
     if (val >= 40) return "from-yellow-500 to-orange-500";
     return "from-orange-500 to-red-500";
   };

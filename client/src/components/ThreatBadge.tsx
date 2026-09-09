@@ -29,8 +29,8 @@ const severityConfig = {
     pulse: false,
   },
   low: {
-    bg: "bg-blue-500/10 border-blue-500/30",
-    text: "text-blue-600 dark:text-blue-400",
+    bg: "bg-primary/10 border-primary/30",
+    text: "text-primary dark:text-gold",
     icon: Info,
     pulse: false,
   },

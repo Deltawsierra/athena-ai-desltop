@@ -92,7 +92,7 @@ export default function AuditLogs() {
               transition={{ duration: 1.2, delay: 0.3 }}
             >
               <FileText className="w-10 h-10 text-primary" />
-              Audit <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Logs</span>
+              Audit <span className="bg-gradient-to-r from-gold via-primary to-gold-dim bg-clip-text text-transparent">Logs</span>
             </motion.h1>
             <div className="athena-meander max-w-xs" aria-hidden="true" />
             <motion.p

@@ -89,6 +89,27 @@ export default {
           DEFAULT: "hsl(var(--magenta) / <alpha-value>)",
           foreground: "hsl(var(--magenta-foreground) / <alpha-value>)",
         },
+        // Mythos surfaces: three raised greys above the ground, for panels,
+        // inputs and chips.
+        "surface-0": "hsl(var(--surface-0) / <alpha-value>)",
+        "surface-1": "hsl(var(--surface-1) / <alpha-value>)",
+        "surface-2": "hsl(var(--surface-2) / <alpha-value>)",
+        // Gold: the primary metal and its unlit rule.
+        gold: {
+          DEFAULT: "hsl(var(--gold) / <alpha-value>)",
+          dim: "hsl(var(--gold-dim) / <alpha-value>)",
+        },
+        // The two secondary accents named in the palette.
+        violet: "hsl(var(--accent-violet) / <alpha-value>)",
+        amber: "hsl(var(--accent-amber) / <alpha-value>)",
+        // Severity. Reserved -- these classes should only ever colour severity.
+        sev: {
+          critical: "hsl(var(--sev-critical) / <alpha-value>)",
+          high: "hsl(var(--sev-high) / <alpha-value>)",
+          medium: "hsl(var(--sev-medium) / <alpha-value>)",
+          low: "hsl(var(--sev-low) / <alpha-value>)",
+          info: "hsl(var(--sev-info) / <alpha-value>)",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 
-import Navigation from "@/components/Navigation";
+import AppShell from "@/components/AppShell";
 import WebGLBoundary from "@/components/three/WebGLBoundary";
 import MagneticCursor from "@/components/MagneticCursor";
 import CursorGlow from "@/components/CursorGlow";
@@ -14,6 +14,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import PentestScan from "@/pages/PentestScan";
+import AthenaScan from "@/pages/AthenaScan";
 import Compliance from "@/pages/Compliance";
 import Findings from "@/pages/Findings";
 import CVEClassifier from "@/pages/CVEClassifier";
@@ -50,6 +51,7 @@ function AppRoutes({ admin }: { admin: boolean }) {
         <Redirect to="/dashboard" />
       </Route>
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/athena" component={AthenaScan} />
       <Route path="/clients" component={Clients} />
       <Route path="/tests" component={Tests} />
       <Route path="/documents" component={Documents} />
@@ -142,10 +144,9 @@ function App() {
     content = <Login onAuthenticated={handleAuthenticated} />;
   } else {
     content = (
-      <>
-        <Navigation onLogout={handleLogout} isAdmin={isAdmin(user)} username={user.username} />
+      <AppShell onLogout={handleLogout} isAdmin={isAdmin(user)} username={user.username}>
         <AppRoutes admin={isAdmin(user)} />
-      </>
+      </AppShell>
     );
   }
 
