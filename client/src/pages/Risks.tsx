@@ -21,7 +21,7 @@ import {
 import PageHero from "@/components/mythos/PageHero";
 import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
-import { Divider } from "@/components/mythos/Ornament";
+import { Divider, Corners } from "@/components/mythos/Ornament";
 import { SeverityPill, StatusPill, type Severity, type StatusTone } from "@/components/mythos/atoms";
 import owlMedallion from "@assets/mythos/owl-medallion.webp";
 import { cn } from "@/lib/utils";
@@ -138,7 +138,7 @@ export default function Risks() {
       <PageHero
         title="Risks"
         subtitle="Discover, prioritize, and remediate AI risks before they become real-world problems."
-        background="storm"
+        background="astrolabe"
         verbs={["Analyze", "Evidence", "Mitigate", "Strengthen"]}
       />
       <Divider variant="astrolabe" className="mt-5" />
@@ -186,7 +186,8 @@ export default function Risks() {
               </div>
             </GlassCard>
 
-            <GlassCard hover={false}>
+            <GlassCard hover={false} className="relative overflow-hidden">
+              <Corners />
               <p className="athena-label mb-3">Open Risks by Category</p>
               <div className="flex items-center gap-4">
                 <Donut segments={DONUT} center="23" sub="Open Risks" />
@@ -272,7 +273,8 @@ export default function Risks() {
             </ul>
           </GlassCard>
 
-          <GlassCard hover={false}>
+          <GlassCard hover={false} className="relative overflow-hidden">
+            <Corners />
             <div className="mb-3 flex items-center justify-between">
               <p className="athena-label">Remediation Progress</p>
               <span className="flex items-center gap-1 text-[11px] text-gold">View all <ChevronRight className="h-3 w-3" /></span>

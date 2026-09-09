@@ -111,7 +111,7 @@ export default function Settings() {
       <PageHero
         title="Settings"
         subtitle="Configure your environment. Strengthen security. Enable responsible AI at scale."
-        background="astrolabe"
+        background="vista"
         verbs={["Trusted", "AI Adoption", "At Enterprise", "Scale"]}
       />
       <Divider variant="key" className="mt-5" />

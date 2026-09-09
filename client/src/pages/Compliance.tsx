@@ -16,7 +16,7 @@ import {
 import PageHero from "@/components/mythos/PageHero";
 import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
-import { Divider } from "@/components/mythos/Ornament";
+import { Divider, Corners } from "@/components/mythos/Ornament";
 import { FrameworkBadge as Badge } from "@/components/mythos/atoms";
 import { cn } from "@/lib/utils";
 
@@ -229,7 +229,8 @@ export default function Compliance() {
 
         {/* right rail */}
         <div className="space-y-5">
-          <GlassCard hover={false} ruling>
+          <GlassCard hover={false} ruling className="relative overflow-hidden">
+            <Corners />
             <div className="mb-3 flex items-center justify-between">
               <p className="athena-label">SOC 2 Readiness</p>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Active</span>

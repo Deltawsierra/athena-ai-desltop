@@ -44,9 +44,27 @@ export function Divider({
       <img
         src={DIVIDERS[variant]}
         alt=""
-        className="h-12 w-auto max-w-full select-none opacity-90"
+        className="h-10 w-auto max-w-full select-none opacity-85"
       />
     </div>
+  );
+}
+
+/**
+ * Four brass corner brackets around a card. The parent must be
+ * `relative overflow-hidden`; the corners sit just inside its edges. Keep them
+ * for a single showcase surface per page -- a framed figure, a hero panel --
+ * not every card, or the page turns to filigree.
+ */
+export function Corners({ size = 34 }: { size?: number }) {
+  const common = "pointer-events-none absolute select-none opacity-70";
+  return (
+    <>
+      <img src={corner} alt="" aria-hidden="true" style={{ width: size, height: size }} className={cn(common, "left-0 top-0")} />
+      <img src={corner} alt="" aria-hidden="true" style={{ width: size, height: size, transform: "scaleX(-1)" }} className={cn(common, "right-0 top-0")} />
+      <img src={corner} alt="" aria-hidden="true" style={{ width: size, height: size, transform: "scaleY(-1)" }} className={cn(common, "bottom-0 left-0")} />
+      <img src={corner} alt="" aria-hidden="true" style={{ width: size, height: size, transform: "scale(-1,-1)" }} className={cn(common, "bottom-0 right-0")} />
+    </>
   );
 }
 

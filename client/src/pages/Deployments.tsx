@@ -164,7 +164,7 @@ export default function Deployments() {
       <PageHero
         title="Deployments"
         subtitle="Review and manage AI systems before trust expands."
-        background="council"
+        background="sunburst"
         verbs={["Scan", "Analyze", "Evidence", "Deploy"]}
       />
       <Divider variant="key" className="mt-5" />

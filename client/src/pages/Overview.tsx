@@ -32,7 +32,7 @@ import {
 import GlassCard from "@/components/GlassCard";
 import mythosGlyph from "@assets/mythos/mark-glyph.webp";
 import PageHero from "@/components/mythos/PageHero";
-import { Divider } from "@/components/mythos/Ornament";
+import { Divider, RingFrame } from "@/components/mythos/Ornament";
 import StatCard from "@/components/mythos/StatCard";
 import { Label, SeverityPill, StatusPill, type Severity } from "@/components/mythos/atoms";
 import { cn } from "@/lib/utils";
@@ -107,7 +107,7 @@ const OPEN_ISSUES = [
 ] as { t: string; sev: Severity }[];
 
 function RiskPosture() {
-  const size = 190;
+  const size = 150;
   const stroke = 12;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -161,7 +161,9 @@ export default function Overview() {
         <GlassCard hover={false}>
           <Label>Overall Risk Posture</Label>
           <div className="mt-4">
-            <RiskPosture />
+            <RingFrame variant="ring" className="mx-auto w-[248px]">
+              <RiskPosture />
+            </RingFrame>
           </div>
           <p className="mt-4 text-center text-[12px] leading-relaxed text-muted-foreground">
             Your AI program shows moderate risk. Address high-priority findings to reduce exposure and maintain momentum.
