@@ -40,7 +40,7 @@ import { ReactNode } from "react";
 import MythosMark from "./MythosMark";
 import ThemeToggle from "./ThemeToggle";
 import { cn } from "@/lib/utils";
-import athenaOwl from "@assets/generated_images/athena-mark.png";
+import athenaStatue from "@assets/mythos/athena-statue.webp";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -177,10 +177,10 @@ export default function AppShell({ children, onLogout, isAdmin, username }: AppS
         {/* Emblem + creed */}
         <div className="relative overflow-hidden border-t border-border/40 px-5 py-6">
           <img
-            src={athenaOwl}
+            src={athenaStatue}
             alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute -bottom-6 -left-4 h-32 w-32 opacity-[0.08] grayscale"
+            className="pointer-events-none absolute -bottom-8 -right-6 h-40 w-auto opacity-[0.22] [mask-image:linear-gradient(to_top,transparent,black_45%)]"
           />
           <div className="relative flex flex-col gap-1 text-[10px] uppercase tracking-[0.22em] text-muted-foreground/60">
             <span>Wisdom</span>

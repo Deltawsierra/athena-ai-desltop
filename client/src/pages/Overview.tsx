@@ -141,6 +141,7 @@ export default function Overview() {
       <PageHero
         title="Overview"
         subtitle="Your AI assurance program at a glance. Manage risk. Enable innovation. Build trust."
+        background="vista"
         verbs={["Analyze", "Evidence", "Deploy"]}
       />
 

@@ -18,6 +18,7 @@ import ScanProgress from "@/components/athena/ScanProgress";
 import AthenaReasoning from "@/components/athena/AthenaReasoning";
 import RiskDial from "@/components/athena/RiskDial";
 import { cn } from "@/lib/utils";
+import templeStorm from "@assets/mythos/temple-storm.webp";
 import {
   SAMPLE_SCAN,
   SCAN_STAGES,
@@ -76,25 +77,37 @@ export default function AthenaScan() {
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8 md:py-8">
       {/* ---- Hero -------------------------------------------------------- */}
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div>
-          <h1 className="font-serif text-5xl font-semibold tracking-tight text-foreground">
-            Athena
-          </h1>
-          <p className="mt-2 text-[15px] text-muted-foreground">
-            See the system. Understand the risks. Deploy with confidence.
-          </p>
-        </div>
-        <div className="flex items-start gap-10 pt-2">
-          <ul className="space-y-1 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
-            {SCAN_STAGES.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ul>
-          <div className="space-y-1 border-l border-border/50 pl-10 text-[10px] uppercase tracking-[0.24em]">
-            <p className="text-gold">Greater</p>
-            <p className="text-gold">Clarity</p>
-            <p className="mt-2 text-muted-foreground/70">Safer AI</p>
+      <div className="relative overflow-hidden rounded-2xl border border-border/50">
+        <img
+          src={templeStorm}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-right"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-background/40" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/30" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/70 to-transparent" />
+
+        <div className="relative flex flex-wrap items-start justify-between gap-6 px-6 py-7 md:px-8">
+          <div>
+            <h1 className="font-serif text-5xl font-semibold tracking-tight text-foreground [text-shadow:0_2px_18px_hsl(var(--background)/0.8)]">
+              Athena
+            </h1>
+            <p className="mt-2 text-[15px] text-muted-foreground">
+              See the system. Understand the risks. Deploy with confidence.
+            </p>
+          </div>
+          <div className="flex items-start gap-10 pt-2">
+            <ul className="hidden space-y-1 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70 sm:block">
+              {SCAN_STAGES.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+            <div className="space-y-1 border-l border-border/50 pl-10 text-[10px] uppercase tracking-[0.24em]">
+              <p className="text-gold">Greater</p>
+              <p className="text-gold">Clarity</p>
+              <p className="mt-2 text-muted-foreground/70">Safer AI</p>
+            </div>
           </div>
         </div>
       </div>
