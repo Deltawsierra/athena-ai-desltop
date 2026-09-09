@@ -232,7 +232,7 @@ export default function Tests() {
                 transition={{ duration: 1.2, delay: 0.3 }}
               >
                 <Shield className="w-10 h-10 text-primary" />
-                Security <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Tests</span>
+                Security <span className="bg-gradient-to-r from-gold via-primary to-gold-dim bg-clip-text text-transparent">Tests</span>
               </motion.h1>
               <div className="athena-meander max-w-xs" aria-hidden="true" />
               <motion.p

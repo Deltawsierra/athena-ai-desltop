@@ -129,7 +129,7 @@ export default function AIChat() {
               transition={{ duration: 1.2, delay: 0.3 }}
             >
               <MessageSquare className="w-10 h-10 text-primary" />
-              AI <span className="bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent">Assistant</span>
+              AI <span className="bg-gradient-to-r from-gold via-primary to-gold-dim bg-clip-text text-transparent">Assistant</span>
             </motion.h1>
             <div className="athena-meander max-w-xs" aria-hidden="true" />
             <motion.p
@@ -217,12 +217,12 @@ export default function AIChat() {
                       >
                         {/* Avatar */}
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                          isUser ? "bg-primary/20" : "bg-blue-500/20"
+                          isUser ? "bg-primary/20" : "bg-primary/20"
                         }`}>
                           {isUser ? (
                             <User className="w-5 h-5 text-primary" />
                           ) : (
-                            <Bot className="w-5 h-5 text-blue-500" />
+                            <Bot className="w-5 h-5 text-primary" />
                           )}
                         </div>
 

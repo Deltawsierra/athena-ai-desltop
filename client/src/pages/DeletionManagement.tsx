@@ -66,7 +66,7 @@ export default function DeletionManagement() {
       icon: Users,
       type: "clients",
       items: clients,
-      color: "text-blue-500",
+      color: "text-primary",
       getName: (item: any) => item.name,
       getDescription: (item: any) => item.company,
     },
@@ -204,7 +204,7 @@ export default function DeletionManagement() {
               <div className="grid gap-4 md:grid-cols-4">
                 <div className="text-center space-y-1">
                   <p className="text-sm text-muted-foreground">Total Clients</p>
-                  <p className="text-3xl font-bold text-blue-500" data-testid="text-total-clients">
+                  <p className="text-3xl font-bold text-primary" data-testid="text-total-clients">
                     {clients.length}
                   </p>
                 </div>

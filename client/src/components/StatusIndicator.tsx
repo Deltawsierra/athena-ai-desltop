@@ -16,9 +16,9 @@ const statusConfig = {
     textColor: "text-green-600 dark:text-green-400",
   },
   running: {
-    color: "bg-blue-500 animate-pulse-glow",
+    color: "bg-primary animate-pulse-glow",
     text: "Running",
-    textColor: "text-blue-600 dark:text-blue-400",
+    textColor: "text-primary dark:text-gold",
   },
   pending: {
     color: "bg-yellow-500 animate-pulse",

@@ -9,7 +9,7 @@ export default function NotFound() {
 
       <GlassCard className="max-w-md text-center relative z-10">
         <div className="mb-8">
-          <h1 className="text-8xl font-bold bg-gradient-to-r from-primary via-blue-500 to-purple bg-clip-text text-transparent mb-4">
+          <h1 className="text-8xl font-bold bg-gradient-to-r from-gold via-primary to-gold-dim bg-clip-text text-transparent mb-4">
             404
           </h1>
           <p className="text-2xl font-semibold mb-2">Page Not Found</p>
