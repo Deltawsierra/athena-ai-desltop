@@ -6,41 +6,38 @@
  * list beside a circle.
  */
 import { motion, useReducedMotion } from "framer-motion";
-import { Check, Loader2, Clock, Circle } from "lucide-react";
 import mythosGlyph from "@assets/mythos/mark-glyph.webp";
+import modDataBoundary from "@assets/mythos/modules/data-boundary.webp";
+import modCapabilityMap from "@assets/mythos/modules/capability-map.webp";
+import modPersonalContext from "@assets/mythos/modules/personal-context.webp";
+import modDataLifecycle from "@assets/mythos/modules/data-lifecycle.webp";
+import modTrainingReuse from "@assets/mythos/modules/training-reuse.webp";
+import modProviderAssurance from "@assets/mythos/modules/provider-assurance.webp";
+import modEffectiveAccess from "@assets/mythos/modules/effective-access.webp";
+import modAdversarial from "@assets/mythos/modules/adversarial.webp";
 import { cn } from "@/lib/utils";
 import {
   MODULE_STATE_META,
   type ScanModule,
-  type ModuleState,
 } from "@/lib/athenaScan";
 
-function StateGlyph({ state }: { state: ModuleState }) {
-  const tone = MODULE_STATE_META[state].tone;
-  if (state === "complete")
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-primary">
-        <Check className="h-3 w-3" strokeWidth={3} />
-      </span>
-    );
-  if (state === "scanning")
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      </span>
-    );
-  if (state === "pending")
-    return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-2 text-muted-foreground">
-        <Clock className="h-3 w-3" />
-      </span>
-    );
-  return (
-    <span className="flex h-5 w-5 items-center justify-center text-muted-foreground/60">
-      <Circle className="h-2 w-2 fill-current" />
-    </span>
-  );
-}
+/** The struck-brass emblem for each scan module, keyed by module id. */
+const MODULE_ICON: Record<string, string> = {
+  "data-boundary": modDataBoundary,
+  "capability-map": modCapabilityMap,
+  "personal-context": modPersonalContext,
+  "data-lifecycle": modDataLifecycle,
+  "training-reuse": modTrainingReuse,
+  "provider-assurance": modProviderAssurance,
+  "effective-access": modEffectiveAccess,
+  adversarial: modAdversarial,
+};
+
+const STATE_DOT: Record<string, string> = {
+  done: "bg-primary",
+  live: "bg-primary athena-live",
+  idle: "bg-muted-foreground/40",
+};
 
 function ModuleChip({
   module,
@@ -52,11 +49,12 @@ function ModuleChip({
   const meta = MODULE_STATE_META[module.state];
   const live = meta.tone === "live";
   const done = meta.tone === "done";
+  const icon = MODULE_ICON[module.id];
   return (
     <div
       data-testid={`module-${module.id}`}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors",
+        "flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors",
         align === "left" && "flex-row-reverse text-right",
         live
           ? "border-primary/50 bg-primary/[0.06] shadow-[var(--glow-primary)]"
@@ -65,7 +63,17 @@ function ModuleChip({
             : "border-border/40 bg-surface-0/40",
       )}
     >
-      <StateGlyph state={module.state} />
+      {icon && (
+        <img
+          src={icon}
+          alt=""
+          aria-hidden="true"
+          className={cn(
+            "h-9 w-9 shrink-0 select-none object-contain transition-opacity",
+            done || live ? "opacity-100" : "opacity-55",
+          )}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <p
           className={cn(
@@ -77,10 +85,12 @@ function ModuleChip({
         </p>
         <p
           className={cn(
-            "text-[11px] leading-tight",
+            "mt-0.5 flex items-center gap-1.5 text-[11px] leading-tight",
+            align === "left" && "flex-row-reverse",
             live ? "text-primary" : "text-muted-foreground/70",
           )}
         >
+          <span className={cn("h-1.5 w-1.5 rounded-full", STATE_DOT[meta.tone])} />
           {meta.label}
         </p>
       </div>
