@@ -105,17 +105,17 @@ interface AppShellProps {
 function NavRow({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
   return (
-    <Link href={item.path}>
-      <a
-        data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-        aria-current={active ? "page" : undefined}
-        className={cn(
-          "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-          active
-            ? "bg-primary/10 text-foreground"
-            : "text-muted-foreground hover:bg-surface-1/60 hover:text-foreground",
-        )}
-      >
+    <Link
+      href={item.path}
+      data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        active
+          ? "bg-primary/10 text-foreground"
+          : "text-muted-foreground hover:bg-surface-1/60 hover:text-foreground",
+      )}
+    >
         {/* The lit rail. Present on the active row, and a whisper on hover so
             the pointer has something to land on before the click. */}
         <span
@@ -146,7 +146,6 @@ function NavRow({ item, active }: { item: NavItem; active: boolean }) {
           />
         )}
         <span className="truncate">{item.label}</span>
-      </a>
     </Link>
   );
 }
@@ -169,15 +168,13 @@ export default function AppShell({ children, onLogout, isAdmin, username }: AppS
       {/* ---- Rail --------------------------------------------------------- */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border/60 bg-surface-0/70 backdrop-blur-md md:flex">
         {/* Brand */}
-        <Link href="/dashboard">
-          <a className="flex items-center gap-3 px-5 pb-5 pt-6" data-testid="link-brand">
-            <img src={mythosGlyph} alt="" aria-hidden="true" className="h-8 w-8 shrink-0 select-none object-contain" />
-            <div className="flex flex-col leading-none">
-              <span className="text-[17px] font-semibold tracking-[0.18em] text-foreground">
-                MYTHOS
-              </span>
-            </div>
-          </a>
+        <Link href="/dashboard" className="flex items-center gap-3 px-5 pb-5 pt-6" data-testid="link-brand">
+          <img src={mythosGlyph} alt="" aria-hidden="true" className="h-8 w-8 shrink-0 select-none object-contain" />
+          <div className="flex flex-col leading-none">
+            <span className="text-[17px] font-semibold tracking-[0.18em] text-foreground">
+              MYTHOS
+            </span>
+          </div>
         </Link>
         <p className="px-5 pb-5 text-[10px] uppercase leading-relaxed tracking-[0.22em] text-muted-foreground/70">
           AI security for
