@@ -2655,6 +2655,19 @@ export const FINDING_MAPPING: Record<string, FindingMapping> = {
     ],
     "why": "the only requirement whose text names OS command injection (\"operating system\")"
   },
+  "sql_injection": {
+    "requirements": [
+      "V5.3.4",
+      "V5.3.5"
+    ],
+    "why": "the requirements carrying CWE-89, parameterized queries and SQL injection defence"
+  },
+  "xss": {
+    "requirements": [
+      "V5.3.3"
+    ],
+    "why": "the requirement carrying CWE-79, context-aware output escaping against XSS"
+  },
   "rce": {
     "requirements": [
       "V5.2.5",
@@ -2781,6 +2794,12 @@ export const SCANNER_FINDINGS: Record<string, string[]> = {
   ],
   "command_injection": [
     "command_injection"
+  ],
+  "sql_injection": [
+    "sql_injection"
+  ],
+  "xss": [
+    "xss"
   ],
   "directory_traversal": [
     "directory_traversal"
