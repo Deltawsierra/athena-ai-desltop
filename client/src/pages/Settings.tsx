@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   BookOpen,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import PageHero from "@/components/mythos/PageHero";
 import StatCard from "@/components/mythos/StatCard";
 import GlassCard from "@/components/GlassCard";
@@ -105,7 +106,27 @@ const GUIDANCE: { tone: GuideTone; title: string; note: string }[] = [
   { tone: "ok", title: "Training data reuse is disabled", note: "Good — customer data will not be used for model training." },
 ];
 
+interface ConnField { field: string; secret: boolean; source: string; set: boolean; env: string }
+interface Connections { fields: ConnField[] }
+interface EngineStatus { configured: boolean; reachable: boolean; authorized: boolean | null; url: string | null; detail: string }
+
 export default function Settings() {
+  const { data: conn } = useQuery<Connections>({ queryKey: ["/api/settings/connections"] });
+  const { data: engine } = useQuery<EngineStatus>({ queryKey: ["/api/engine/status"] });
+
+  const fields = conn?.fields ?? [];
+  const setCount = fields.filter((f) => f.set).length;
+  const engineOk = engine?.configured && engine?.reachable && engine?.authorized !== false;
+
+  const guidance: { tone: GuideTone; title: string; note: string }[] = [
+    engine?.configured
+      ? engineOk
+        ? { tone: "ok", title: "Engine is connected", note: `Reachable at ${engine?.url ?? "the configured address"} and authorized.` }
+        : { tone: "warn", title: "Engine configured but not reachable", note: engine?.detail ?? "Check the engine address and operator key." }
+      : { tone: "warn", title: "No engine is configured", note: "Set the engine address and an operator key below (or ATHENA_ENGINE_URL / ATHENA_ENGINE_KEY) before scanning." },
+    ...GUIDANCE,
+  ];
+
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8">
       <PageHero
@@ -116,12 +137,12 @@ export default function Settings() {
       />
       <Divider variant="key" className="mt-5" />
 
-      {/* stats */}
+      {/* stats -- integrations & engine live */}
       <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard layout="tile" label="Connected Integrations" value="8 / 12" icon={Link2} sublabel="Providers and tools connected" />
-        <StatCard layout="tile" label="Approval Gates Enabled" value="4 / 5" icon={ShieldCheck} sublabel="Human oversight configured" />
+        <StatCard layout="tile" label="Connected Integrations" value={`${setCount} / ${fields.length || 0}`} icon={Link2} sublabel="Connection fields configured" />
+        <StatCard layout="tile" label="Engine" value={engineOk ? "Connected" : engine?.configured ? "Unreachable" : "Not set"} icon={ShieldCheck} sublabel={engine?.configured ? (engine?.url ?? "") : "No address configured"} />
         <StatCard layout="tile" label="Secure Defaults" value="Active" icon={Lock} sublabel="Aligned with Mythos recommendations" />
-        <StatCard layout="tile" label="Last Configuration Review" value="3 days ago" icon={Clock} sublabel="Next review in 27 days" />
+        <StatCard layout="tile" label="Approval Gates" value="4 / 5" icon={Clock} sublabel="Human oversight configured" />
       </div>
 
       {/* tabs */}
@@ -238,7 +259,7 @@ export default function Settings() {
           </div>
           <p className="mb-4 text-[12px] text-muted-foreground">Mythos recommendations to keep your environment secure and compliant.</p>
           <ul className="space-y-3">
-            {GUIDANCE.map((g) => (
+            {guidance.map((g) => (
               <li key={g.title} className={cn("flex items-start gap-2.5 rounded-lg border px-3 py-2.5", g.tone === "ok" ? "border-emerald-500/25 bg-emerald-500/[0.06]" : "border-amber-500/25 bg-amber-500/[0.06]")}>
                 {g.tone === "ok"
                   ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
