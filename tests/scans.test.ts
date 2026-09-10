@@ -190,6 +190,47 @@ describe("what authorises a scan", () => {
     expect(sent[0].scope).toEqual(["only.example"]);
   });
 
+  it("forwards authenticated-scanning config to the engine when enabled", async () => {
+    sent = [];
+    const client = await agent.post("/api/clients")
+      .send({ name: "Auth", company: "Auth Ltd", email: "a@example.test" });
+    await agent.post("/api/sites")
+      .send({ clientId: client.body.id, name: "App", url: "https://app.example" });
+
+    await agent.post("/api/scans").send({
+      clientId: client.body.id,
+      target: "https://app.example/",
+      auth: {
+        enabled: true,
+        login_url: "/login",
+        identities: [
+          { name: "alice", login_fields: { username: "alice" } },
+          { name: "bob", cookies: { session: "x" } },
+        ],
+      },
+    }).expect(201);
+
+    const auth = sent[0].auth as Record<string, unknown> | undefined;
+    expect(auth).toBeDefined();
+    expect(auth!.enabled).toBe(true);
+    expect(auth!.login_url).toBe("/login");
+    expect((auth!.identities as unknown[]).length).toBe(2);
+  });
+
+  it("sends no auth block when authenticated scanning is not requested", async () => {
+    sent = [];
+    const client = await agent.post("/api/clients")
+      .send({ name: "Anon", company: "Anon Ltd", email: "an@example.test" });
+    await agent.post("/api/sites")
+      .send({ clientId: client.body.id, name: "App", url: "https://anon.example" });
+
+    await agent.post("/api/scans")
+      .send({ clientId: client.body.id, target: "https://anon.example/" })
+      .expect(201);
+
+    expect(sent[0].auth).toBeUndefined();
+  });
+
   it("refuses to scan for a client with no site on record", async () => {
     sent = [];
     const client = await agent.post("/api/clients")

@@ -57,11 +57,32 @@ const createSiteSchema = insertSiteSchema.omit({ isSample: true });
 // there is one, a site -- both looked up rather than taken on trust, because
 // a scan filed under an engagement nobody opened is a scan nobody authorised.
 
+// Authenticated scanning, in the engine's TargetAuthConfig shape. Bounded so a
+// launch request cannot smuggle an unbounded credential blob through; the
+// engine validates the contents again and refuses a malformed block.
+const authIdentitySchema = z.object({
+  name: z.string().min(1).max(100),
+  cookies: z.record(z.string(), z.string().max(4096)).optional(),
+  headers: z.record(z.string(), z.string().max(4096)).optional(),
+  login_fields: z.record(z.string(), z.string().max(4096)).optional(),
+});
+
+const scanAuthSchema = z.object({
+  enabled: z.boolean(),
+  login_url: z.string().max(2000).nullish(),
+  login_method: z.enum(["GET", "POST"]).optional(),
+  authenticated_marker: z.string().max(500).nullish(),
+  identities: z.array(authIdentitySchema).max(8),
+});
+
 const startScanSchema = z.object({
   clientId: z.string().min(1),
   siteId: z.string().min(1).optional(),
   target: z.string().min(1).max(2000),
   testType: z.string().min(1).max(100).default("penetration_test"),
+  // Optional: present only when the operator turned on authenticated scanning.
+  // Not persisted -- forwarded to the engine for the scan and then dropped.
+  auth: scanAuthSchema.optional(),
 });
 
 /**
@@ -664,7 +685,13 @@ export function registerRoutes(app: Express): void {
 
     let started;
     try {
-      started = await engine.startScan({ target: data.target, engagementRef, scope });
+      started = await engine.startScan({
+        target: data.target,
+        engagementRef,
+        scope,
+        // Forwarded only when the operator enabled authenticated scanning.
+        ...(data.auth?.enabled ? { auth: data.auth } : {}),
+      });
     } catch (cause) {
       if (cause instanceof engine.EngineUnavailable) {
         // 503, not 500. Nothing is broken: the engine is not there, or not
