@@ -10,9 +10,9 @@ import {
  * The compliance map, whose entire risk is making an untested control look
  * like a passing one.
  *
- * The engine's scanners bear on 21 of ASVS 4.0.3's 286 requirements. A screen
- * that rendered the other 265 as satisfied would be false about the great
- * majority of the standard, and convincing, because the 21 are real. These
+ * The engine's scanners bear on 34 of ASVS 4.0.3's 286 requirements. A screen
+ * that rendered the other 252 as satisfied would be false about the great
+ * majority of the standard, and convincing, because the 34 are real. These
  * tests hold the four states apart.
  */
 
@@ -80,7 +80,7 @@ describe("mapping findings to ASVS requirements", () => {
   });
 
   it("reports the tested count as the small number it is", () => {
-    // 21 of 286. If this number ever grows without the mapping growing, the
+    // 34 of 286. If this number ever grows without the mapping growing, the
     // map has started claiming coverage it does not have.
     const { summary } = controlMap([], ALL_SCANNERS);
     const reachable = new Set([

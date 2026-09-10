@@ -227,10 +227,34 @@ export async function status(): Promise<EngineStatus> {
   }
 }
 
+/**
+ * Authenticated scanning, in the exact shape the engine's TargetAuthConfig
+ * accepts (snake_case, so it passes straight through to `/api/scan`). One
+ * identity drives an authenticated crawl; two disjoint identities are what the
+ * IDOR scanner needs. Credentials are forwarded to the engine for the duration
+ * of the scan and are never persisted by Athena.
+ */
+export interface EngineAuthIdentity {
+  name: string;
+  cookies?: Record<string, string>;
+  headers?: Record<string, string>;
+  login_fields?: Record<string, string>;
+}
+
+export interface EngineAuthConfig {
+  enabled: boolean;
+  login_url?: string | null;
+  login_method?: string;
+  authenticated_marker?: string | null;
+  identities: EngineAuthIdentity[];
+}
+
 export interface ScanRequest {
   target: string;
   /** The engagement this scan is being run under. The engine records it. */
   engagementRef: string;
+  /** Optional authenticated-scanning config, forwarded to the engine as-is. */
+  auth?: EngineAuthConfig;
   /**
    * The hosts this engagement authorises.
    *
@@ -263,6 +287,9 @@ export async function startScan(request: ScanRequest): Promise<EngineScan> {
       target: request.target,
       engagement_ref: request.engagementRef,
       scope: request.scope,
+      // Forwarded only when authenticated scanning was configured; the engine
+      // validates it against TargetAuthConfig and refuses a malformed block.
+      ...(request.auth ? { auth: request.auth } : {}),
     }),
   });
 

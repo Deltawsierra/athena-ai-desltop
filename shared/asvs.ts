@@ -10,7 +10,7 @@
  * OWASP Application Security Verification Standard 4.0.3, CC BY-SA 4.0.
  * https://owasp.org/www-project-application-security-verification-standard/
  *
- * 286 requirements. 21 of them can be reached by
+ * 286 requirements. 34 of them can be reached by
  * something this engine tests for -- which is the number that matters, and the
  * reason the product says how many it did not test rather than reporting a
  * percentage over the ones it did.
@@ -2660,13 +2660,13 @@ export const FINDING_MAPPING: Record<string, FindingMapping> = {
       "V5.3.4",
       "V5.3.5"
     ],
-    "why": "the requirements carrying CWE-89, parameterized queries and SQL injection defence"
+    "why": "the requirements carrying CWE-89: parameterized queries (V5.3.4) and context-specific output encoding against injection (V5.3.5)"
   },
   "xss": {
     "requirements": [
       "V5.3.3"
     ],
-    "why": "the requirement carrying CWE-79, context-aware output escaping against XSS"
+    "why": "the requirement carrying CWE-79: context-aware output escaping against reflected, stored and DOM XSS"
   },
   "rce": {
     "requirements": [
@@ -2738,6 +2738,57 @@ export const FINDING_MAPPING: Record<string, FindingMapping> = {
       "V10.3.3"
     ],
     "why": "the requirement naming subdomain takeover"
+  },
+  "idor": {
+    "requirements": [
+      "V4.2.1"
+    ],
+    "why": "the requirement whose text names Insecure Direct Object Reference (IDOR), CWE-639"
+  },
+  "csrf": {
+    "requirements": [
+      "V4.2.2",
+      "V13.2.3"
+    ],
+    "why": "the requirements naming a strong anti-CSRF mechanism (CWE-352), for the application (V4.2.2) and for cookie-using REST services (V13.2.3)"
+  },
+  "xxe": {
+    "requirements": [
+      "V5.5.2"
+    ],
+    "why": "the requirement whose text names XML External Entity (XXE) attacks and restrictive XML parser configuration, CWE-611"
+  },
+  "cors_misconfiguration": {
+    "requirements": [
+      "V14.5.3"
+    ],
+    "why": "the requirement that the CORS Access-Control-Allow-Origin header uses a strict allow list of trusted domains, CWE-346"
+  },
+  "tls_certificate": {
+    "requirements": [
+      "V9.2.1"
+    ],
+    "why": "the requirement that connections use trusted TLS certificates, CWE-295; the scanner flags expired, self-signed, and hostname-mismatched certificates"
+  },
+  "tls_deprecated_protocol": {
+    "requirements": [
+      "V9.1.2",
+      "V9.1.3"
+    ],
+    "why": "the requirements that only strong cipher suites (V9.1.2) and only the latest TLS versions, 1.2 and 1.3 (V9.1.3), are enabled, CWE-326"
+  },
+  "insecure_cookie": {
+    "requirements": [
+      "V3.4.1",
+      "V3.4.2"
+    ],
+    "why": "the requirements that session cookies set the Secure (V3.4.1, CWE-614) and HttpOnly (V3.4.2, CWE-1004) attributes"
+  },
+  "vulnerable_component": {
+    "requirements": [
+      "V14.2.1"
+    ],
+    "why": "the requirement that all components are up to date, CWE-1026; the scanner correlates disclosed component versions to known CVEs"
   }
 };
 
@@ -2801,6 +2852,29 @@ export const SCANNER_FINDINGS: Record<string, string[]> = {
   "xss": [
     "xss"
   ],
+  "cors": [
+    "cors_misconfiguration"
+  ],
+  "csrf": [
+    "csrf"
+  ],
+  "tls": [
+    "tls_certificate",
+    "tls_deprecated_protocol"
+  ],
+  "xxe": [
+    "xxe"
+  ],
+  "sca": [
+    "vulnerable_component"
+  ],
+  "hygiene": [
+    "insecure_cookie",
+    "missing_security_txt"
+  ],
+  "idor": [
+    "idor"
+  ],
   "directory_traversal": [
     "directory_traversal"
   ],
@@ -2849,6 +2923,7 @@ export const UNMAPPED_FINDINGS: Record<string, string> = {
   "open_port": "an observation about the host, not an application control",
   "waf_detected": "an observation about the deployment, not a control failure",
   "endpoint_exposed": "a discovered path; whether it should be reachable is a question for a person",
+  "missing_security_txt": "ASVS 4.0.3 has no requirement for a security.txt / vulnerability-disclosure file; its absence is an operational hygiene note, not a control the standard names",
   "error": "the engine reporting its own trouble, not a finding about the target",
   "timeout": "the engine reporting its own trouble, not a finding about the target"
 };
